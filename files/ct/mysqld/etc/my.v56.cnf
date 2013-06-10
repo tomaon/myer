@@ -1,0 +1,50 @@
+# ====================================
+#  my.cnf for fugo : v56 (samll+)
+# ====================================
+
+# ------------------------------------
+# ------------------------------------
+[mysqld]
+#autocommit = 0
+ datadir = /var/tmp/fugo/v56/data
+ explicit_defaults_for_timestamp
+#init_connect = ''
+ key_buffer_size = 16K
+ log-bin = mysqld-bin
+ log-error = /var/tmp/fugo/v56/log/error.log
+ lower_case_table_names = 1 # linux=1,macos=2
+ max_allowed_packet = 18M # 4M
+ net_buffer_length = 2K
+ pid-file = /var/tmp/fugo/v56/log/mysqld.pid
+ port = 20506 # 3306
+ query_cache_size = 0
+ query_cache_type = 0
+ read_buffer_size = 256K
+ read_rnd_buffer_size = 256K
+ server-id = 56
+ skip-external-locking
+ socket = /tmp/mysql.v56.sock # /tmp/mysql.sock
+ sort_buffer_size = 64K
+ table_open_cache = 20
+ thread_stack = 256K
+
+ innodb_buffer_pool_size = 64M
+ innodb_data_file_path = ibdata1:10M:autoextend
+ innodb_data_home_dir = /var/tmp/fugo/v56/data
+ innodb_doublewrite = 0
+ innodb_file_per_table = 1
+ innodb_log_buffer_size = 64M
+ innodb_log_file_size = 32M
+ innodb_log_group_home_dir = /var/tmp/fugo/v56/data
+
+ sha256_password_private_key_path = /var/tmp/fugo/v56/private_key.pem
+ sha256_password_public_key_path = /var/tmp/fugo/v56/public_key.pem
+
+# ------------------------------------
+# ------------------------------------
+[client]
+ default-character-set = utf8
+ socket = /tmp/mysql.v56.sock
+
+[mysql]
+ no-auto-rehash
