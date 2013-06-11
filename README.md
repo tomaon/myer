@@ -4,6 +4,8 @@ MySQL driver, using the MySQL network protocol
 
 support: (text|binary)-protocol with compression, blob 
 
+[![Build Status](https://travis-ci.org/tomaon/myer.png)](https://travis-ci.org/tomaon/myer)
+
 ## Example
 
 ```erlang
