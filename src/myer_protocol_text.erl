@@ -23,7 +23,7 @@
 -export([recv_row/3]).
 
 %% -- private --
--import(myer_protocol, [binary_to_float/2,
+-import(myer_protocol, [binary_to_float/2, binary_to_integer/3,
                         recv/2, recv_packed_binary/1, recv_packed_binary/2]).
 
 %% == public ==
@@ -71,8 +71,8 @@ cast(null, _Type, _Field) ->
     null;
 cast(Binary, binary, _Field) ->
     Binary;
-cast(Binary, integer, _Field) ->
-    binary_to_integer(Binary);
+cast(Binary, integer, #field{decimals=D}) ->
+    binary_to_integer(Binary, 10, D);
 cast(Binary, float, #field{decimals=D}) ->
     binary_to_float(Binary, D);
 cast(Binary, datetime, _Field) ->

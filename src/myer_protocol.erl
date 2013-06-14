@@ -25,7 +25,7 @@
 -export([next_result/1, stmt_next_result/2]).
 
 %% -- protected --
--export([binary_to_float/2]).
+-export([binary_to_float/2, binary_to_integer/3]).
 -export([recv/2, recv_packed_binary/1, recv_packed_binary/2]).
 
 %% -- private --
@@ -169,10 +169,11 @@ stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
 
 -spec binary_to_float(binary(),non_neg_integer()) -> float().
 binary_to_float(Binary, _Decimals) ->
-    try erlang:binary_to_float(Binary)
+    L = binary_to_list(Binary),
+    try list_to_float(L) % erlang:binary_to_float/1, > R16
     catch
         _:_ ->
-            try erlang:binary_to_integer(Binary) of
+            try list_to_integer(L) of % erlang:binary_to_integer/2, > R16
                 I ->
                     I * 1.0
             catch
@@ -180,6 +181,12 @@ binary_to_float(Binary, _Decimals) ->
                     undefined % for v5.1 (out_of_range)
             end
     end.
+
+-spec binary_to_integer(binary(),pos_integer(),non_neg_integer()) -> integer().
+binary_to_integer(Binary, _Base, _Decimals) ->
+    %%erlang:binary_to_integer/2, > R16
+    L = binary_to_list(Binary),
+    list_to_integer(L).
 
 %% -- protected: network --
 
@@ -212,7 +219,7 @@ recv_packed_binary(#protocol{}=P, Byte) ->
 %% == private ==
 
 binary_to_version(Binary) ->
-    F = fun(E) -> try binary_to_integer(E) catch _:_ -> E end end,
+    F = fun(E) -> try binary_to_integer(E,10,0) catch _:_ -> E end end,
     L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
     lists:map(F, lists:sublist(L,3)).
 

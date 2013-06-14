@@ -53,7 +53,7 @@ groups() ->
                      ]},
      {conf_test, [], [
                       conf_test_address_atom, conf_test_address_list, conf_test_address_err,
-                      conf_test_port_binary, conf_test_port_list, conf_test_port_err,
+                      conf_test_port_err,
                       conf_test_user_atom, conf_test_user_list, conf_test_user_err,
                       conf_test_password_atom, conf_test_password_list1,
                       conf_test_password_list2, conf_test_password_err,
@@ -201,30 +201,6 @@ conf_test_address_err(Config) ->
     catch
         _:_ ->
             ok
-    end.
-
-conf_test_port_binary(Config) ->
-    L = [
-         {user, <<"test">>},
-         {password, <<"test">>},
-         {port, integer_to_binary(get_value(Config, port))}
-        ],
-    try do_test(Config, L)
-    catch
-        _:Reason ->
-            ct:fail(Reason)
-    end.
-
-conf_test_port_list(Config) ->
-    L = [
-         {user, <<"test">>},
-         {password, <<"test">>},
-         {port, integer_to_list(get_value(Config, port))}
-        ],
-    try do_test(Config, L)
-    catch
-        _:Reason ->
-            ct:fail(Reason)
     end.
 
 conf_test_port_err(Config) ->
