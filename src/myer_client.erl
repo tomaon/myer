@@ -181,8 +181,6 @@ validate({address=K,Value}, List) -> % inet:ip_address()|inet:hostname()
     [T|List];
 validate({port=K,Value}, List) -> % inet:port_number()
     T = if is_integer(Value)                 -> {K, Value};
-           is_list(Value), 0 < length(Value) -> {K, list_to_integer(Value)};
-           is_binary(Value), 0 < size(Value) -> {K, binary_to_integer(Value)};
            true -> throw({badarg,K})
         end,
     [T|List];

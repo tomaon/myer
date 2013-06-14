@@ -5,6 +5,7 @@
  REBAR_BIN  = ./rebar
 
  REBAR_ENV  =
+ REBAR_ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
  REBAR_ENV += ERL_LIB=..
 
  REBAR_OPT  =
@@ -33,6 +34,9 @@ clean compile ct:
 
 build: get-deps
 	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) compile
+
+cleanall:
+	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) clean
 
 build_plt:
 	@$(ERLANG_HOME)/bin/dialyzer --$@ --output_plt $(PLT) --apps deps/*/ebin
