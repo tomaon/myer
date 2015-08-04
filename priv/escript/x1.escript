@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -pa ebin deps/*/ebin -config priv/conf/n1 -s crypto
+%%! -config priv/conf/n1 -s crypto
 
 %% -- myer --
 run(2, H, myer) ->

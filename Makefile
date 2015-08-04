@@ -2,69 +2,46 @@
  ERLANG_HOME ?= /opt/erlang/release/latest
 
 #
- REBAR ?= ../bin/rebar
+ REBAR ?= ../bin/rebar3
 
  REBAR_ENV  =
  REBAR_ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
- REBAR_ENV += ERL_LIBS=deps:..
+#REBAR_ENV += DEBUG=1 
 
  REBAR_OPT  =
-#REBAR_OPT += --verbose 3
+ REBAR_OPT += -sname $(1)@localhost
+ REBAR_OPT += -config priv/conf/$(1)
 
-#
- ERL_ENV  =
- ERL_ENV += ERL_LIBS=deps
-
- ERL_OPT  =
- ERL_OPT += -sname $(1)@localhost
- ERL_OPT += -setcookie test
- ERL_OPT += -config priv/conf/$(1)
+#ERL_OPT += -setcookie test
 #ERL_OPT += -s myer
-
- PLT = .dialyzer_plt.local
-
- DIALYZER_OPT  =
- DIALYZER_OPT += --no_native
- DIALYZER_OPT += --plts $(ERLANG_HOME)/.dialyzer_plt $(PLT)
- DIALYZER_OPT += --src src
- DIALYZER_OPT += -I deps
 
 #
 default: compile
 
 #
-delete-deps get-deps:
-	@$(REBAR_ENV) $(REBAR) $(REBAR_OPT) $@
+build:
+	@$(REBAR_ENV) $(REBAR) as prod compile
 
-compile ct:
-	@$(REBAR_ENV) $(REBAR) $(REBAR_OPT) $@ skip_deps=true
-
-
-all: build
-
-build: get-deps
-	@$(REBAR_ENV) $(REBAR) $(REBAR_OPT) compile
+ct compile:
+	@$(REBAR_ENV) $(REBAR) as test $@
 
 build_plt:
-	@$(ERLANG_HOME)/bin/dialyzer --$@ --output_plt $(PLT) --apps deps/*/ebin
-
-clean: delete-autosave
-	@$(REBAR_ENV) $(REBAR) $(REBAR_OPT) $@ skip_deps=true
-
-delete-autosave:
-	@-find . -name "*~" | xargs rm -f
-
+	@$(REBAR_ENV) $(REBAR) as test dialyzer
 dialyzer:
-	@$(ERLANG_HOME)/bin/dialyzer $(DIALYZER_OPT)
+	@$(REBAR_ENV) $(REBAR) as test dialyzer --update-plt
 
-distclean: clean delete-deps
-	@-rm -rf deps $(PLT)
-
-test: compile ct
+clean: clean-autosave
+	@$(REBAR_ENV) $(REBAR) clean
+clean-all: clean-autosave
+	@$(REBAR_ENV) $(REBAR) clean --all 
+clean-autosave:
+	@-find . -name "*~" | xargs rm -f
+distclean:
+	@-rm -rf .rebar3 rebar.lock
 
 #
 n%: compile
-	@$(ERL_ENV) $(ERLANG_HOME)/bin/erl $(call ERL_OPT,$@)
+	@$(REBAR_ENV) $(REBAR) as test shell $(call REBAR_OPT,$@)
 
 x%: compile
-	@$(ERL_ENV) $(ERLANG_HOME)/bin/escript priv/escript/$@.escript
+	@$(ERBAR_ENV) ERL_LIBS=.rebar3/test/lib escript priv/escript/$@.escript

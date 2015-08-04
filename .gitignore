@@ -1,13 +1,6 @@
-.ct
-.dialyzer_plt.local
-.eunit
-.rebar
-deps
-doc
-ebin
-rebar
-var
-tmp
+.rebar3/
+tmp/
+rebar.lock
 *.beam
 *.dump
 *.o
