@@ -1,25 +1,11 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%% http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
 %% =============================================================================
 
 -module(myer_public_SUITE).
 
 -compile(export_all).
 
--include_lib("common_test/include/ct.hrl").
--include_lib("myer/include/myer.hrl").
+-include("internal.hrl").
 
 -define(TABLE, ?MODULE_STRING).
 
@@ -115,12 +101,12 @@ end_per_group(Group, Config) ->
             Config
     end.
 
-init_per_testcase(_TestCase, Config) -> % use erlang:monitor/2 (poolboy:checkout/3)
-    L = [ fun connect/1, fun get_server_version/1, fun drop_table/1, fun testcase_pre/1 ],
+init_per_testcase(_TestCase, Config) ->
+    L = [ fun checkout/1, fun get_server_version/1, fun drop_table/1, fun testcase_pre/1 ],
     lists:foldl(fun(E,A) -> E(A) end, Config, L).
 
 end_per_testcase(_TestCase, Config) ->
-    L = [ fun testcase_post/1, fun drop_table/1, fun close/1, fun cleanup/1 ],
+    L = [ fun testcase_post/1, fun drop_table/1, fun checkin/1, fun cleanup/1 ],
     lists:foldl(fun(E,A) -> E(A) end, Config, L).
 
 %% == group: query_test ==
@@ -754,25 +740,26 @@ cover_myer_app(Config) ->
 
     {error, badarg} = myer_app:call(nobody, {real_query,[<<"SELECT @@version">>]}),
 
-    {error, badarg} = myer_app:checkout(nobody, false, 1),
+%   {error, badarg} = myer_app:checkout(nobody, false, 1),
 
-    {error, badarg} = myer_app:checkin(nobody, self()),
+%   {error, badarg} = myer_app:checkin(nobody, self()),
 
-    F = fun (_,A) ->
-                case myer_app:checkout(?config(pool,Config),false,5) of
-                    {ok, Pid} ->
-                        [Pid|A];
-                    {error, full} ->
-                        throw(A)
-                end
-        end,
-    case catch lists:foldl(F, [], lists:seq(1,1000)) of
-        {'EXIT',_} -> % gen_server:call, timeout ...
-            ok;
-        List ->
-            ct:log("length=~p", [length(List)]),
-            lists:foreach(fun(E) -> myer_app:checkin(?config(pool,Config),E) end, List)
-    end.
+%   F = fun (_,A) ->
+%               case myer_app:checkout(?config(pool,Config),false,5) of
+%                   {ok, Pid} ->
+%                       [Pid|A];
+%                   {error, full} ->
+%                       throw(A)
+%               end
+%       end,
+%   case catch lists:foldl(F, [], lists:seq(1,1000)) of
+%       {'EXIT',_} -> % gen_server:call, timeout ...
+%           ok;
+%       List ->
+%           ct:log("length=~p", [length(List)]),
+%           lists:foreach(fun(E) -> myer_app:checkin(?config(pool,Config),E) end, List)
+%   end.
+    ok.
 
 cover_myer_client(Config) ->
 
@@ -797,18 +784,17 @@ call(Config, Func, Args) ->
 cleanup(Config) ->
     lists:foldl(fun proplists:delete/2, Config, [version]).
 
-close(Config) ->
-    case myer:close(?config(pool,Config), ?config(pid,Config)) of
+checkin(Config) ->
+    case myer:checkin(?config(pid,Config)) of
         ok ->
             proplists:delete(pid, Config);
         {error, Reason} ->
             ct:fail(Reason)
     end.
 
-connect(Config) ->
-    case myer:connect(?config(pool,Config)) of
+checkout(Config) ->
+    case myer:checkout(?config(pool,Config)) of
         {ok, Pid} ->
-            ct:log("connect, pid=~p", [Pid]),
             [{pid,Pid}|Config];
         {error, Reason} ->
             ct:fail(Reason)
@@ -833,8 +819,7 @@ set_env(Config) ->
          {password, <<"test">>},
          {compress, ?config(compress,Config)}
         ],
-    ok = application:set_env(myer, poolboy,
-                             [{A,[{size,1},{max_overflow,3}],L ++ ct:get_config(A)}]),
+    ok = application:set_env(myer, A, L ++ ct:get_config(A)),
     Config.
 
 start(Config) ->

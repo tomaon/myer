@@ -3,17 +3,17 @@
 %%! -pa ebin deps/*/ebin -config priv/conf/n1 -s crypto
 
 %% -- myer --
-run(2, Pid, myer) ->
+run(2, H, myer) ->
     F = fun (E) ->
                 Q = <<"SELECT * FROM ", E/binary, " WHERE k > 0">>,
-                [E, element(1,timer:tc(myer,real_query,[Pid,Q]))]
+                [E, element(1,timer:tc(myer,real_query,[H,Q]))]
         end,
     [ io:format("myer: ~p=~p~n", F(E)) || E <- tables() ];
 run(1, undefined, myer) ->
-    case myer:connect(mysql_pool) of
-        {ok, Pid} ->
-            run(2, Pid, myer),
-            ok = myer:close(mysql_pool, Pid)
+    case myer:checkout(mysql_pool) of
+        {ok, H} ->
+            run(2, H, myer),
+            ok = myer:checkin(H)
     end;
 %% -- emysql --
 run(2, undefined, emysql) ->

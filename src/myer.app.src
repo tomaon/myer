@@ -2,31 +2,21 @@
 {application, myer,
  [
   {description, "myer : MySQL driver, using the MySQL network protocol"},
-  {vsn, "0.2.0"},
-  {modules, []},
+  {vsn, "0.3.0"},
   {registered, [myer_sup]},
-  {included_applications, [poolboy]},
+  {included_applications, []},
   {applications, [kernel,stdlib,crypto]},
-  {env, [
-         {poolboy, [
-                    {default_pool,
-                     [
-                      {size, 10},
-                      {max_overflow, 20}
-                     ],
-                     [
-                      {address, <<"localhost">>},
-                      {port, 3306},
-                      {user, <<"root">>},
-                      {password, <<"">>},
-                      {database, <<"">>},
-                      {default_character_set, 33}, % 33=CHARSET_utf8_general_ci
-                      {compress, false},
-                      {max_allowed_packet, 4194304},
-                      {timeout, 10}
-                     ]
-                    }
-                   ]}
-        ]},
-  {mod, {myer_app, []}}
+  {mod, {myer_app, [
+                   %{mysql_pool, [
+                   %              {address, <<"localhost">>},
+                   %              {port, 3306},
+                   %              {user, <<"root">>},
+                   %              {password, <<"">>},
+                   %              {database, <<"">>},
+                   %              {default_character_set, 33}, % 33=CHARSET_utf8_general_ci
+                   %              {compress, false},
+                   %              {max_allowed_packet, 4194304},
+                   %              {timeout, 10}
+                   %             ]}
+                   ]}}
  ]}.
