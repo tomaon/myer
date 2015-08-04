@@ -31,20 +31,20 @@ all() -> [
 groups() ->
     [
      {test_normal,   [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool},
-                          {group, test_v50_pool},
-                          {group, test_v41_pool},
-                          {group, test_v40_pool}
+                          {group, test_v56_pool}
+                         %{group, test_v55_pool}
+                         %{group, test_v51_pool}
+                         %{group, test_v50_pool}
+                         %{group, test_v41_pool}
+                         %{group, test_v40_pool}
                          ]},
      {test_compress, [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool},
-                          {group, test_v50_pool},
-                          {group, test_v41_pool},
-                          {group, test_v40_pool}
+                          {group, test_v56_pool}
+                         %{group, test_v55_pool}
+                         %{group, test_v51_pool}
+                         %{group, test_v50_pool}
+                         %{group, test_v41_pool}
+                         %{group, test_v40_pool}
                          ]},
 
      {test_v56_pool, [], [{group,query_test},{group,blob_test},{group,other_test}]},
@@ -67,7 +67,7 @@ groups() ->
                        stmt_test_call_1, stmt_test_call_1
                       ]},
      {blob_test,  [], [
-                       stmt_test_blob
+                      %stmt_test_blob
                       ]},
      {other_test, [], [
                        ping_test,

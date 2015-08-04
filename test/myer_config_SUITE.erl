@@ -28,12 +28,12 @@ all() -> [
 groups() ->
     [
      {test_normal,   [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool},
-                          {group, test_v50_pool},
-                          {group, test_v41_pool},
-                          {group, test_v40_pool}
+                          {group, test_v56_pool}
+                         %{group, test_v55_pool}
+                         %{group, test_v51_pool}
+                         %{group, test_v50_pool}
+                         %{group, test_v41_pool}
+                         %{group, test_v40_pool}
                          ]},
 
      {test_v56_pool, [], [{group,auth_test}]},
@@ -45,10 +45,10 @@ groups() ->
 
      {auth_test, [], [
                       auth_test_pwd,
-                      auth_test_nopwd,
+                     %auth_test_nopwd,
                       auth_test_oldpwd,
-                      auth_test_oldnopwd,
-                      auth_test_pwderr,
+                     %auth_test_oldnopwd,
+                     %auth_test_pwderr,
                       auth_test_nodb
                      ]},
      {conf_test, [], [

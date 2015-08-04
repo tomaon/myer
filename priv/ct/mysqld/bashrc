@@ -1,5 +1,5 @@
-#ID=v56
-#MYSQL_HOME=/home/mysql/release/5.6.12
+ID=v56
+MYSQL_HOME=/home/mysql/release/5.6.25-ndb-7.4.7
 
 #ID=v55
 #MYSQL_HOME=/home/mysql/release/5.5.32

@@ -30,14 +30,14 @@ all() -> [
 groups() ->
     [
      {test_normal,   [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool}
+                          {group, test_v56_pool}
+                         %{group, test_v55_pool}
+                         %{group, test_v51_pool}
                          ]},
      {test_compress, [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool}
+                          {group, test_v56_pool}
+                         %{group, test_v55_pool}
+                         %{group, test_v51_pool}
                          ]},
 
      {test_v56_pool, [], [{group,real_test},{group,stmt_test}]},
@@ -46,20 +46,24 @@ groups() ->
 
      {real_test, [], [
                       real_types_test_11_2_1,
-                      real_types_test_11_2_2,
+                     %real_types_test_11_2_2,
                       real_types_test_11_2_3, real_types_test_11_2_4,
                       real_types_test_11_3_1, real_types_test_11_3_2,
-                      real_types_test_11_3_3, real_types_test_11_4_1,
-                      real_types_test_11_4_2, real_types_test_11_4_3,
+                      real_types_test_11_3_3,
+                     %real_types_test_11_4_1,
+                     %real_types_test_11_4_2,
+                      real_types_test_11_4_3,
                       real_types_test_11_4_4, real_types_test_11_4_5
                      ]},
      {stmt_test, [], [
                       stmt_types_test_11_2_1,
-                      stmt_types_test_11_2_2,
+                     %stmt_types_test_11_2_2,
                       stmt_types_test_11_2_3, stmt_types_test_11_2_4,
                       stmt_types_test_11_3_1, stmt_types_test_11_3_2,
-                      stmt_types_test_11_3_3, stmt_types_test_11_4_1,
-                      stmt_types_test_11_4_2, stmt_types_test_11_4_3,
+                      stmt_types_test_11_3_3,
+                     %stmt_types_test_11_4_1,
+                     %stmt_types_test_11_4_2,
+                      stmt_types_test_11_4_3,
                       stmt_types_test_11_4_4, stmt_types_test_11_4_5
                      ]}
     ].
