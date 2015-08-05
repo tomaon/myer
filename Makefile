@@ -1,47 +1,42 @@
 #
  ERLANG_HOME ?= /opt/erlang/release/latest
 
-#
  REBAR ?= ../bin/rebar3
 
- REBAR_ENV  =
- REBAR_ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
-#REBAR_ENV += DEBUG=1 
+ ENV  =
+ ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
+#ENV += DEBUG=1
 
- REBAR_OPT  =
- REBAR_OPT += -sname $(1)@localhost
- REBAR_OPT += -config priv/conf/$(1)
-
-#ERL_OPT += -setcookie test
-#ERL_OPT += -s myer
+ OPT  =
+ OPT += -sname $(1)@localhost
+ OPT += -config priv/conf/$(1)
 
 #
 default: compile
 
+all: build
+
+test: ct
+
 #
 build:
-	@$(REBAR_ENV) $(REBAR) as prod compile
+	@$(ENV) $(REBAR) as prod compile
 
-ct compile:
-	@$(REBAR_ENV) $(REBAR) as test $@
+compile ct dialyzer eunit:
+	@$(ENV) $(REBAR) as test $@
 
-build_plt:
-	@$(REBAR_ENV) $(REBAR) as test dialyzer
-dialyzer:
-	@$(REBAR_ENV) $(REBAR) as test dialyzer --update-plt
-
-clean: clean-autosave
-	@$(REBAR_ENV) $(REBAR) clean
-clean-all: clean-autosave
-	@$(REBAR_ENV) $(REBAR) clean --all 
-clean-autosave:
-	@-find . -name "*~" | xargs rm -f
+clean: rm-autosave
+	@for P in prod test; do $(ENV) $(REBAR) as $$P clean; done # prod,test -> prod+test ?!, TODO
+cleanall: rm-autosave
+	@for P in prod test; do $(ENV) $(REBAR) as $$P clean --all; done
 distclean:
 	@-rm -rf .rebar3 rebar.lock
+rm-autosave:
+	@-find . -name "*~" | xargs rm -f
 
 #
 n%: compile
-	@$(REBAR_ENV) $(REBAR) as test shell $(call REBAR_OPT,$@)
+	@$(ENV) $(REBAR) as test shell $(call OPT,$@)
 
 x%: compile
-	@$(ERBAR_ENV) ERL_LIBS=.rebar3/test/lib escript priv/escript/$@.escript
+	@$(ENV) ERL_LIBS=.rebar3/test/lib escript priv/escript/$@.escript

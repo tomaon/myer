@@ -37,11 +37,11 @@ scramble(Password, Seed, _Plugin) ->
 %% << sql/password.c : scramble/3, check_scramble/3
 %% -----------------------------------------------------------------------------
 scramble(Password, Seed) ->
-    R = crypto:sha(Password),
-    L = crypto:sha_final(
-          crypto:sha_update(
-            crypto:sha_update(crypto:sha_init(), Seed),
-            crypto:sha(R)
+    R = crypto:hash(sha, Password),
+    L = crypto:hash_final(
+          crypto:hash_update(
+            crypto:hash_update(crypto:hash_init(sha), Seed),
+            crypto:hash(sha, R)
            )
          ),
     list_to_binary([ binary:at(L,P) bxor binary:at(R,P) || P <- lists:seq(0,size(R)-1) ]).

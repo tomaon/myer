@@ -152,4 +152,4 @@ type(_) ->
 -spec md5(binary()) -> binary().
 md5(Binary)
   when is_binary(Binary) ->
-    list_to_binary([ io_lib:format("~2.16.0b",[E]) || <<E>> <= crypto:md5(Binary) ]).
+    list_to_binary([ io_lib:format("~2.16.0b",[E]) || <<E>> <= crypto:hash(md5,Binary) ]).

@@ -31,23 +31,23 @@ groups() ->
 
      {real_test, [], [
                       real_types_test_11_2_1,
-                     %real_types_test_11_2_2,
+                      real_types_test_11_2_2,
                       real_types_test_11_2_3, real_types_test_11_2_4,
                       real_types_test_11_3_1, real_types_test_11_3_2,
                       real_types_test_11_3_3,
-                     %real_types_test_11_4_1,
-                     %real_types_test_11_4_2,
+                      real_types_test_11_4_1,
+                      real_types_test_11_4_2,
                       real_types_test_11_4_3,
                       real_types_test_11_4_4, real_types_test_11_4_5
                      ]},
      {stmt_test, [], [
                       stmt_types_test_11_2_1,
-                     %stmt_types_test_11_2_2,
+                      stmt_types_test_11_2_2,
                       stmt_types_test_11_2_3, stmt_types_test_11_2_4,
                       stmt_types_test_11_3_1, stmt_types_test_11_3_2,
                       stmt_types_test_11_3_3,
-                     %stmt_types_test_11_4_1,
-                     %stmt_types_test_11_4_2,
+                      stmt_types_test_11_4_1,
+                      stmt_types_test_11_4_2,
                       stmt_types_test_11_4_3,
                       stmt_types_test_11_4_4, stmt_types_test_11_4_5
                      ]}
@@ -643,7 +643,6 @@ checkin(Config) ->
 checkout(Config) ->
     case myer:checkout(?config(pool,Config)) of
         {ok, Pid} ->
-            ct:log("ccheckout, pid=~p", [Pid]),
             [{pid,Pid}|Config];
         {error, Reason} ->
             ct:fail(Reason)

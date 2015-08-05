@@ -15,9 +15,9 @@
 %% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
--include_lib("myer/include/myer.hrl").
-
 -include_lib("baseline/include/baseline.hrl").
+
+-include("../include/myer.hrl").
 
 %% == ~/include/mysql_com.h ==
 

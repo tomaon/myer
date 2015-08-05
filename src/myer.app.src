@@ -5,7 +5,7 @@
   {vsn, "0.3.0"},
   {registered, [myer_sup]},
   {included_applications, []},
-  {applications, [kernel,stdlib,crypto]},
+  {applications, [crypto,kernel,stdlib]},
   {mod, {myer_app, [
                    %{mysql_pool, [
                    %              {address, <<"localhost">>},

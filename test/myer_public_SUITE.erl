@@ -472,7 +472,7 @@ stmt_test_count_3_0(Config, true) -> % param=3, field=0
     ok = stmt_close(Config, P9).
 
 stmt_test_fetch(Config) ->
-    stmt_test_fetch(Config, ?config(version,Config) > [5,1,0]).
+    stmt_test_fetch(Config, (?config(version,Config) > [5,1,0])).
 
 stmt_test_fetch(_Config, false) ->
     {skip, not_supported};

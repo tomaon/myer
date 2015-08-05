@@ -107,8 +107,8 @@ INSERT INTO data_types_11_2_2 (k, d) VALUES
 ;
 INSERT INTO data_types_11_2_2 (k, ds) VALUES
   (201, 0)
-, (202, -999999.999)
-, (203, +999999.999)
+, (202, -999.99)
+, (203, +999.99)
 ;
 INSERT INTO data_types_11_2_2 (k, dm) VALUES
   (301, 0)
@@ -144,8 +144,8 @@ INSERT INTO data_types_11_2_2 (k, n) VALUES
 ;
 INSERT INTO data_types_11_2_2 (k, ns) VALUES
   (701, 0)
-, (702, -999999.999)
-, (703,  999999.999)
+, (702, -999.99)
+, (703,  999.99)
 ;
 INSERT INTO data_types_11_2_2 (k, nm) VALUES
   (801, 0)
@@ -373,11 +373,11 @@ ENGINE=InnoDB
 ;
 
 INSERT INTO data_types_11_4_1 (k, c) VALUES
-  (101, 'abcdef')
-, (102, 'てすと')
+  (101, '')
+, (102, '')
 ;
 INSERT INTO data_types_11_4_1 (k, cf) VALUES
-  (201, 'abcdef')
+  (201, 'abcde')
 , (202, 'てすと')
 ;
 INSERT INTO data_types_11_4_1 (k, cs) VALUES
@@ -389,11 +389,11 @@ INSERT INTO data_types_11_4_1 (k, cm) VALUES
 , (402, 'てすと')
 ;
 INSERT INTO data_types_11_4_1 (k, v) VALUES
-  (501, 'abcdef')
-, (502, 'てすと')
+  (501, '')
+, (502, '')
 ;
 INSERT INTO data_types_11_4_1 (k, vf) VALUES
-  (601, 'abcdef')
+  (601, 'abcde')
 , (602, 'てすと')
 ;
 INSERT INTO data_types_11_4_1 (k, vs) VALUES
@@ -434,10 +434,10 @@ ENGINE=InnoDB
 ;
 
 INSERT INTO data_types_11_4_2 (k, b) VALUES
-  (101, 'abcdef')
+  (101, '')
 ;
 INSERT INTO data_types_11_4_2 (k, bf) VALUES
-  (201, 'abcdef')
+  (201, 'abcde')
 ;
 INSERT INTO data_types_11_4_2 (k, bs) VALUES
   (301, 'abcdef')
@@ -446,10 +446,10 @@ INSERT INTO data_types_11_4_2 (k, bm) VALUES
   (401, 'abcdef')
 ;
 INSERT INTO data_types_11_4_2 (k, v) VALUES
-  (501, 'abcdef')
+  (501, '')
 ;
 INSERT INTO data_types_11_4_2 (k, vf) VALUES
-  (601, 'abcdef')
+  (601, 'abcde')
 ;
 INSERT INTO data_types_11_4_2 (k, vs) VALUES
   (701, 'abcdef')
