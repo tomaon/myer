@@ -25,14 +25,16 @@ build:
 compile ct dialyzer eunit:
 	@$(ENV) $(REBAR) as test $@
 
-clean: rm-autosave
+clean: rm-autosave rm-logs
 	@for P in prod test; do $(ENV) $(REBAR) as $$P clean; done # prod,test -> prod+test ?!, TODO
-cleanall: rm-autosave
+cleanall: rm-autosave rm-logs
 	@for P in prod test; do $(ENV) $(REBAR) as $$P clean --all; done
 distclean:
 	@-rm -rf .rebar3 rebar.lock
 rm-autosave:
 	@-find . -name "*~" | xargs rm -f
+rm-logs:
+	@for D in cover logs; do rm -rf .rebar3/test/$$D; done
 
 #
 n%: compile

@@ -1,5 +1,6 @@
 .rebar3/
 tmp/
+deps
 rebar.lock
 *.beam
 *.dump
