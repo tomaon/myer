@@ -69,7 +69,8 @@ version() ->
 %% == public: pool ==
 
 -spec checkout(atom()) -> {ok,myer()}|{error,_}.
-checkout(Pool) ->
+checkout(Pool)
+  when is_atom(Pool) ->
     case baseline_sup:find(myer_sup, Pool) of
         undefined ->
             {error,notfound};
