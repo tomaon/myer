@@ -8,8 +8,8 @@
 #ENV += DEBUG=1
 
  OPT  =
- OPT += -sname $(1)@localhost
- OPT += -config priv/conf/$(1)
+ OPT += --sname $(1)@localhost
+ OPT += --config priv/conf/$(1)
 
 #
 default: compile
