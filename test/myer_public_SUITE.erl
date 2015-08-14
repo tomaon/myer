@@ -3,113 +3,219 @@
 
 -module(myer_public_SUITE).
 
--compile(export_all).
-
 -include("internal.hrl").
 
--define(TABLE, ?MODULE_STRING).
+%% -- callback: ct --
+-export([all/0,
+         groups/0, init_per_group/2, end_per_group/2,
+         init_per_testcase/2, end_per_testcase/2]).
+
+%% -- public --
+-export([start_test/1, stop_test/1, version_test/1]).
+-export([checkout_test/1, checkin_test/1]).
+-export([set_timeout_test/1]).
+-export([get_server_version_test/1, ping_test/1,
+         refresh_test/1, select_db_test/1, stat_test/1]).
+
+-export([real_test_crud/1,
+         real_test_transaction/1,
+         real_test_multi/1,
+         real_test_call_1/1, real_test_call_2/1]).
+-export([stmt_test_crud/1,
+         stmt_test_count_0_0/1, stmt_test_count_0_1/1,
+         stmt_test_count_1_1/1, stmt_test_count_3_0/1,
+         stmt_test_fetch/1,
+         stmt_test_call_1/1, stmt_test_call_2/1,
+         stmt_test_blob/1]).
+
+-export([cover_myer/1]).
+
+%% -- internal --
+-define(TABLE, ?MODULE_STRING). % TODO (sequence -> parallel)
+
+%% == callback: ct ==
 
 all() -> [
-          {group, test_normal},
-          {group, test_compress}
+          version_test,
+          {group, groups_public}
          ].
 
-groups() ->
-    [
-     {test_normal,   [], [
-                          {group, test_v56_pool}
-                         %{group, test_v55_pool}
-                         %{group, test_v51_pool}
-                         %{group, test_v50_pool}
-                         %{group, test_v41_pool}
-                         %{group, test_v40_pool}
-                         ]},
-     {test_compress, [], [
-                          {group, test_v56_pool}
-                         %{group, test_v55_pool}
-                         %{group, test_v51_pool}
-                         %{group, test_v50_pool}
-                         %{group, test_v41_pool}
-                         %{group, test_v40_pool}
-                         ]},
+groups() -> [
 
-     {test_v56_pool, [], [{group,query_test},{group,blob_test},{group,other_test}]},
-     {test_v55_pool, [], [{group,query_test},{group,other_test}]},
-     {test_v51_pool, [], [{group,query_test},{group,other_test}]},
-     {test_v50_pool, [], [{group,other_test}]},
-     {test_v41_pool, [], [{group,other_test}]},
-     {test_v40_pool, [], [{group,other_test},{group,cover_test}]},
+             {groups_public, [sequence], [
+                                          {group, group_normal},
+                                          {group, group_compress}
+                                         ]},
 
-     {query_test, [], [
-                       real_test_crud,
-                       real_test_transaction,
-                       real_test_multi,
-                       real_test_call_1, real_test_call_2,
+             {group_normal, [sequence], [
+                                         set_timeout_test,
+                                         {group, group_query},
+                                         {group, group_other},
+                                         {group, group_cover}
+                                        ]},
 
-                       stmt_test_crud,
-                       stmt_test_count_0_0, stmt_test_count_0_1,
-                       stmt_test_count_1_1, stmt_test_count_3_0,
-                       stmt_test_fetch,
-                       stmt_test_call_1, stmt_test_call_1
-                      ]},
-     {blob_test,  [], [
-                      %stmt_test_blob
-                      ]},
-     {other_test, [], [
-                       ping_test,
-                       stat_test,
-                       refresh_test,
-                       select_db_test
-                      ]},
-     {cover_test, [], [
-                       cover_myer,
-                       cover_myer_app,
-                       cover_myer_client
-                      ]}
-    ].
+             {group_compress, [sequence], [
+                                           {group, group_query}
+                                          ]},
 
-init_per_suite(Config) ->
-    _ = application:load(myer),
-    Config.
+             {group_query, [], [
+                                real_test_crud,
+                                real_test_transaction,
+                                real_test_multi,
+                                real_test_call_1, real_test_call_2,
+                                stmt_test_crud,
+                                stmt_test_count_0_0, stmt_test_count_0_1,
+                                stmt_test_count_1_1, stmt_test_count_3_0,
+                                stmt_test_fetch,
+                                stmt_test_call_1, stmt_test_call_1
+                              % stmt_test_blob
+                               ]},
 
-end_per_suite(Config) ->
-    Config.
+             {group_other, [], [
+                                ping_test,
+                                refresh_test,
+                                select_db_test,
+                                stat_test
+                               ]},
+
+             {group_cover, [], [
+                                cover_myer
+                               ]}
+            ].
 
 init_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun set_env/1, fun start/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, [{pool,Group}|Config], L);
-        <<"lamron_",_/binary>> ->
-            [{compress,false}|Config];
-        <<"sserpmoc_",_/binary>> ->
-            [{compress,true}|Config];
-        _ ->
-            Config
+    case ct:get_config(Group) of
+        undefined ->
+            Config;
+        List ->
+            ok = set_env(List),
+            L = [fun start_test/1],
+            lists:foldl(fun(E,A) -> E(A) end, Config, L)
     end.
 
 end_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun stop/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, proplists:delete(pool,Config), L);
-        <<"lamron_",_/binary>> ->
-            proplists:delete(compress, Config);
-        <<"sserpmoc_",_/binary>> ->
-            proplists:delete(compress, Config);
+    case ct:get_config(Group) of
+        undefined ->
+            Config;
         _ ->
-            Config
+            L = [fun stop_test/1],
+            lists:foldl(fun(E,A) -> E(A) end, Config, L)
     end.
 
-init_per_testcase(_TestCase, Config) ->
-    L = [ fun checkout/1, fun get_server_version/1, fun drop_table/1, fun testcase_pre/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+init_per_testcase(version_test, Config) ->
+    Config;
+init_per_testcase(TestCase, Config) ->
+    case atom_to_binary(TestCase, latin1) of
+        <<"group", _/binary>> ->
+            Config;
+        _ ->
+            L = [ fun checkout_test/1, fun get_server_version_test/1, fun setup/1 ],
+            lists:foldl(fun(E,A) -> E(A) end, Config, L)
+    end.
 
-end_per_testcase(_TestCase, Config) ->
-    L = [ fun testcase_post/1, fun drop_table/1, fun checkin/1, fun cleanup/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+end_per_testcase(version_test, Config) ->
+    Config;
+end_per_testcase(TestCase, Config) ->
+    case atom_to_binary(TestCase, latin1) of
+        <<"group", _/binary>> ->
+            Config;
+        _ ->
+            L = [fun cleanup/1, fun checkin_test/1 ],
+            lists:foldl(fun(E,A) -> E(A) end, Config, L)
+    end.
 
-%% == group: query_test ==
+%% == public ==
+
+start_test(Config) ->
+    case call(start, []) of
+        ok ->
+            Config;
+        {error, Reason} ->
+            ct:fail(Reason)
+    end.
+
+stop_test(Config) ->
+    case call(stop, []) of
+        ok ->
+            Config;
+        {error, Reason} ->
+            ct:fail(Reason)
+    end.
+
+version_test(Config) ->
+    [0,3,0] = version(Config).
+
+
+checkout_test(Config) ->
+    case call(checkout, [mysql_pool]) of
+        {ok, Handle} ->
+            [{handle,Handle}|Config];
+        {error, Reason} ->
+            ct:fail(Reason)
+    end.
+
+checkin_test(Config) ->
+    case call(Config, checkin, []) of
+        ok ->
+            proplists:delete(handle, Config);
+        {error, Reason} ->
+            ct:fail(Reason)
+    end.
+
+
+set_timeout_test(Config) ->
+    {ok, _} = call(Config, set_timeout, [timer:minutes(10)]).
+
+
+get_server_version_test(Config) ->
+    case call(Config, get_server_version, []) of
+        {ok, Version} ->
+            [{version,Version}|Config];
+        {error, Reason} ->
+            ct:fail(Reason)
+    end.
+
+ping_test(Config) ->
+    {ok, _} = ping(Config).
+
+refresh_test(Config) ->
+    refresh_test(Config, ?config(version,Config) > [5,1,0]).
+
+refresh_test(_Config, false) ->
+    {skip, not_supported};
+refresh_test(Config, true) ->
+    {ok, _} = refresh(Config, ?REFRESH_GRANT),
+    {ok, _} = refresh(Config, ?REFRESH_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_TABLES),
+    {ok, _} = refresh(Config, ?REFRESH_HOSTS),
+    {ok, _} = refresh(Config, ?REFRESH_STATUS),
+    {ok, _} = refresh(Config, ?REFRESH_THREADS),
+    {ok, _} = refresh(Config, ?REFRESH_SLAVE),
+    {ok, _} = refresh(Config, ?REFRESH_MASTER),
+    {ok, _} = refresh(Config, ?REFRESH_ERROR_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_ENGINE_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_BINARY_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_RELAY_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_GENERAL_LOG),
+    {ok, _} = refresh(Config, ?REFRESH_SLOW_LOG).
+
+select_db_test(Config) ->
+    select_db_test(Config, ?config(version,Config) > [5,1,0]).
+
+select_db_test(_Config, false) ->
+    {skip, not_supported};
+select_db_test(Config, true) ->
+
+    {error, R} = select_db(Config, <<"nowhere">>),
+    1044 = errno(R), <<"42000">> = sqlstate(R),
+    <<"Access denied for user ",_/binary>> = errmsg(R),
+
+    {ok, _} = select_db(Config, <<"test">>).
+
+stat_test(Config) ->
+    {ok, _} = stat(Config).
+
+%% -- real_* --
 
 real_test_crud(Config) ->
     real_test_crud(Config, ?config(version,Config) > [5,1,0]).
@@ -117,6 +223,8 @@ real_test_crud(Config) ->
 real_test_crud(_Config, false) ->
     {skip, not_supported};
 real_test_crud(Config, true) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
@@ -162,6 +270,8 @@ real_test_transaction(Config) ->
 real_test_transaction(_Config, false) ->
     {skip, not_supported};
 real_test_transaction(Config, true) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
@@ -217,6 +327,8 @@ real_test_multi(Config) ->
 real_test_multi(_Config, false) ->
     {skip, not_supported};
 real_test_multi(Config, true) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
@@ -305,12 +417,16 @@ real_test_call_2(Config, true) ->
 
     {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p2">>).
 
+%% -- stmt_* --
+
 stmt_test_crud(Config) ->
     stmt_test_crud(Config, ?config(version,Config) > [5,1,0]).
 
 stmt_test_crud(_Config, false) ->
     {skip, not_supported};
 stmt_test_crud(Config, true) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
@@ -385,6 +501,8 @@ stmt_test_count_0_0(_Config, false) ->
     {skip, not_supported};
 stmt_test_count_0_0(Config, true) -> % param=0, field=0 (no-eof)
 
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
                                    ", name  VARCHAR(5)"
@@ -437,6 +555,8 @@ stmt_test_count_3_0(_Config, false) ->
     {skip, not_supported};
 stmt_test_count_3_0(Config, true) -> % param=3, field=0
 
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
                                    ", name  VARCHAR(5)"
@@ -477,6 +597,8 @@ stmt_test_fetch(Config) ->
 stmt_test_fetch(_Config, false) ->
     {skip, not_supported};
 stmt_test_fetch(Config, true) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
@@ -633,16 +755,19 @@ stmt_test_call_2(Config, true) ->
 
     {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p2">>).
 
-%% == group: blob_test ==
 
 stmt_test_blob(Config) ->
+
+    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
                                    "  id    INT"
                                    ", value LONGBLOB"
                                    ")">>),
 
-    D = case ?config(compress,Config) of
+    {ok, L} = application:get_env(myer, mysql_pool),
+
+    D = case proplists:get_value(compress, L) of
             true ->
                 [
                  225, 226, 251,
@@ -686,166 +811,56 @@ stmt_test_blob(Config) ->
         undefined = affected_rows(R), 0 = warning_count(R)
     end.
 
-%% == group: other_test ==
-
-ping_test(Config) ->
-    {ok, _} = ping(Config).
-
-stat_test(Config) ->
-    {ok, _} = stat(Config).
-
-refresh_test(Config) ->
-    refresh_test(Config, ?config(version,Config) > [5,1,0]).
-
-refresh_test(_Config, false) ->
-    {skip, not_supported};
-refresh_test(Config, true) ->
-    {ok, _} = refresh(Config, ?REFRESH_GRANT),
-    {ok, _} = refresh(Config, ?REFRESH_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_TABLES),
-    {ok, _} = refresh(Config, ?REFRESH_HOSTS),
-    {ok, _} = refresh(Config, ?REFRESH_STATUS),
-    {ok, _} = refresh(Config, ?REFRESH_THREADS),
-    {ok, _} = refresh(Config, ?REFRESH_SLAVE),
-    {ok, _} = refresh(Config, ?REFRESH_MASTER),
-    {ok, _} = refresh(Config, ?REFRESH_ERROR_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_ENGINE_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_BINARY_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_RELAY_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_GENERAL_LOG),
-    {ok, _} = refresh(Config, ?REFRESH_SLOW_LOG).
-
-select_db_test(Config) ->
-    select_db_test(Config, ?config(version,Config) > [5,1,0]).
-
-select_db_test(_Config, false) ->
-    {skip, not_supported};
-select_db_test(Config, true) ->
-
-    {error, R} = select_db(Config, <<"nowhere">>),
-    1044 = errno(R), <<"42000">> = sqlstate(R),
-    <<"Access denied for user ",_/binary>> = errmsg(R),
-
-    {ok, _} = select_db(Config, <<"test">>).
-
-%% == group: cover_test ==
 
 cover_myer(_Config) ->
 
-    {ok, [0,1,0]} = myer:get_client_version().
+    {error, notfound} = call(checkout, [?MODULE]),
 
-cover_myer_app(Config) ->
-
-    {ok, _} = myer_app:call(?config(pool,Config), {real_query,[<<"SELECT @@version">>]}),
-
-    {error, badarg} = myer_app:call(nobody, {real_query,[<<"SELECT @@version">>]}),
-
-%   {error, badarg} = myer_app:checkout(nobody, false, 1),
-
-%   {error, badarg} = myer_app:checkin(nobody, self()),
-
-%   F = fun (_,A) ->
-%               case myer_app:checkout(?config(pool,Config),false,5) of
-%                   {ok, Pid} ->
-%                       [Pid|A];
-%                   {error, full} ->
-%                       throw(A)
-%               end
-%       end,
-%   case catch lists:foldl(F, [], lists:seq(1,1000)) of
-%       {'EXIT',_} -> % gen_server:call, timeout ...
-%           ok;
-%       List ->
-%           ct:log("length=~p", [length(List)]),
-%           lists:foreach(fun(E) -> myer_app:checkin(?config(pool,Config),E) end, List)
-%   end.
-    ok.
-
-cover_myer_client(Config) ->
-
-    Pid = ?config(pid,Config),
-
-    {error,badarg} = myer_client:call(Pid, ?MODULE),
-
-    ok = myer_client:cast(Pid, ?MODULE),
-
-    Pid ! ?MODULE,
+    undefined = call(affected_rows,      [?MODULE]),
+    undefined = call(errno,              [?MODULE]),
+    undefined = call(errmsg,             [?MODULE]),
+    undefined = call(insert_id,          [?MODULE]),
+    false     = call(more_results,       [?MODULE]),
+    undefined = call(sqlstate,           [?MODULE]),
+    undefined = call(warning_count,      [?MODULE]),
+    undefined = call(stmt_affected_rows, [?MODULE]),
+    undefined = call(stmt_field_count,   [?MODULE]),
+    undefined = call(stmt_insert_id,     [?MODULE]),
+    undefined = call(stmt_param_count,   [?MODULE]),
+    undefined = call(stmt_warning_count, [?MODULE]),
 
     ok.
 
-%% -- --
-
-call(Func, Args) ->
-    apply(myer, Func, Args).
-
-call(Config, Func, Args) ->
-    apply(myer, Func, [?config(pid,Config)|Args]).
+%% == internal ==
 
 cleanup(Config) ->
+    case ?config(handle, Config) of
+        undefined ->
+            Config;
+        _ ->
+            {ok, _} = autocommit(Config, true),
+            Config
+    end,
     lists:foldl(fun proplists:delete/2, Config, [version]).
 
-checkin(Config) ->
-    case myer:checkin(?config(pid,Config)) of
-        ok ->
-            proplists:delete(pid, Config);
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-checkout(Config) ->
-    case myer:checkout(?config(pool,Config)) of
-        {ok, Pid} ->
-            [{pid,Pid}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-drop_table(Config) ->
-    _ = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE >>),
-    Config.
-
-get_server_version(Config) ->
-    case call(Config, get_server_version, []) of
-        {ok, Version} ->
-            [{version,Version}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-set_env(Config) ->
-    A = ?config(pool, Config),
-    L = [
-         {user, <<"test">>},
-         {password, <<"test">>},
-         {compress, ?config(compress,Config)}
-        ],
-    ok = application:set_env(myer, A, L ++ ct:get_config(A)),
-    Config.
-
-start(Config) ->
-    case myer:start() of
-        ok ->
+setup(Config) ->
+    case ?config(handle, Config) of
+        undefined ->
             Config;
-        {error, Reason} ->
-            ct:fail(Reason)
+        _ ->
+            {ok, _} = autocommit(Config, false),
+            Config
     end.
 
-stop(Config) ->
-    case myer:stop() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
 
-testcase_post(Config) ->
-    {ok, _} = commit(Config),
-    {ok, _} = autocommit(Config, true),
-    Config.
+call(Function, Args) -> test(myer, Function, Args).
+call(Config, Function, Args) -> call(Config, myer, Function, Args).
+call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,Config)|Args]).
+set_env(List) -> baseline_ct:set_env(List).
+test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
-testcase_pre(Config) ->
-    {ok, _} = autocommit(Config, false),
-    Config.
+
+version(_Config) -> call(version, []).
 
 autocommit(Config, Bool) -> call(Config, autocommit, [Bool]).
 commit(Config) -> call(Config, commit, []).
@@ -856,6 +871,7 @@ refresh(Config, Options) -> call(Config, refresh, [Options]).
 rollback(Config) -> call(Config, rollback, []).
 select_db(Config, Database) -> call(Config, select_db, [Database]).
 stat(Config) -> call(Config, stat, []).
+
 stmt_close(Config, Prepare) -> call(Config, stmt_close, [Prepare]).
 stmt_execute(Config, Prepare, Args) -> call(Config, stmt_execute, [Prepare,Args]).
 stmt_fetch(Config, Prepare) -> call(Config, stmt_fetch, [Prepare]).
@@ -869,6 +885,8 @@ errmsg(Reason) -> call(errmsg, [Reason]).
 insert_id(Record) -> call(insert_id, [Record]).
 more_results(Record) -> call(more_results, [Record]).
 sqlstate(Reason) -> call(sqlstate, [Reason]).
+warning_count(Result) -> call(warning_count, [Result]).
+
 stmt_affected_rows(Prepare) -> call(stmt_affected_rows, [Prepare]).
 stmt_field_count(Prepare) -> call(stmt_field_count, [Prepare]).
 stmt_insert_id(Prepare) -> call(stmt_insert_id, [Prepare]).
@@ -876,4 +894,3 @@ stmt_param_count(Prepare) -> call(stmt_param_count, [Prepare]).
 stmt_attr_get(Prepare, AttrType) -> call(stmt_attr_get, [Prepare,AttrType]).
 stmt_attr_set(Prepare, AttrType, Value) -> call(stmt_attr_set, [Prepare,AttrType,Value]).
 stmt_warning_count(Prepare) -> call(stmt_warning_count, [Prepare]).
-warning_count(Result) -> call(warning_count, [Result]).
