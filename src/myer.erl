@@ -40,9 +40,9 @@
 
 %% -- internal --
 -record(myer, {
-          sup     :: pid(),
-          worker  :: pid(),
-          timeout :: timeout()
+          sup :: pid(),
+          worker :: pid(),
+          timeout = 3000 :: timeout()
          }).
 
 -type(myer() :: #myer{}).
@@ -62,7 +62,7 @@ start(Type)
 stop() ->
     application:stop(?MODULE).
 
--spec version() -> [non_neg_integer()].
+-spec version() -> [term()].
 version() ->
     baseline_app:version(?MODULE).
 
@@ -84,7 +84,7 @@ checkout(Pool)
             end
     end.
 
--spec checkin(myer()) -> ok.
+-spec checkin(myer()) -> ok|{error,not_found|simple_one_for_one}.
 checkin(#myer{sup=S,worker=W})
   when is_pid(S), is_pid(W) ->
     true = unlink(W),
@@ -185,21 +185,23 @@ stmt_next_result(#myer{worker=W}, #prepare{}=X)
 
 %% == public: record ==
 
--spec affected_rows(result()) -> non_neg_integer()|undefined.
+-spec affected_rows(term()) -> non_neg_integer()|undefined.
 affected_rows(#result{affected_rows=A}) -> A;
 affected_rows(_) -> undefined.
 
--spec errno(reason()) -> non_neg_integer().
-errno(#reason{errno=E}) -> E.
+-spec errno(term()) -> non_neg_integer()|undefined.
+errno(#reason{errno=E}) -> E;
+errno(_) -> undefined.
 
--spec errmsg(reason()) -> binary().
-errmsg(#reason{message=M}) -> M. % rename error/1 to errmsg/1
+-spec errmsg(term()) -> binary()|undefined.
+errmsg(#reason{message=M}) -> M; % rename error/1 to errmsg/1
+errmsg(_) -> undefined.
 
--spec insert_id(result()) -> non_neg_integer()|undefined.
+-spec insert_id(term()) -> non_neg_integer()|undefined.
 insert_id(#result{insert_id=I}) -> I;
 insert_id(_) -> undefined.
 
--spec more_results(prepare()|result()) -> boolean().
+-spec more_results(term()) -> boolean().
 more_results(#prepare{result=R}) ->
     more_results(R);
 more_results(#result{status=S})
@@ -208,28 +210,34 @@ more_results(#result{status=S})
 more_results(_) ->
     false.
 
--spec sqlstate(reason()) -> binary().
-sqlstate(#reason{state=S}) -> S.
+-spec sqlstate(term()) -> binary()|undefined.
+sqlstate(#reason{state=S}) -> S;
+sqlstate(_) -> undefined.
 
--spec warning_count(result()) -> non_neg_integer()|undefined.
+-spec warning_count(term()) -> non_neg_integer()|undefined.
 warning_count(#result{warning_count=W}) -> W;
 warning_count(_) -> undefined.
 
--spec stmt_affected_rows(prepare()) -> non_neg_integer().
-stmt_affected_rows(#prepare{result=R}) -> affected_rows(R).
+-spec stmt_affected_rows(term()) -> non_neg_integer()|undefined.
+stmt_affected_rows(#prepare{result=R}) -> affected_rows(R);
+stmt_affected_rows(_) -> undefined.
 
--spec stmt_field_count(prepare()) -> non_neg_integer().
-stmt_field_count(#prepare{field_count=F}) -> F.
+-spec stmt_field_count(term()) -> non_neg_integer()|undefined.
+stmt_field_count(#prepare{field_count=F}) -> F;
+stmt_field_count(_) -> undefined.
 
--spec stmt_insert_id(prepare()) -> non_neg_integer().
-stmt_insert_id(#prepare{result=R}) -> insert_id(R).
+-spec stmt_insert_id(term()) -> non_neg_integer()|undefined.
+stmt_insert_id(#prepare{result=R}) -> insert_id(R);
+stmt_insert_id(_) -> undefined.
 
--spec stmt_param_count(prepare()) -> non_neg_integer().
-stmt_param_count(#prepare{param_count=P}) -> P.
+-spec stmt_param_count(term()) -> non_neg_integer()|undefined.
+stmt_param_count(#prepare{param_count=P}) -> P;
+stmt_param_count(_) -> undefined.
 
--spec stmt_attr_get(prepare(),non_neg_integer()) -> non_neg_integer().
+-spec stmt_attr_get(term(),non_neg_integer()) -> non_neg_integer()|undefined.
 stmt_attr_get(#prepare{flags=F}, ?STMT_ATTR_CURSOR_TYPE) -> F;
-stmt_attr_get(#prepare{prefetch_rows=P}, ?STMT_ATTR_PREFETCH_ROWS) -> P.
+stmt_attr_get(#prepare{prefetch_rows=P}, ?STMT_ATTR_PREFETCH_ROWS) -> P;
+stmt_attr_get(_,_) -> undefined.
 
 -spec stmt_attr_set(prepare(),non_neg_integer(),non_neg_integer()) -> prepare().
 stmt_attr_set(#prepare{}=X, ?STMT_ATTR_CURSOR_TYPE, Value) ->
@@ -237,8 +245,9 @@ stmt_attr_set(#prepare{}=X, ?STMT_ATTR_CURSOR_TYPE, Value) ->
 stmt_attr_set(#prepare{}=X, ?STMT_ATTR_PREFETCH_ROWS, Value) ->
     X#prepare{prefetch_rows = Value}.
 
--spec stmt_warning_count(prepare()) -> non_neg_integer().
-stmt_warning_count(#prepare{result=R}) -> warning_count(R).
+-spec stmt_warning_count(term()) -> non_neg_integer()|undefined.
+stmt_warning_count(#prepare{result=R}) -> warning_count(R);
+stmt_warning_count(_) -> undefined.
 
 %% == private ==
 
