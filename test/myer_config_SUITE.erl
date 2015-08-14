@@ -3,93 +3,109 @@
 
 -module(myer_config_SUITE).
 
--compile(export_all).
-
 -include("internal.hrl").
 
+%% -- callback: ct --
+-export([all/0,
+         groups/0, init_per_group/2, end_per_group/2,
+         init_per_testcase/2]).
+
+%% -- public --
+-export([version_test/1]).
+-export([auth_test_pwd/1,
+         auth_test_nopwd/1,
+         auth_test_oldpwd/1,
+         auth_test_oldnopwd/1,
+         auth_test_pwderr/1,
+         auth_test_nodb/1]).
+-export([conf_test_address_atom/1, conf_test_address_list/1, conf_test_address_err/1,
+         conf_test_port_err/1,
+         conf_test_user_atom/1, conf_test_user_list/1, conf_test_user_err/1,
+         conf_test_password_atom/1, conf_test_password_list1/1,
+         conf_test_password_list2/1, conf_test_password_err/1,
+         conf_test_database_atom/1, conf_test_database_list1/1,
+         conf_test_database_list2/1, conf_test_database_err/1,
+         conf_test_default_character_set_integer/1,
+         conf_test_default_character_set_err/1,
+         conf_test_compress_boolean/1, conf_test_compress_err/1,
+         conf_test_max_allowed_packet_integer/1,
+         conf_test_max_allowed_packet_err/1,
+         conf_test_timeout_integer/1, conf_test_timeout_err/1,
+         conf_test_other/1]).
+
+%% == callback: ct ==
+
 all() -> [
-          {group, test_normal}
+          version_test,
+          {group, groups_private}
          ].
 
-groups() ->
-    [
-     {test_normal,   [], [
-                          {group, test_v56_pool}
-                         %{group, test_v55_pool}
-                         %{group, test_v51_pool}
-                         %{group, test_v50_pool}
-                         %{group, test_v41_pool}
-                         %{group, test_v40_pool}
-                         ]},
+groups() -> [
+             {groups_private, [sequence], [
+                                           {group, group_normal}
+                                          ]},
 
-     {test_v56_pool, [], [{group,auth_test}]},
-     {test_v55_pool, [], [{group,auth_test}]},
-     {test_v51_pool, [], [{group,auth_test}]},
-     {test_v50_pool, [], [{group,auth_test}]},
-     {test_v41_pool, [], [{group,auth_test}]},
-     {test_v40_pool, [], [{group,auth_test},{group,conf_test}]},
+             {group_normal, [sequence], [
+                                         {group, auth_test},
+                                         {group, conf_test}
+                                        ]},
 
-     {auth_test, [], [
-                      auth_test_pwd,
-                     %auth_test_nopwd,
-                      auth_test_oldpwd,
-                     %auth_test_oldnopwd,
-                     %auth_test_pwderr,
-                      auth_test_nodb
-                     ]},
-     {conf_test, [], [
-                      conf_test_address_atom, conf_test_address_list, conf_test_address_err,
-                      conf_test_port_err,
-                      conf_test_user_atom, conf_test_user_list, conf_test_user_err,
-                      conf_test_password_atom, conf_test_password_list1,
-                      conf_test_password_list2, conf_test_password_err,
-                      conf_test_database_atom, conf_test_database_list1,
-                      conf_test_database_list2, conf_test_database_err,
-                      conf_test_default_character_set_integer,
-                      conf_test_default_character_set_err,
-                      conf_test_compress_boolean, conf_test_compress_err,
-                      conf_test_max_allowed_packet_integer,
-                      conf_test_max_allowed_packet_err,
-                      conf_test_timeout_integer, conf_test_timeout_err,
-                      conf_test_other
-                     ]}
-    ].
+             {auth_test, [], [
+                              auth_test_pwd,
+                              %% auth_test_nopwd
+                              auth_test_oldpwd,
+                              %% auth_test_oldnopwd
+                              %% auth_test_pwderr
+                              auth_test_nodb
+                             ]},
 
-init_per_suite(Config) ->
-    _ = application:load(myer),
-    Config.
-
-end_per_suite(Config) ->
-    Config.
+             {conf_test, [], [
+                              conf_test_address_atom, conf_test_address_list, conf_test_address_err,
+                              conf_test_port_err,
+                              conf_test_user_atom, conf_test_user_list, conf_test_user_err,
+                              conf_test_password_atom, conf_test_password_list1,
+                              conf_test_password_list2, conf_test_password_err,
+                              conf_test_database_atom, conf_test_database_list1,
+                              conf_test_database_list2, conf_test_database_err,
+                              conf_test_default_character_set_integer,
+                              conf_test_default_character_set_err,
+                              conf_test_compress_boolean, conf_test_compress_err,
+                              conf_test_max_allowed_packet_integer,
+                              conf_test_max_allowed_packet_err,
+                              conf_test_timeout_integer, conf_test_timeout_err,
+                              conf_test_other
+                             ]}
+            ].
 
 init_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            [{pool,Group}|Config];
-        <<"lamron_",_/binary>> ->
-            [{compress,false}|Config];
-        _ ->
-            Config
+    case ct:get_config(Group) of
+        undefined ->
+            Config;
+        List ->
+            [{env,List}|Config]
     end.
 
-end_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            proplists:delete(pool, Config);
-        <<"lamron_",_/binary>> ->
-            proplists:delete(compress, Config);
-        _ ->
-            Config
-    end.
+end_per_group(_Group, Config) ->
+    proplists:delete(env, Config).
 
-%% == group: auth_test ==
+init_per_testcase(version_test, Config) ->
+    Config;
+init_per_testcase(_Testcase, Config) ->
+    ok = set_env(?config(env,Config)),
+    Config.
+
+%% == public ==
+
+version_test(Config) -> myer_public_SUITE:version_test(Config).
+
+%% -- auth_* --
 
 auth_test_pwd(Config) ->
     L = [
          {user, <<"test">>},
          {password, <<"test">>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -100,7 +116,7 @@ auth_test_nopwd(Config) ->
          {user, <<"test_nopwd">>},
          {password, <<>>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -111,7 +127,7 @@ auth_test_oldpwd(Config) ->
          {user, <<"test_oldpwd">>},
          {password, <<"test">>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -122,7 +138,7 @@ auth_test_oldnopwd(Config) ->
          {user, <<"test_oldnopwd">>},
          {password, <<>>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -133,7 +149,7 @@ auth_test_pwderr(Config) ->
          {user, <<"test">>},
          {password, <<>>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -145,13 +161,13 @@ auth_test_nodb(Config) ->
          {password, <<"test">>},
          {database, <<>>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
     end.
 
-%% == group: conf_test ==
+%% -- conf_* --
 
 conf_test_address_atom(Config) ->
     L = [
@@ -159,7 +175,7 @@ conf_test_address_atom(Config) ->
          {password, <<"test">>},
          {address, ct:get_config(hostname)}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -171,7 +187,7 @@ conf_test_address_list(Config) ->
          {password, <<"test">>},
          {address, atom_to_list(ct:get_config(hostname))}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -183,7 +199,7 @@ conf_test_address_err(Config) ->
          {password, <<"test">>},
          {address, <<>>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -195,7 +211,7 @@ conf_test_port_err(Config) ->
          {password, <<"test">>},
          {port, nobody}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -206,7 +222,7 @@ conf_test_user_atom(Config) ->
          {user, test},
          {password, <<"test">>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -217,7 +233,7 @@ conf_test_user_list(Config) ->
          {user, "test"},
          {password, <<"test">>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -228,7 +244,7 @@ conf_test_user_err(Config) ->
          {user, nobody},
          {password, <<"test">>}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -239,7 +255,7 @@ conf_test_password_atom(Config) ->
          {user, <<"test">>},
          {password, test}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -250,7 +266,7 @@ conf_test_password_list1(Config) ->
          {user, <<"test">>},
          {password, "test"}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -261,7 +277,7 @@ conf_test_password_list2(Config) ->
          {user, <<"test_nopwd">>},
          {password, ""}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -272,7 +288,7 @@ conf_test_password_err(Config) ->
          {user, <<"test">>},
          {password, nobody}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -282,9 +298,9 @@ conf_test_database_atom(Config) ->
     L = [
          {user, <<"test">>},
          {password, <<"test">>},
-         {database, binary_to_atom(get_value(Config,database),latin1)}
+         {database, binary_to_atom(get_env(database),latin1)}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -294,9 +310,9 @@ conf_test_database_list1(Config) ->
     L = [
          {user, <<"test">>},
          {password, <<"test">>},
-         {database, binary_to_list(get_value(Config,database))}
+         {database, binary_to_list(get_env(database))}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -308,7 +324,7 @@ conf_test_database_list2(Config) ->
          {password, <<"test">>},
          {database, ""}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -320,7 +336,7 @@ conf_test_database_err(Config) ->
          {password, <<"test">>},
          {database, nowhere}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -332,7 +348,7 @@ conf_test_default_character_set_integer(Config) ->
          {password, <<"test">>},
          {default_character_set, ?CHARSET_utf8_bin}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -344,7 +360,7 @@ conf_test_default_character_set_err(Config) ->
          {password, <<"test">>},
          {default_character_set, false}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -356,7 +372,7 @@ conf_test_compress_boolean(Config) ->
          {password, <<"test">>},
          {compress, true}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -368,7 +384,7 @@ conf_test_compress_err(Config) ->
          {password, <<"test">>},
          {compress, "false"}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -380,7 +396,7 @@ conf_test_max_allowed_packet_integer(Config) ->
          {password, <<"test">>},
          {max_allowed_packet, 4096}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -392,7 +408,7 @@ conf_test_max_allowed_packet_err(Config) ->
          {password, <<"test">>},
          {max_allowed_packet, nobody}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -404,7 +420,7 @@ conf_test_timeout_integer(Config) ->
          {password, <<"test">>},
          {timeout, 10}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:Reason ->
             ct:fail(Reason)
@@ -416,7 +432,7 @@ conf_test_timeout_err(Config) ->
          {password, <<"test">>},
          {timeout, infinity}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
@@ -426,43 +442,27 @@ conf_test_other(Config) ->
     L = [
          {nobody, false}
         ],
-    try do_test(Config, L)
+    try test(Config, L)
     catch
         _:_ ->
             ok
     end.
 
-%% -- --
+%% == internal ==
 
-do_test(Config, List) ->
-    L = [fun start/1, fun stop/1],
-    lists:foldl(fun(E,A) -> E(A) end, set_env(Config,List), L).
+get_env(Key) ->
+    {ok, L} = test(application, get_env, [myer,mysql_pool]),
+    test(proplists, get_value, [Key,L]).
 
-get_value(Config, Key) ->
-    A = ?config(pool, Config),
-    proplists:get_value(Key, ct:get_config(A)).
+set_env(List) ->
+    baseline_ct:set_env(List).
 
 set_env(Config, List) ->
-    A = ?config(pool, Config),
-    L1 = [{compress,?config(compress,Config)}|List],
-    L2 = lists:foldl(fun proplists:delete/2, ct:get_config(A), proplists:get_keys(L1)),
-    ok = application:set_env(myer, poolboy, [{A,[{size,1},{max_overflow,3}],L1 ++ L2}]),
-    {ok, L3} = application:get_env(myer, poolboy),
-    ct:log("env.poolboy=~p", [L3]),
+    ok = test(application, set_env, [myer,mysql_pool,List]),
     Config.
 
-start(Config) ->
-    case myer:start() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
+test(Config, List) ->
+    L = [fun myer_public_SUITE:start_test/1, fun myer_public_SUITE:stop_test/1],
+    lists:foldl(fun(E,A) -> E(A) end, set_env(Config,List), L).
 
-stop(Config) ->
-    case myer:stop() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
+test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).

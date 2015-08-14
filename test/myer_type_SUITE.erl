@@ -3,98 +3,94 @@
 
 -module(myer_type_SUITE).
 
--compile(export_all).
-
 -include("internal.hrl").
 
+%% -- callback: ct --
+-export([all/0,
+         groups/0, init_per_group/2, end_per_group/2,
+         init_per_testcase/2, end_per_testcase/2]).
+
+%% -- public --
+-export([version_test/1]).
+-export([real_types_test_11_2_1/1,
+         real_types_test_11_2_2/1,
+         real_types_test_11_2_3/1, real_types_test_11_2_4/1,
+         real_types_test_11_3_1/1, real_types_test_11_3_2/1,
+         real_types_test_11_3_3/1,
+         real_types_test_11_4_1/1,
+         real_types_test_11_4_2/1,
+         real_types_test_11_4_3/1,
+         real_types_test_11_4_4/1, real_types_test_11_4_5/1]).
+-export([stmt_types_test_11_2_1/1,
+         stmt_types_test_11_2_2/1,
+         stmt_types_test_11_2_3/1, stmt_types_test_11_2_4/1,
+         stmt_types_test_11_3_1/1, stmt_types_test_11_3_2/1,
+         stmt_types_test_11_3_3/1,
+         stmt_types_test_11_4_1/1,
+         stmt_types_test_11_4_2/1,
+         stmt_types_test_11_4_3/1,
+         stmt_types_test_11_4_4/1, stmt_types_test_11_4_5/1]).
+
+%% == callback: ct ==
+
 all() -> [
-          {group, test_normal},
-          {group, test_compress}
+          version_test,
+          {group, groups_private}
          ].
 
-groups() ->
-    [
-     {test_normal,   [], [
-                          {group, test_v56_pool}
-                         %{group, test_v55_pool}
-                         %{group, test_v51_pool}
-                         ]},
-     {test_compress, [], [
-                          {group, test_v56_pool}
-                         %{group, test_v55_pool}
-                         %{group, test_v51_pool}
-                         ]},
+groups() -> [
 
-     {test_v56_pool, [], [{group,real_test},{group,stmt_test}]},
-     {test_v55_pool, [], [{group,real_test},{group,stmt_test}]},
-     {test_v51_pool, [], [{group,real_test},{group,stmt_test}]},
+             {groups_private, [sequence], [
+                                           {group, group_normal}
+                                          ]},
 
-     {real_test, [], [
-                      real_types_test_11_2_1,
-                      real_types_test_11_2_2,
-                      real_types_test_11_2_3, real_types_test_11_2_4,
-                      real_types_test_11_3_1, real_types_test_11_3_2,
-                      real_types_test_11_3_3,
-                      real_types_test_11_4_1,
-                      real_types_test_11_4_2,
-                      real_types_test_11_4_3,
-                      real_types_test_11_4_4, real_types_test_11_4_5
-                     ]},
-     {stmt_test, [], [
-                      stmt_types_test_11_2_1,
-                      stmt_types_test_11_2_2,
-                      stmt_types_test_11_2_3, stmt_types_test_11_2_4,
-                      stmt_types_test_11_3_1, stmt_types_test_11_3_2,
-                      stmt_types_test_11_3_3,
-                      stmt_types_test_11_4_1,
-                      stmt_types_test_11_4_2,
-                      stmt_types_test_11_4_3,
-                      stmt_types_test_11_4_4, stmt_types_test_11_4_5
-                     ]}
-    ].
+             {group_normal, [sequence], [
+                                         {group,real_test},
+                                         {group,stmt_test}
+                                        ]},
 
-init_per_suite(Config) ->
-    _ = application:load(myer),
-    Config.
+             {real_test, [], [
+                              real_types_test_11_2_1,
+                              real_types_test_11_2_2,
+                              real_types_test_11_2_3, real_types_test_11_2_4,
+                              real_types_test_11_3_1, real_types_test_11_3_2,
+                              real_types_test_11_3_3,
+                              real_types_test_11_4_1,
+                              real_types_test_11_4_2,
+                              real_types_test_11_4_3,
+                              real_types_test_11_4_4, real_types_test_11_4_5
+                             ]},
 
-end_per_suite(Config) ->
-    Config.
+             {stmt_test, [], [
+                              stmt_types_test_11_2_1,
+                              stmt_types_test_11_2_2,
+                              stmt_types_test_11_2_3, stmt_types_test_11_2_4,
+                              stmt_types_test_11_3_1, stmt_types_test_11_3_2,
+                              stmt_types_test_11_3_3,
+                              stmt_types_test_11_4_1,
+                              stmt_types_test_11_4_2,
+                              stmt_types_test_11_4_3,
+                              stmt_types_test_11_4_4, stmt_types_test_11_4_5
+                             ]}
+            ].
 
 init_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun set_env/1, fun start/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, [{pool,Group}|Config], L);
-        <<"lamron_",_/binary>> ->
-            [{compress,false}|Config];
-        <<"sserpmoc_",_/binary>> ->
-            [{compress,true}|Config];
-        _ ->
-            Config
-    end.
+    myer_public_SUITE:init_per_group(Group, Config).
 
 end_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun stop/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, proplists:delete(pool,Config), L);
-        <<"lamron_",_/binary>> ->
-            proplists:delete(compress, Config);
-        <<"sserpmoc_",_/binary>> ->
-            proplists:delete(compress, Config);
-        _ ->
-            Config
-    end.
+    myer_public_SUITE:end_per_group(Group, Config).
 
-init_per_testcase(_TestCase, Config) ->
-    L = [ fun checkout/1, fun get_server_version/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+init_per_testcase(TestCase, Config) ->
+    myer_public_SUITE:init_per_testcase(TestCase, Config).
 
-end_per_testcase(_TestCase, Config) ->
-    L = [ fun checkin/1, fun cleanup/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+end_per_testcase(TestCase, Config) ->
+    myer_public_SUITE:end_per_testcase(TestCase, Config).
 
-%% == group: real_test --
+%% == public ==
+
+version_test(Config) -> myer_public_SUITE:version_test(Config).
+
+%% -- real_* --
 
 real_types_test(Config, Table) ->
     real_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
@@ -122,7 +118,7 @@ real_types_test_11_4_3(Config) -> real_types_test(Config, <<"data_types_11_4_3">
 real_types_test_11_4_4(Config) -> real_types_test(Config, <<"data_types_11_4_4">>).
 real_types_test_11_4_5(Config) -> real_types_test(Config, <<"data_types_11_4_5">>).
 
-%% == group: stmt_test --
+%%  -- stmt_* --
 
 stmt_types_test(Config, Table) ->
     stmt_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
@@ -153,6 +149,8 @@ stmt_types_test_11_4_2(Config) -> stmt_types_test(Config, <<"data_types_11_4_2">
 stmt_types_test_11_4_3(Config) -> stmt_types_test(Config, <<"data_types_11_4_3">>).
 stmt_types_test_11_4_4(Config) -> stmt_types_test(Config, <<"data_types_11_4_4">>).
 stmt_types_test_11_4_5(Config) -> stmt_types_test(Config, <<"data_types_11_4_5">>).
+
+%% == internal ==
 
 %% -- filed(s) --
 
@@ -621,74 +619,14 @@ rows(_Config, <<"data_types_11_4_5">>, all) ->
 rows(_Config, _Table, _Cond) ->
     [].
 
-%% -- --
 
-call(Func, Args) ->
-    apply(myer, Func, Args).
+call(Config, Function, Args) -> call(Config, myer, Function, Args).
+call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,Config)|Args]).
+get_value(Config, List) -> lists:foldl(fun proplists:get_value/2, Config, List).
+test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
-call(Config, Func, Args) ->
-    apply(myer, Func, [?config(pid,Config)|Args]).
-
-cleanup(Config) ->
-    lists:foldl(fun proplists:delete/2, Config, [version]).
-
-checkin(Config) ->
-    case myer:checkin(?config(pid,Config)) of
-        ok ->
-            proplists:delete(pid, Config);
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-checkout(Config) ->
-    case myer:checkout(?config(pool,Config)) of
-        {ok, Pid} ->
-            [{pid,Pid}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-get_server_version(Config) ->
-    case call(Config, get_server_version, []) of
-        {ok, Version} ->
-            [{version,Version}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-get_value(Config, List) ->
-    lists:foldl(fun proplists:get_value/2, Config, List).
-
-set_env(Config) ->
-    A = ?config(pool, Config),
-    L = [
-         {user, <<"test">>},
-         {password, <<"test">>},
-         {compress, ?config(compress,Config)}
-        ],
-    ok = application:set_env(myer, A, L ++ ct:get_config(A)),
-    Config.
-
-start(Config) ->
-    case myer:start() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-stop(Config) ->
-    case myer:stop() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
 
 real_query(Config, Query) -> call(Config, real_query, [Query]).
 stmt_close(Config, Prepare) -> call(Config, stmt_close, [Prepare]).
 stmt_execute(Config, Prepare, Args) -> call(Config, stmt_execute, [Prepare,Args]).
 stmt_prepare(Config, Query) -> call(Config, stmt_prepare, [Query]).
-
-affected_rows(Result) -> call(affected_rows, [Result]).
-warning_count(Result) -> call(warning_count, [Result]).

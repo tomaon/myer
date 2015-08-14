@@ -18,14 +18,14 @@
 
 all() -> [
           version_test,
-          {group, groups_public}
+          {group, groups_private}
          ].
 
 groups() -> [
 
-             {groups_public, [sequence], [
-                                          {group, group_normal}
-                                         ]},
+             {groups_private, [sequence], [
+                                           {group, group_normal}
+                                          ]},
 
              {group_normal, [sequence], [
                                          cover_myer_client
@@ -46,14 +46,14 @@ end_per_testcase(TestCase, Config) ->
 
 %% == public ==
 
-version_test(Config) ->  myer_public_SUITE:version_test(Config).
+version_test(Config) -> myer_public_SUITE:version_test(Config).
 
 
 cover_myer_client(Config) ->
 
     Handle = ?config(handle, Config),
 
-    Pid =  element(3, Handle),
+    Pid = element(3, Handle),
 
     {error, badarg} = test(myer_client, call, [Pid,?MODULE]),
 
