@@ -208,7 +208,7 @@ recv_packed_binary(Protocol) ->
 -spec recv_packed_binary(protocol(),undefined|binary())
                         -> {ok,null|binary(),protocol()}|{error,_,protocol()}.
 recv_packed_binary(#protocol{}=P, Byte) ->
-    case recv_packed_integer(P, Byte) of
+    case recv_packed_integer(Byte, P) of
         {ok, null, Protocol} ->
             {ok, null, Protocol};
         {ok, 0, Protocol} ->
@@ -254,7 +254,7 @@ loop(Protocol, Term, []) ->
     {ok, Term, Protocol};
 loop(#protocol{}=P, Term, [H|T])
   when is_list(Term) ->
-    case apply(H, [P|Term]) of
+    case apply(H, Term ++ [P]) of % bin_opt_info(SUGGEST)
         {ok, List, Protocol} ->
             loop(Protocol, List, T);
         {error, Reason, Protocol} ->
@@ -277,23 +277,23 @@ zreset(#protocol{handle=H}=P) ->
 
 %% -- private: loop,auth --
 
-auth_pre(#protocol{caps=C}=P, User, Password, <<>>) ->
+auth_pre(User, Password, <<>>, #protocol{caps=C}=P) ->
     Protocol = P#protocol{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
-    {ok, [auth_to_binary(Protocol,User,Password,<<>>)], Protocol};
-auth_pre(#protocol{caps=C}=P, User, Password, Database) ->
+    {ok, [auth_to_binary(User,Password,<<>>,Protocol)], Protocol};
+auth_pre(User, Password, Database, #protocol{caps=C}=P) ->
     Protocol = P#protocol{caps = (C bxor ?CLIENT_NO_SCHEMA)},
-    {ok, [auth_to_binary(Protocol,User,Password,Database)], Protocol}.
+    {ok, [auth_to_binary(User,Password,Database,Protocol)], Protocol}.
 
-auth_post(Protocol, <<254>>) ->
+auth_post(<<254>>, Protocol) ->
     recv_plugin(Protocol);
-auth_post(#protocol{caps=C}=P, <<0>>) ->
+auth_post(<<0>>, #protocol{caps=C}=P) ->
     recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
 
-auth_alt_pre(#protocol{seed=S,plugin=A}=P, Password) ->
+auth_alt_pre(Password, #protocol{seed=S,plugin=A}=P) ->
     Scrambled = myer_auth:scramble(Password, S, A),
     {ok, [<<Scrambled/binary,0>>], P}.
 
-auth_alt_post(#protocol{caps=C}=P, <<0>>) ->
+auth_alt_post(<<0>>, #protocol{caps=C}=P) ->
     recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
 
 %% -- private: loop,close --
@@ -307,7 +307,7 @@ close_post(#protocol{handle=H}=P) ->
 
 %% -- private: loop,connect --
 
-connect_pre(#protocol{}=P, Address, Port, Charset, Compress, MaxLength, Timeout) ->
+connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout, #protocol{}=P) ->
     case myer_network:connect(Address, Port, MaxLength, Timeout) of
         {ok, Handle} ->
             {ok, [], P#protocol{handle = Handle, maxlength = MaxLength, compress = false,
@@ -316,7 +316,7 @@ connect_pre(#protocol{}=P, Address, Port, Charset, Compress, MaxLength, Timeout)
             {error, Reason, P}
     end.
 
-connect_post(Protocol, <<10>>) -> % "always 10"
+connect_post(<<10>>, Protocol) -> % "always 10"
     case recv_rest(Protocol) of
         {ok, Binary, #protocol{}=P} ->
             {ok, undefined, merge(P,binary_to_handshake(Binary))};
@@ -336,29 +336,29 @@ ping_pre(Protocol) ->
 
 %% -- private: loop,real_query --
 
-real_query_pre(Protocol, Query) ->
+real_query_pre(Query, Protocol) ->
     {ok, [<<?COM_QUERY,Query/binary>>], reset(Protocol)}.
 
-real_query_post(Protocol, <<0>>) ->
+real_query_post(<<0>>, Protocol) ->
     recv_result(Protocol);
-real_query_post(Protocol, Byte) ->
-    case recv_packed_integer(Protocol, Byte) of
+real_query_post(Byte, Protocol) ->
+    case recv_packed_integer(Byte, Protocol) of
         {ok, N, #protocol{}=P} ->
-            real_query_recv_fields(P, N);
+            real_query_recv_fields(N, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-real_query_recv_fields(Protocol, N) ->
-    case recv_until_eof(Protocol, func_recv_field(Protocol), [], []) of
+real_query_recv_fields(N, Protocol) ->
+    case recv_until_eof(func_recv_field(Protocol), [], [], Protocol) of
         {ok, _Result, Fields, #protocol{}=P} when N == length(Fields) ->
-            real_query_recv_rows(P, Fields);
+            real_query_recv_rows(Fields, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-real_query_recv_rows(Protocol, Fields) ->
-    case recv_until_eof(Protocol, fun myer_protocol_text:recv_row/3, [Fields], []) of
+real_query_recv_rows(Fields, Protocol) ->
+    case recv_until_eof(fun myer_protocol_text:recv_row/3, [Fields], [], Protocol) of
         {ok, Result, Rows, #protocol{}=P} ->
 	    {ok, {Fields,Rows,Result}, P};
         {error, Reason, P} ->
@@ -367,12 +367,12 @@ real_query_recv_rows(Protocol, Fields) ->
 
 %% -- priate: loop,refresh --
 
-refresh_pre(Protocol, Options) ->
+refresh_pre(Options, Protocol) ->
     {ok, [<<?COM_REFRESH,Options>>], reset(Protocol)}.
 
 %% -- priate: loop,select_db --
 
-select_db_pre(Protocol, Database) ->
+select_db_pre(Database, Protocol) ->
     {ok, [<<?COM_INIT_DB,Database/binary>>], reset(Protocol)}.
 
 %% -- priate: loop,stat --
@@ -380,7 +380,7 @@ select_db_pre(Protocol, Database) ->
 stat_pre(Protocol) ->
     {ok, [<<?COM_STATISTICS>>], reset(Protocol)}.
 
-stat_post(Protocol, Byte) ->
+stat_post(Byte, Protocol) ->
     case recv_rest(Protocol) of
         {ok, Binary, #protocol{}=P} ->
             {ok, iolist_to_binary([Byte,Binary]), P};
@@ -390,46 +390,46 @@ stat_post(Protocol, Byte) ->
 
 %% -- priate: loop,stmt_close --
 
-stmt_close_pre(Protocol, #prepare{stmt_id=S}=X) ->
+stmt_close_pre(#prepare{stmt_id=S}=X, Protocol) ->
     {ok, [X,<<?COM_STMT_CLOSE,S:32/little>>], reset(Protocol)}.
 
-stmt_close_post(Protocol, _Prepare) ->
+stmt_close_post(_Prepare, Protocol) ->
     {ok, undefined, Protocol}.
 
 %% -- priate: loop,stmt_execute --
 
-stmt_execute_pre(Protocol, Prepare, Args) ->
+stmt_execute_pre(Prepare, Args, Protocol) ->
     B = stmt_execute_to_binary(Prepare, Args),
     {ok, [Prepare,B], reset(Protocol)}.
 
-stmt_execute_post(Protocol, #prepare{execute=E}=X, <<0>>) ->
+stmt_execute_post(<<0>>, #prepare{execute=E}=X, Protocol) ->
     case recv_result(Protocol) of
         {ok, Result, #protocol{}=P} ->
             {ok, X#prepare{result = Result, execute = E+1}, P};
         {error, Reason, P} ->
             {error, Reason, P}
     end;
-stmt_execute_post(Protocol, Prepare, Byte) ->
-    case recv_packed_integer(Protocol, Byte) of
+stmt_execute_post(Byte, Prepare, Protocol) ->
+    case recv_packed_integer(Byte, Protocol) of
         {ok, N, #protocol{}=P} ->
-            stmt_execute_recv_fields(P, Prepare, N);
+            stmt_execute_recv_fields(Prepare, N, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-stmt_execute_recv_fields(Protocol, #prepare{}=X, N) -> % do CALL, 0=X.filed_count
-    case recv_until_eof(Protocol, func_recv_field(Protocol), [], []) of
+stmt_execute_recv_fields(#prepare{}=X, N, Protocol) -> % do CALL, 0=X.filed_count
+    case recv_until_eof(func_recv_field(Protocol), [], [], Protocol) of
         {ok, Result, Fields, #protocol{}=P} when N == length(Fields) ->
-            stmt_execute_recv_rows(P, Result, X#prepare{field_count = N, fields = Fields});
+            stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = Fields}, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-stmt_execute_recv_rows(Protocol, #result{status=S}=R, #prepare{execute=E}=X)
+stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, Protocol)
   when ?ISSET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
     {ok, X#prepare{result = R, execute = E+1}, Protocol};
-stmt_execute_recv_rows(Protocol, _Result, #prepare{fields=F,execute=E}=X) ->
-    case recv_until_eof(Protocol, fun myer_protocol_binary:recv_row/3, [F], []) of
+stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, Protocol) ->
+    case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], Protocol) of
         {ok, Result, Rows, #protocol{}=P} ->
 	    {ok, {F,Rows,X#prepare{result = Result, execute = E+1}}, P};
         {error, Reason, P} ->
@@ -438,12 +438,12 @@ stmt_execute_recv_rows(Protocol, _Result, #prepare{fields=F,execute=E}=X) ->
 
 %% -- priate: loop,stmt_fetch --
 
-stmt_fetch_pre(Protocol, #prepare{stmt_id=S,prefetch_rows=R}=X) ->
+stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, Protocol) ->
     B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
     {ok, [X,B], reset(Protocol)}.
 
-stmt_fetch_post(Protocol, #prepare{fields=F}=X) ->
-    case recv_until_eof(Protocol, fun myer_protocol_binary:recv_row/3, [F], []) of
+stmt_fetch_post(#prepare{fields=F}=X, Protocol) ->
+    case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], Protocol) of
         {ok, Result, Rows, #protocol{}=P} ->
 	    {ok, {F,Rows,X#prepare{result = Result}}, P};
         {error, Reason, P} ->
@@ -452,10 +452,10 @@ stmt_fetch_post(Protocol, #prepare{fields=F}=X) ->
 
 %% -- private: loop,stmt_next_result --
 
-stmt_next_result_pre(Protocol, #prepare{}=X) ->
+stmt_next_result_pre(#prepare{}=X, Protocol) ->
     {ok, [X], zreset(Protocol)}.
 
-stmt_next_result_post(Protocol, #prepare{execute=E}=X, <<0>>) ->
+stmt_next_result_post(<<0>>, #prepare{execute=E}=X, Protocol) ->
     case recv_result(Protocol) of
         {ok, Result, #protocol{}=P} ->
             {ok, X#prepare{result = Result, execute = E+1}, P};
@@ -465,31 +465,31 @@ stmt_next_result_post(Protocol, #prepare{execute=E}=X, <<0>>) ->
 
 %% -- private: loop,stmt_prepare --
 
-stmt_prepare_pre(Protocol, Query) ->
+stmt_prepare_pre(Query, Protocol) ->
     {ok, [<<?COM_STMT_PREPARE,Query/binary>>], reset(Protocol)}.
 
-stmt_prepare_post(Protocol, <<0>>) ->
+stmt_prepare_post(<<0>>, Protocol) ->
     case recv_rest(Protocol) of
 	{ok, Binary, #protocol{version=V}=P} ->
-            stmt_prepare_recv_params(P, binary_to_prepare(V,Binary));
+            stmt_prepare_recv_params(binary_to_prepare(V,Binary), P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-stmt_prepare_recv_params(Protocol, #prepare{param_count=0}=X) ->
-    stmt_prepare_recv_fields(Protocol, undefined, X#prepare{params = []});
-stmt_prepare_recv_params(Protocol, #prepare{param_count=N}=X) ->
-    case recv_until_eof(Protocol, func_recv_field(Protocol), [], []) of
+stmt_prepare_recv_params(#prepare{param_count=0}=X, Protocol) ->
+    stmt_prepare_recv_fields(undefined, X#prepare{params = []}, Protocol);
+stmt_prepare_recv_params(#prepare{param_count=N}=X, Protocol) ->
+    case recv_until_eof(func_recv_field(Protocol), [], [], Protocol) of
         {ok, Result, Params, #protocol{}=P} when N == length(Params)->
-            stmt_prepare_recv_fields(P, Result, X#prepare{params = Params});
+            stmt_prepare_recv_fields(Result, X#prepare{params = Params}, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-stmt_prepare_recv_fields(Protocol, Result, #prepare{field_count=0}=X) ->
+stmt_prepare_recv_fields(Result, #prepare{field_count=0}=X, Protocol) ->
     {ok, X#prepare{result = Result}, Protocol};
-stmt_prepare_recv_fields(Protocol, _Result, #prepare{field_count=N}=X) ->
-    case recv_until_eof(Protocol, func_recv_field(Protocol), [], []) of
+stmt_prepare_recv_fields(_Result, #prepare{field_count=N}=X, Protocol) ->
+    case recv_until_eof(func_recv_field(Protocol), [], [], Protocol) of
         {ok, Result, Fields, #protocol{}=P} when N == length(Fields) ->
             {ok, X#prepare{fields = Fields, result = Result}, P};
         {error, Reason, P} ->
@@ -498,10 +498,10 @@ stmt_prepare_recv_fields(Protocol, _Result, #prepare{field_count=N}=X) ->
 
 %% -- private: loop,stmt_reset --
 
-stmt_reset_pre(Protocol, #prepare{stmt_id=S}=X) ->
+stmt_reset_pre(#prepare{stmt_id=S}=X, Protocol) ->
     {ok, [X,<<?COM_STMT_RESET,S:32/little>>], reset(Protocol)}.
 
-stmt_reset_post(Protocol, #prepare{}=X, <<0>>) ->
+stmt_reset_post(<<0>>, #prepare{}=X, Protocol) ->
     case recv_result(Protocol) of
         {ok, Result, #protocol{}=P} ->
             {ok, X#prepare{result = Result}, P};
@@ -511,7 +511,7 @@ stmt_reset_post(Protocol, #prepare{}=X, <<0>>) ->
 
 %% -- private: network --
 
-recv_eof(Protocol, Term) ->
+recv_eof(Term, Protocol) ->
     case recv_rest(Protocol) of
 	{ok, Binary, #protocol{caps=C}=P} ->
             {ok, binary_to_eof(C,Binary), Term, P};
@@ -546,7 +546,7 @@ recv_result(Protocol) ->
             {error, Reason, P}
     end.
 
-recv_result(Protocol, <<0>>) ->
+recv_result(<<0>>, Protocol) ->
     recv_result(Protocol).
 
 recv_status(Protocol) ->
@@ -559,17 +559,17 @@ recv_status(Protocol) ->
             {error, Reason, P}
     end.
 
-recv_status(Protocol, Term) ->
+recv_status(Term, Protocol) ->
     case recv(Protocol, 1) of
 	{ok, <<255>>, #protocol{}=P} ->
             recv_error(P);
         {ok, Byte, #protocol{}=P} ->
-            {ok, [Term,Byte], P}; % forward
+            {ok, [Byte,Term], P}; % forward
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-recv_unsigned(Protocol, Length) ->
+recv_unsigned(Length, Protocol) ->
     case recv(Protocol, Length) of
         {ok, Binary, #protocol{}=P} ->
             {ok, binary:decode_unsigned(Binary,little), P};
@@ -577,27 +577,27 @@ recv_unsigned(Protocol, Length) ->
             {error, Reason, P}
     end.
 
-recv_until_eof(Protocol, Func, Args, List) ->
+recv_until_eof(Func, Args, List, Protocol) ->
     case recv(Protocol, 1) of
         {ok, <<255>>, #protocol{}=P} ->
             recv_error(P);
 	{ok, <<254>>, #protocol{}=P} ->
-            recv_eof(P, lists:reverse(List));
+            recv_eof(lists:reverse(List), P);
         {ok, Byte, #protocol{}=P} ->
-            recv_until_eof(P, Func, Args, List, Byte);
+            recv_until_eof(Func, Args, List, Byte, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-recv_until_eof(Protocol, Func, Args, List, Byte) ->
+recv_until_eof(Func, Args, List, Byte, Protocol) ->
     case apply(Func, [Protocol|[Byte|Args]]) of
         {ok, Term, #protocol{}=P} ->
-            recv_until_eof(P, Func, Args, [Term|List]);
+            recv_until_eof(Func, Args, [Term|List], P);
         {error, Reason, P} ->
             {error, Reason, P}
     end.
 
-send(#protocol{handle=H,compress=Z}=P, Binary) ->
+send(Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_network:send(H, Binary, Z) of
 	{ok, Handle} ->
 	    {ok, [], replace(P,Handle)};
@@ -605,7 +605,7 @@ send(#protocol{handle=H,compress=Z}=P, Binary) ->
 	    {error, Reason, replace(P,Handle)}
     end.
 
-send(#protocol{handle=H,compress=Z}=P, Term, Binary) ->
+send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_network:send(H, Binary, Z) of
 	{ok, Handle} ->
 	    {ok, [Term], replace(P,Handle)};
@@ -649,24 +649,24 @@ unpack_integer(Binary, Start, Length) ->
         <<L>> -> {L, Start+1, Length-1}
     end.
 
-recv_packed_integer(Protocol, undefined) ->
+recv_packed_integer(undefined, Protocol) ->
     case recv(Protocol, 1) of
         {ok, Byte, #protocol{}=P} ->
-            recv_packed_integer(P, Byte);
+            recv_packed_integer(Byte, P);
         {error, Reason, P} ->
             {error, Reason, P}
     end;
-recv_packed_integer(Protocol, <<254>>) -> recv_unsigned(Protocol, 8);
-recv_packed_integer(Protocol, <<253>>) -> recv_unsigned(Protocol, 3);
-recv_packed_integer(Protocol, <<252>>) -> recv_unsigned(Protocol, 2);
-recv_packed_integer(Protocol, <<251>>) -> {ok, null, Protocol};
-recv_packed_integer(Protocol, <<Int>>) -> {ok, Int, Protocol}.
+recv_packed_integer(<<254>>, Protocol) -> recv_unsigned(8, Protocol);
+recv_packed_integer(<<253>>, Protocol) -> recv_unsigned(3, Protocol);
+recv_packed_integer(<<252>>, Protocol) -> recv_unsigned(2, Protocol);
+recv_packed_integer(<<251>>, Protocol) -> {ok, null, Protocol};
+recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 
 %% -----------------------------------------------------------------------------
 %% << sql-common/client.c : send_client_reply_packet/3
 %% -----------------------------------------------------------------------------
-auth_to_binary(#protocol{maxlength=M,seed=S,caps=C,charset=E,plugin=P},
-               User, Password, Database)
+auth_to_binary(User, Password, Database,
+               #protocol{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
   when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -685,8 +685,8 @@ auth_to_binary(#protocol{maxlength=M,seed=S,caps=C,charset=E,plugin=P},
       D/binary,
       P/binary
     >>;
-auth_to_binary(#protocol{maxlength=M,seed=S,caps=C,plugin=P},
-               User, Password, Database) ->
+auth_to_binary(User, Password, Database,
+               #protocol{maxlength=M,seed=S,caps=C,plugin=P}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
