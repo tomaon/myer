@@ -522,7 +522,7 @@ recv_eof(Protocol, Term) ->
 recv_error(Protocol) ->
     case recv_rest(Protocol) of
 	{ok, Binary, #protocol{caps=C}=P} ->
-            {error, binary_to_reason(C,Binary), P};
+            {error, binary_to_reason(C,Binary,0,byte_size(Binary)), P};
         {error, Reason, P} ->
             {error, Reason, P}
     end.
@@ -541,7 +541,7 @@ recv_rest(Protocol) ->
 recv_result(Protocol) ->
     case recv_rest(Protocol) of
 	{ok, Binary, #protocol{caps=C}=P} ->
-            {ok, binary_to_result(C,Binary), P};
+            {ok, binary_to_result(C,Binary,0,byte_size(Binary)), P};
         {error, Reason, P} ->
             {error, Reason, P}
     end.
@@ -630,23 +630,23 @@ pack_integer(Value) when Value < 65536    -> <<252, Value:16/little>>;
 pack_integer(Value) when Value < 16777216 -> <<253, Value:24/little>>;
 pack_integer(Value)                       -> <<254, Value:64/little>>.
 
-unpack_binary(Binary) ->
-    case unpack_integer(Binary) of
-        {null, Rest} ->
-            {null, Rest};
-        {Length, Data} ->
-            split_binary(Data, Length)
+unpack_binary(Binary, Start, Length) ->
+    case unpack_integer(Binary, Start, Length) of
+        {null, S, L} ->
+            {null, S, L};
+        {Len, S, L} ->
+            {binary_part(Binary,{S,Len}), S+Len, L-Len}
     end.
 
-unpack_integer(<<>>) ->
-    {0, <<>>};
-unpack_integer(Binary) ->
-    case split_binary(Binary, 1) of
-        {<<254>>, Rest} -> <<L:64/little, R/binary>> = Rest, {L, R};
-        {<<253>>, Rest} -> <<L:24/little, R/binary>> = Rest, {L, R};
-        {<<252>>, Rest} -> <<L:16/little, R/binary>> = Rest, {L, R};
-        {<<251>>, Rest} -> {null, Rest};
-        {<<Len>>, Rest} -> {Len, Rest}
+unpack_integer(_Binary, Start, 0) ->
+    {0, Start, 0};
+unpack_integer(Binary, Start, Length) ->
+    case binary_part(Binary, {Start,1}) of
+        <<254>> -> <<L:64/little>> = binary_part(Binary, {Start+1,8}), {L, Start+9, Length-9};
+        <<253>> -> <<L:24/little>> = binary_part(Binary, {Start+1,4}), {L, Start+5, Length-5};
+        <<252>> -> <<L:16/little>> = binary_part(Binary, {Start+1,2}), {L, Start+3, Length-3};
+        <<251>> -> {null, Start+1, Length-1};
+        <<L>> -> {L, Start+1, Length-1}
     end.
 
 recv_packed_integer(Protocol, undefined) ->
@@ -775,39 +775,45 @@ binary_to_eof(Caps, Binary) % eof -> #result{}
 %% << sql/sql_acl.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
 binary_to_handshake(Binary) ->
-    binary_to_handshake(#handshake{}, Binary).
+    binary_to_handshake(#handshake{}, Binary, 0, byte_size(Binary)).
 
-binary_to_handshake(#handshake{version=undefined}=H, Binary) ->
-    [B, R] = binary:split(Binary, <<0>>),
-    binary_to_handshake(H#handshake{version = binary_to_version(B)}, R);
-binary_to_handshake(#handshake{tid=undefined}=H, Binary) ->
-    <<N:32/little, R/binary>> = Binary,
-    binary_to_handshake(H#handshake{tid = N}, R);
-binary_to_handshake(#handshake{seed=undefined}=H, Binary) ->
-    [B, R] = binary:split(Binary, <<0>>),
-    binary_to_handshake(H#handshake{seed = B}, R);
-binary_to_handshake(#handshake{caps=undefined}=H, Binary) ->
-    <<I:16/little, R/binary>> = Binary,
-    binary_to_handshake(H#handshake{caps = I}, R);
-binary_to_handshake(#handshake{version=V,seed=S1,caps=C1,charset=undefined}=H, Binary)
+binary_to_handshake(#handshake{version=undefined}=H, Binary, Start, Length) ->
+    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
+    binary_to_handshake(H#handshake{version = binary_to_version(B)}, Binary, Start+L, Length-L);
+binary_to_handshake(#handshake{tid=undefined}=H, Binary, Start, Length) ->
+    <<N:32/little>> = binary_part(Binary, {Start,4}),
+    binary_to_handshake(H#handshake{tid = N}, Binary, Start+4, Length-4);
+binary_to_handshake(#handshake{seed=undefined}=H, Binary, Start, Length) ->
+    [B, _] = binary:split(binary_part(Binary,{Start,Length}), <<0>>), L = byte_size(B)+1,
+    binary_to_handshake(H#handshake{seed = B}, Binary, Start+L, Length-L);
+binary_to_handshake(#handshake{caps=undefined}=H, Binary, Start, Length) ->
+    <<I:16/little>> = binary_part(Binary, {Start,2}),
+    binary_to_handshake(H#handshake{caps = I}, Binary, Start+2, Length-2);
+binary_to_handshake(#handshake{version=V,seed=S1,caps=C1,charset=undefined}=H, Binary, Start, Length)
   when V >= [4,1,1]; ?ISSET(C1,?CLIENT_PROTOCOL_41) ->
-    <<E, I:16/little, C2:16/little, _X, 0:10/integer-unit:8, R1/binary>> = Binary,
-    [S2, R2] = binary:split(R1, <<0>>),
+    <<E>> = binary_part(Binary, Start, 1),
+    <<I:16/little>> = binary_part(Binary, {Start+1,2}),
+    <<C2:16/little>> = binary_part(Binary, {Start+3,2}),
+    %% _X
+    %% 0:10/integer-unit:8
+    [S2, _] = binary:split(binary_part(Binary,{Start+16,Length-16}), <<0>>), L2 = byte_size(S2)+1,
     S = <<S1/binary, S2/binary>>,
     C = (C2 bsl 16) bor C1,
-    binary_to_handshake(H#handshake{seed = S, caps = C, charset = E, status = I}, R2);
-binary_to_handshake(#handshake{charset=undefined}=H, Binary) ->
-    <<E, I:16/little, 0:13/integer-unit:8>> = Binary,
-    binary_to_handshake(H#handshake{charset = E, status = I}, <<>>);
-binary_to_handshake(#handshake{version=V,caps=C,plugin=undefined}=H, <<>>)
+    binary_to_handshake(H#handshake{seed = S, caps = C, charset = E, status = I}, Binary, Start+16+L2, Length-16-L2);
+binary_to_handshake(#handshake{charset=undefined}=H, Binary, Start, Length) ->
+    <<E>> = binary_part(Binary, Start, 1),
+    <<I:16/little>> = binary_part(Binary, Start+1, 2),
+    %% 0:13/integer-unit:8
+    binary_to_handshake(H#handshake{charset = E, status = I}, Binary, Start+16, Length-16);
+binary_to_handshake(#handshake{version=V,caps=C,plugin=undefined}=H, Binary, Start, 0)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    binary_to_handshake(H#handshake{plugin = <<"mysql_native_password">>}, <<>>);
-binary_to_handshake(#handshake{plugin=undefined}=H, <<>>) ->
-    binary_to_handshake(H#handshake{plugin = <<>>}, <<>>);
-binary_to_handshake(#handshake{plugin=undefined}=H, Binary) ->
-    [B, <<>>] = binary:split(Binary, <<0>>),
-    binary_to_handshake(H#handshake{plugin = B}, <<>>);
-binary_to_handshake(Handshake, <<>>) ->
+    binary_to_handshake(H#handshake{plugin = <<"mysql_native_password">>}, Binary, Start, 0);
+binary_to_handshake(#handshake{plugin=undefined}=H, Binary, Start, 0) ->
+    binary_to_handshake(H#handshake{plugin = <<>>}, Binary, Start, 0);
+binary_to_handshake(#handshake{plugin=undefined}=H, Binary, Start, Length) ->
+    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
+    binary_to_handshake(H#handshake{plugin = B}, Binary, Start+L, Length-L);
+binary_to_handshake(Handshake, _Binary, _Start, 0) -> % byte_size(Binary) =:= Start
     Handshake.
 
 %% -----------------------------------------------------------------------------
@@ -830,27 +836,31 @@ binary_to_prepare(_Version, Binary) -> % < 5.0.0, warning_count=undefined
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc : net_send_error_packet/4
 %% -----------------------------------------------------------------------------
-binary_to_reason(Caps, Binary)
+binary_to_reason(Caps, Binary, Start, Length)
   when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
-    <<E:16/little, $#, S:5/binary-unit:8, M/binary>> = Binary,
+    <<E:16/little>> = binary_part(Binary, {Start,2}),
+    <<$#>> = binary_part(Binary, {Start+2,1}),
+    S = binary_part(Binary, {Start+3,5}),
+    M = binary_part(Binary, {Start+8,Length-8}),
     #reason{errno = E, state = S, message = M};
-binary_to_reason(_Caps, Binary) ->
-    <<E:16/little, M/binary>> = Binary,
+binary_to_reason(_Caps, Binary, Start, Length) ->
+    <<E:16/little>> = binary_part(Binary, {Start,2}),
+    M = binary_part(Binary, {Start+2,Length-2}),
     #reason{errno = E, message = M}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc : net_send_ok/6
 %% -----------------------------------------------------------------------------
-binary_to_result(Caps, Binary)
+binary_to_result(Caps, Binary, Start, Length)
   when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
-    {A, R1} = unpack_integer(Binary),
-    {I, R2} = unpack_integer(R1),
-    <<S:16/little, W:16/little, R3/binary>> = R2,
-    {M, <<>>} = unpack_binary(R3),
+    {A, S1, L1} = unpack_integer(Binary, Start, Length),
+    {I, S2, L2} = unpack_integer(Binary, S1, L1),
+    <<S:16/little, W:16/little>> = binary_part(Binary, {S2,4}),
+    {M, _, 0} = unpack_binary(Binary, S2+4, L2-4),
     #result{affected_rows = A, insert_id = I, status = S, warning_count = W, message = M};
-binary_to_result(_Caps, Binary) ->
-    {N, R1} = unpack_integer(Binary),
-    {I, R2} = unpack_integer(R1),
-    <<S:16/little, R3/binary>> = R2, % < 4.0 -> S:8 ?
-    {M, <<>>} = unpack_binary(R3),
+binary_to_result(_Caps, Binary, Start, Length) ->
+    {N, S1, L1} = unpack_integer(Binary, Start, Length),
+    {I, S2, L2} = unpack_integer(Binary, S1, L1),
+    <<S:16/little>> = binary_part(Binary, {S2,2}), % < 4.0 -> S:8 ?
+    {M, _, 0} = unpack_binary(Binary, S2+2, L2-2),
     #result{affected_rows = N, insert_id = I, status = S, message = M}.
