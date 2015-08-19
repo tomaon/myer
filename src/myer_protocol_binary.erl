@@ -72,17 +72,17 @@ recv_row(Protocol, <<0>>, Fields) ->
     Size = (length(Fields) + (8+1)) div 8,
     case recv(Protocol, Size) of
         {ok, Binary, #protocol{}=P} ->
-            recv_row(P, Fields, null_fields(Binary), [])
+            recv_row(null_fields(Binary,0,Size,[]), Fields, [], P)
     end.
 
-recv_row(Protocol, [], _NullFields, List) ->
+recv_row(_NullFields, [], List, Protocol) ->
     {ok, lists:reverse(List), Protocol};
-recv_row(Protocol, [_|T], <<1:1,B/bits>>, List) ->
-    recv_row(Protocol, T, B, [null|List]);
-recv_row(Protocol, [H|T], <<0:1,B/bits>>, List) ->
+recv_row([1|L], [_|T], List, Protocol) ->
+    recv_row(L, T, [null|List], Protocol);
+recv_row([0|L], [H|T], List, Protocol) ->
     case restore(Protocol, type(H#field.type), H) of
         {ok, Value, #protocol{}=P} ->
-            recv_row(P, T, B, [Value|List])
+            recv_row(L, T, [Value|List], P)
     end.
 
 %% == private ==
@@ -113,14 +113,11 @@ cast(Binary, bit, _Field) ->
 cast(_Binary, undefined, _Field) ->
     undefined.
 
-null_fields(Binary) ->
-    null_fields(Binary, <<>>).
-
-null_fields(<<>>, Binary) ->
-    <<0:2,B/bits>> = Binary,
-    B;
-null_fields(<<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1,Rest/binary>>, B) ->
-    null_fields(Rest, <<B/binary,B1:1,B2:1,B3:1,B4:1,B5:1,B6:1,B7:1,B8:1>>).
+null_fields(_Binary, _Start, 0, List) ->
+    lists:sublist(List, 3, length(List));
+null_fields(Binary, Start, Length, List) ->
+    <<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1>> = binary_part(Binary, Start, 1),
+    null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
 restore(Protocol, {integer,Size}, #field{flags=F})
   when ?ISSET(F,?UNSIGNED_FLAG) ->
