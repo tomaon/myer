@@ -184,10 +184,8 @@ binary_to_float(Binary, _Decimals) ->
     end.
 
 -spec binary_to_integer(binary(),pos_integer(),non_neg_integer()) -> integer().
-binary_to_integer(Binary, _Base, _Decimals) ->
-    %%erlang:binary_to_integer/2, > R16
-    L = binary_to_list(Binary),
-    list_to_integer(L).
+binary_to_integer(Binary, Base, _Decimals) ->
+    binary_to_integer(Binary, Base).
 
 %% -- protected: network --
 
