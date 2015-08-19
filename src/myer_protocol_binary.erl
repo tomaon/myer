@@ -89,8 +89,6 @@ recv_row([0|L], [H|T], List, Protocol) ->
 
 cast(Binary, #field{type=binary}) ->
     Binary;
-cast(Binary, #field{type=decimal,decimals=D}) ->
-    binary_to_float(Binary, D);
 cast(Binary, #field{type=datetime}) ->
     case Binary of
         <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
@@ -108,6 +106,8 @@ cast(Binary, #field{type=time}) ->
         _ ->
             undefined % TODO: second_part, 8->12?
     end;
+cast(Binary, #field{type=decimal,decimals=D}) ->
+    binary_to_float(Binary, D);
 cast(Binary, #field{type=bit}) ->
     binary:decode_unsigned(Binary, big);
 cast(_Binary, _Field) ->
@@ -123,13 +123,13 @@ restore(Protocol, #field{type={integer,Size},flags=F}) ->
     case recv(Protocol,Size) of
         {ok, Binary, #protocol{}=P} ->
             Data = case ?ISSET(F,?UNSIGNED_FLAG) of
-                        true ->
-                            <<Value:Size/integer-unsigned-little-unit:8>> = Binary,
-                            Value;
-                        false ->
-                            <<Value:Size/integer-signed-little-unit:8>> = Binary,
-                            Value
-                    end,
+                       true ->
+                           <<Value:Size/integer-unsigned-little-unit:8>> = Binary,
+                           Value;
+                       false ->
+                           <<Value:Size/integer-signed-little-unit:8>> = Binary,
+                           Value
+                   end,
             {ok, Data, P}
     end;
 restore(Protocol, #field{type={float,Size},flags=F}) ->

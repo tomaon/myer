@@ -61,23 +61,21 @@ recv_row(Protocol, Byte, Fields) ->
 recv_row(Protocol, undefined, [], List) ->
     {ok, lists:reverse(List), Protocol};
 recv_row(Protocol, Byte, [H|T], List) ->
-    case restore(Protocol, Byte, H) of
-        {ok, Value, #protocol{}=P} ->
-            recv_row(P, undefined, T, [Value|List])
+    case recv_packed_binary(Protocol, Byte) of
+        {ok, Binary, #protocol{}=P} ->
+            recv_row(P, undefined, T, [cast(Binary,H)|List])
     end.
 
 %% == private ==
 
 cast(null, _Field) ->
     null;
-cast(Binary, #field{type=binary}) ->
-    Binary;
 cast(Binary, #field{type={integer,_},decimals=D}) ->
     binary_to_integer(Binary, 10, D);
 cast(Binary, #field{type={float,_},decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, #field{type=decimal,decimals=D}) ->
-    binary_to_float(Binary, D);
+cast(Binary, #field{type=binary}) ->
+    Binary;
 cast(Binary, #field{type=datetime}) ->
     case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
@@ -99,16 +97,12 @@ cast(Binary, #field{type=time}) ->
         _ ->
             undefined % TODO: second_part
     end;
+cast(Binary, #field{type=decimal,decimals=D}) ->
+    binary_to_float(Binary, D);
 cast(Binary, #field{type=bit}) ->
     binary:decode_unsigned(Binary, big);
 cast(_Binary, _Field) ->
     undefined.
-
-restore(Protocol, Byte, Field) ->
-    case recv_packed_binary(Protocol, Byte) of
-        {ok, Binary, #protocol{}=P} ->
-            {ok, cast(Binary,Field), P}
-    end.
 
 %%pe(?MYSQL_TYPE_DECIMAL)     -> undefined;
 type(?MYSQL_TYPE_TINY)        -> {integer,1};
