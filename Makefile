@@ -25,14 +25,19 @@ build:
 compile ct dialyzer eunit:
 	@$(ENV) $(REBAR) as test $@
 
-clean: rm-autosave rm-logs
+clean: rm
 	@for P in prod test; do $(ENV) $(REBAR) as $$P clean; done # prod,test -> prod+test ?!, TODO
-cleanall: rm-autosave rm-logs
+cleanall: rm
 	@for P in prod test; do $(ENV) $(REBAR) as $$P clean --all; done
 distclean:
 	@-rm -rf .rebar3 rebar.lock
+
+rm: rm-autosave rm-dump rm-logs
+
 rm-autosave:
 	@-find . -name "*~" | xargs rm -f
+rm-dump:
+	@-rm -f erl_crash.dump
 rm-logs:
 	@for D in cover logs; do rm -rf .rebar3/test/$$D; done
 
