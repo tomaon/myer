@@ -1,14 +1,19 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -config priv/conf/n1 -s crypto
+%%! -config priv/conf/n1 -s crypto -s eprof
 
 %% -- myer --
-run(2, H, myer) ->
+run(3, H, myer) ->
     F = fun (E) ->
                 Q = <<"SELECT * FROM ", E/binary, " WHERE k > 0">>,
                 [E, element(1,timer:tc(myer,real_query,[H,Q]))]
         end,
     [ io:format("myer: ~p=~p~n", F(E)) || E <- tables() ];
+run(2, H, myer) ->
+    profiling = eprof:start_profiling([element(3,H)]),
+    run(3, H, myer),
+    profiling_stopped = eprof:stop_profiling(),
+    ok = eprof:analyze();
 run(1, undefined, myer) ->
     case myer:checkout(mysql_pool) of
         {ok, H} ->
@@ -35,10 +40,12 @@ run(0, undefined, A) ->
 
 main(_) ->
     L = [
-         myer,
-         emysql,
-         myer,
-         emysql
+%        emysql,
+%        myer,
+%        emysql,
+%        myer,
+%        emysql,
+         myer
         ],
     [ run(0, undefined, E) || E <- L ].
 
@@ -47,7 +54,7 @@ tables() ->
      <<"data_types_11_2_1">>, % int
      <<"data_types_11_2_2">>, % decimal
      <<"data_types_11_2_3">>, % float
-%%   <<"data_types_11_2_4">>, % bit
+%    <<"data_types_11_2_4">>, % bit
      <<"data_types_11_3_1">>, % date
      <<"data_types_11_3_2">>, % time
      <<"data_types_11_3_3">>, % year
