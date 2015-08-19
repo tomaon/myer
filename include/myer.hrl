@@ -86,7 +86,7 @@
 	  org_name :: binary(),
 	  charsetnr :: non_neg_integer(),
           length :: non_neg_integer(),
-	  type :: integer(),
+	  type :: atom()|{atom(),integer()},
           flags :: integer(),
           decimals :: non_neg_integer()
 	 }).

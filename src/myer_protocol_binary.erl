@@ -80,37 +80,37 @@ recv_row(_NullFields, [], List, Protocol) ->
 recv_row([1|L], [_|T], List, Protocol) ->
     recv_row(L, T, [null|List], Protocol);
 recv_row([0|L], [H|T], List, Protocol) ->
-    case restore(Protocol, type(H#field.type), H) of
+    case restore(Protocol, H) of
         {ok, Value, #protocol{}=P} ->
             recv_row(L, T, [Value|List], P)
     end.
 
 %% == private ==
 
-cast(Binary, binary, _Field) ->
+cast(Binary, #field{type=binary}) ->
     Binary;
-cast(Binary, decimal, #field{decimals=D}) ->
+cast(Binary, #field{type=decimal,decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, datetime, _Field) ->
+cast(Binary, #field{type=datetime}) ->
     case Binary of
         <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
             {{Year,Month,Day},{Hour,Minute,Second}};
         _ ->
             undefined % TODO: second_part, 7->11?
     end;
-cast(Binary, date, _Field) ->
+cast(Binary, #field{type=date}) ->
     <<Year:16/little,Month,Day>> = Binary,
     {Year,Month,Day};
-cast(Binary, time, _Field) ->
+cast(Binary, #field{type=time}) ->
     case Binary of
         <<_Neg,_Day:32/little,Hour,Minute,Second>> ->
             {Hour,Minute,Second};
         _ ->
             undefined % TODO: second_part, 8->12?
     end;
-cast(Binary, bit, _Field) ->
+cast(Binary, #field{type=bit}) ->
     binary:decode_unsigned(Binary, big);
-cast(_Binary, undefined, _Field) ->
+cast(_Binary, _Field) ->
     undefined.
 
 null_fields(_Binary, _Start, 0, List) ->
@@ -119,62 +119,34 @@ null_fields(Binary, Start, Length, List) ->
     <<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1>> = binary_part(Binary, Start, 1),
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
-restore(Protocol, {integer,Size}, #field{flags=F})
-  when ?ISSET(F,?UNSIGNED_FLAG) ->
+restore(Protocol, #field{type={integer,Size},flags=F}) ->
     case recv(Protocol,Size) of
-        {ok, <<Data:Size/integer-unsigned-little-unit:8>>, #protocol{}=P} ->
+        {ok, Binary, #protocol{}=P} ->
+            Data = case ?ISSET(F,?UNSIGNED_FLAG) of
+                        true ->
+                            <<Value:Size/integer-unsigned-little-unit:8>> = Binary,
+                            Value;
+                        false ->
+                            <<Value:Size/integer-signed-little-unit:8>> = Binary,
+                            Value
+                    end,
             {ok, Data, P}
     end;
-restore(Protocol, {integer,Size}, _Field) ->
+restore(Protocol, #field{type={float,Size},flags=F}) ->
     case recv(Protocol,Size) of
-        {ok, <<Data:Size/integer-signed-little-unit:8>>, #protocol{}=P} ->
+        {ok, Binary, #protocol{}=P} ->
+            Data = case ?ISSET(F,?UNSIGNED_FLAG) of
+                       true ->
+                           <<Value:Size/float-unsigned-little-unit:8>> = Binary,
+                           Value;
+                       false ->
+                           <<Value:Size/float-signed-little-unit:8>> = Binary,
+                           Value
+                   end,
             {ok, Data, P}
     end;
-restore(Protocol, {float,Size}, #field{flags=F})
-  when ?ISSET(F,?UNSIGNED_FLAG) ->
-    case recv(Protocol,Size) of
-        {ok, <<Data:Size/float-unsigned-little-unit:8>>, #protocol{}=P} ->
-            {ok, Data, P}
-    end;
-restore(Protocol, {float,Size}, _Field) ->
-    case recv(Protocol,Size) of
-        {ok, <<Data:Size/float-signed-little-unit:8>>, #protocol{}=P} ->
-            {ok, Data, P}
-    end;
-restore(Protocol, Type, Field) ->
+restore(Protocol, Field) ->
     case recv_packed_binary(Protocol) of
         {ok, Binary, #protocol{}=P} ->
-            {ok, cast(Binary,Type,Field), P}
+            {ok, cast(Binary,Field), P}
     end.
-
-%%pe(?MYSQL_TYPE_DECIMAL)     -> undefined;
-type(?MYSQL_TYPE_TINY)        -> {integer,1};
-type(?MYSQL_TYPE_SHORT)       -> {integer,2};
-type(?MYSQL_TYPE_LONG)        -> {integer,4};
-type(?MYSQL_TYPE_FLOAT)       -> {float,4};
-type(?MYSQL_TYPE_DOUBLE)      -> {float,8};
-%%pe(?MYSQL_TYPE_NULL)        -> undefined;
-type(?MYSQL_TYPE_TIMESTAMP)   -> datetime;
-type(?MYSQL_TYPE_LONGLONG)    -> {integer,8};
-type(?MYSQL_TYPE_INT24)       -> {integer,4};
-type(?MYSQL_TYPE_DATE)        -> date;
-type(?MYSQL_TYPE_TIME)        -> time;
-type(?MYSQL_TYPE_DATETIME)    -> datetime;
-type(?MYSQL_TYPE_YEAR)        -> {integer,2};
-%%pe(?MYSQL_TYPE_NEWDATE)     -> undefined;
-%%pe(?MYSQL_TYPE_VARCHAR)     -> undefined;
-type(?MYSQL_TYPE_BIT)         -> bit;
-%%pe(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
-%%pe(?MYSQL_TYPE_DATETIME2)   -> undefined;
-%%pe(?MYSQL_TYPE_TIME2)       -> undefined;
-type(?MYSQL_TYPE_NEWDECIMAL)  -> decimal;
-%%pe(?MYSQL_TYPE_ENUM)        -> undefined;
-%%pe(?MYSQL_TYPE_SET)         -> undefined;
-%%pe(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
-%%pe(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined;
-%%pe(?MYSQL_TYPE_LONG_BLOB)   -> undefined;
-type(?MYSQL_TYPE_BLOB)        -> binary;
-type(?MYSQL_TYPE_VAR_STRING)  -> binary;
-type(?MYSQL_TYPE_STRING)      -> binary;
-%%pe(?MYSQL_TYPE_GEOMETRY)    -> undefined;
-type(_)                       -> undefined.

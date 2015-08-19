@@ -43,7 +43,7 @@ recv_field_41(Protocol, Byte) ->
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
                 name = NA, org_name = ON, charsetnr = E, length = L,
-                type = T, flags = F, decimals = N}, P7}. % TODO: mask(flags)
+                type = type(T), flags = F, decimals = N}, P7}. % TODO: mask(flags)
 
 -spec recv_field(protocol(),binary()) -> {ok, field(), protocol()}.
 recv_field(Protocol, Byte) ->
@@ -61,74 +61,76 @@ recv_row(Protocol, Byte, Fields) ->
 recv_row(Protocol, undefined, [], List) ->
     {ok, lists:reverse(List), Protocol};
 recv_row(Protocol, Byte, [H|T], List) ->
-    case restore(Protocol, Byte, type(H#field.type), H) of
+    case restore(Protocol, Byte, H) of
         {ok, Value, #protocol{}=P} ->
             recv_row(P, undefined, T, [Value|List])
     end.
 
 %% == private ==
 
-cast(null, _Type, _Field) ->
+cast(null, _Field) ->
     null;
-cast(Binary, binary, _Field) ->
+cast(Binary, #field{type=binary}) ->
     Binary;
-cast(Binary, integer, #field{decimals=D}) ->
+cast(Binary, #field{type={integer,_},decimals=D}) ->
     binary_to_integer(Binary, 10, D);
-cast(Binary, float, #field{decimals=D}) ->
+cast(Binary, #field{type={float,_},decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, datetime, _Field) ->
+cast(Binary, #field{type=decimal,decimals=D}) ->
+    binary_to_float(Binary, D);
+cast(Binary, #field{type=datetime}) ->
     case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
             {{Year,Month,Day},{Hour,Minute,Second}};
         _ ->
             undefined % TODO: second_part
     end;
-cast(Binary, date, _Field) ->
+cast(Binary, #field{type=date}) ->
     case io_lib:fread("~d-~d-~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day], []} ->
             {Year,Month,Day};
         _ ->
             undefined
     end;
-cast(Binary, time, _Field) ->
+cast(Binary, #field{type=time}) ->
     case io_lib:fread("~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Hour,Minute,Second], []} ->
             {Hour,Minute,Second};
         _ ->
             undefined % TODO: second_part
     end;
-cast(Binary, bit, _Field) ->
+cast(Binary, #field{type=bit}) ->
     binary:decode_unsigned(Binary, big);
-cast(_Binary, undefined, _Field) ->
+cast(_Binary, _Field) ->
     undefined.
 
-restore(Protocol, Byte, Type, Field) ->
+restore(Protocol, Byte, Field) ->
     case recv_packed_binary(Protocol, Byte) of
         {ok, Binary, #protocol{}=P} ->
-            {ok, cast(Binary,Type,Field), P}
+            {ok, cast(Binary,Field), P}
     end.
 
 %%pe(?MYSQL_TYPE_DECIMAL)     -> undefined;
-type(?MYSQL_TYPE_TINY)        -> integer;
-type(?MYSQL_TYPE_SHORT)       -> integer;
-type(?MYSQL_TYPE_LONG)        -> integer;
-type(?MYSQL_TYPE_FLOAT)       -> float;
-type(?MYSQL_TYPE_DOUBLE)      -> float;
+type(?MYSQL_TYPE_TINY)        -> {integer,1};
+type(?MYSQL_TYPE_SHORT)       -> {integer,2};
+type(?MYSQL_TYPE_LONG)        -> {integer,4};
+type(?MYSQL_TYPE_FLOAT)       -> {float,4};
+type(?MYSQL_TYPE_DOUBLE)      -> {float,8};
 %%pe(?MYSQL_TYPE_NULL)        -> undefined;
 type(?MYSQL_TYPE_TIMESTAMP)   -> datetime;
-type(?MYSQL_TYPE_LONGLONG)    -> integer;
-type(?MYSQL_TYPE_INT24)       -> integer;
+type(?MYSQL_TYPE_LONGLONG)    -> {integer,8};
+type(?MYSQL_TYPE_INT24)       -> {integer,4};
 type(?MYSQL_TYPE_DATE)        -> date;
 type(?MYSQL_TYPE_TIME)        -> time;
 type(?MYSQL_TYPE_DATETIME)    -> datetime;
-type(?MYSQL_TYPE_YEAR)        -> integer;
+type(?MYSQL_TYPE_YEAR)        -> {integer,2};
 %%pe(?MYSQL_TYPE_NEWDATE)     -> undefined;
 %%pe(?MYSQL_TYPE_VARCHAR)     -> undefined;
 type(?MYSQL_TYPE_BIT)         -> bit;
 %%pe(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
 %%pe(?MYSQL_TYPE_DATETIME2)   -> undefined;
 %%pe(?MYSQL_TYPE_TIME2)       -> undefined;
-type(?MYSQL_TYPE_NEWDECIMAL)  -> float;
+type(?MYSQL_TYPE_NEWDECIMAL)  -> decimal;
 %%pe(?MYSQL_TYPE_ENUM)        -> undefined;
 %%pe(?MYSQL_TYPE_SET)         -> undefined;
 %%pe(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
