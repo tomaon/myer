@@ -180,9 +180,9 @@ binary_to_integer(Binary, Base, _Decimals) ->
 recv(#protocol{handle=H,compress=Z}=P, Length) ->
     case myer_network:recv(H, Length, Z) of
         {ok, Binary, Handle} ->
-            {ok, Binary, replace(P,Handle)};
+            {ok, Binary, P#protocol{handle = Handle}};
         {error, Reason, Handle} ->
-            {error, Reason, replace(P,Handle)}
+            {error, Reason, P#protocol{handle = Handle}}
     end.
 
 -spec recv_packed_binary(undefined|binary(),protocol())
@@ -247,14 +247,11 @@ merge(#protocol{caps=I}=P, #handshake{version=V,seed=S,caps=C,plugin=A}) ->
 merge(#protocol{}=P, #plugin{name=N}) ->
     P#protocol{plugin = N}.
 
-replace(#protocol{}=P, Handle) ->
-    P#protocol{handle = Handle}.
-
 reset(#protocol{handle=H}=P) ->
-    replace(P, myer_network:reset(H)).
+    P#protocol{handle = myer_network:reset(H)}.
 
 zreset(#protocol{handle=H}=P) ->
-    replace(P, myer_network:zreset(H)).
+    P#protocol{handle = myer_network:zreset(H)}.
 
 %% -- private: loop,auth --
 
@@ -578,17 +575,17 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
 send(Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_network:send(H, Binary, Z) of
 	{ok, Handle} ->
-	    {ok, [replace(P,Handle)]};
+	    {ok, [P#protocol{handle = Handle}]};
 	{error, Reason, Handle} ->
-	    {error, Reason, replace(P,Handle)}
+	    {error, Reason, P#protocol{handle = Handle}}
     end.
 
 send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_network:send(H, Binary, Z) of
 	{ok, Handle} ->
-	    {ok, [Term,replace(P,Handle)]};
+	    {ok, [Term,P#protocol{handle = Handle}]};
 	{error, Reason, Handle} ->
-	    {error, Reason, replace(P,Handle)}
+	    {error, Reason, P#protocol{handle = Handle}}
     end.
 
 %% -- private: sql* --
