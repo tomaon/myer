@@ -52,7 +52,7 @@ recv_field(Protocol, Byte) ->
     {ok, B,  P3} = recv(P2, 10),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
-                type = T, flags = F, decimals = N}, P3}. % TODO: mask(flags)
+                type = type(T), flags = F, decimals = N}, P3}. % TODO: mask(flags)
 
 -spec recv_row(protocol(),binary(),[field()]) -> {ok, [term()], protocol()}.
 recv_row(Protocol, Byte, Fields) ->
