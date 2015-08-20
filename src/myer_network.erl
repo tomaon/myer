@@ -76,7 +76,9 @@ recv(Handle, Length, Compress) ->
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_,handle()}.
 send(#handle{}=H, Binary, Compress)
   when ?MAX_PACKET_LENGTH =< size(Binary) ->
-    {B, R} = split_binary(Binary, ?MAX_PACKET_LENGTH),
+    B = binary_part(Binary, {0,?MAX_PACKET_LENGTH}),
+    R = binary_part(Binary, {?MAX_PACKET_LENGTH,byte_size(Binary)-?MAX_PACKET_LENGTH}),
+    %%{B, R} = split_binary(Binary, ?MAX_PACKET_LENGTH),
     case send(H, B, ?MAX_PACKET_LENGTH, Compress) of
         {ok, Handle} ->
             send(Handle, R, Compress);
@@ -108,7 +110,9 @@ buffered(#handle{buf_size=S}=H, Length, Compress, Left, List)
     end;
 buffered(#handle{buf=B,buf_size=S}=H, Length, Compress, Left, List)
   when S > Left ->
-    {Binary, Rest} = split_binary(B, Left),
+    Binary = binary_part(B, {0,Left}),
+    Rest = binary_part(B, {Left,byte_size(B)-Left}),
+    %%{Binary, Rest} = split_binary(B, Left),
     buffered(H#handle{buf = Rest, buf_size = size(Rest)},
              Length, Compress, 0, [Binary|List]);
 buffered(#handle{buf=B,buf_size=S}=H, Length, Compress, Left, List) ->
@@ -120,7 +124,9 @@ dispatch(#handle{zraw=Z}=H, true)  -> recv(H, Z).
 
 recv(#handle{seqnum= N,raw = <<L:24/little,N,B/binary>>}=H)
   when L =< size(B) ->
-    {Binary, Rest} = split_binary(B, L),
+    Binary = binary_part(B, {0,L}),
+    Rest = binary_part(B, {L,byte_size(B)-L}),
+    %%{Binary, Rest} = split_binary(B, L),
     {ok, H#handle{seqnum = N+1, buf = Binary, buf_size = L, raw = Rest}};
 recv(#handle{socket=S,timeout=T,raw=R}=H) ->
     case gen_tcp:recv(S, 0, T) of
@@ -132,11 +138,15 @@ recv(#handle{socket=S,timeout=T,raw=R}=H) ->
 
 recv(#handle{zseqnum=N,raw= <<L:24/little,N,B/binary>>}=H, ZRaw)
   when L =< size(B) ->
-    {Binary, Rest} = split_binary(B, L),
+    Binary = binary_part(B, {0,L}),
+    Rest = binary_part(B, {L,byte_size(B)-L}),
+    %%{Binary, Rest} = split_binary(B, L),
     {ok, H#handle{zseqnum = N+1, buf = Binary, buf_size = L, raw = Rest, zraw = ZRaw}};
 recv(#handle{seqnum=N,raw=R}=H, <<L:24/little,N,Z:24/little,B/binary>>)
   when L =< 3 + size(B) ->
-    {Binary, Rest} = split_binary(B, L),
+    Binary = binary_part(B, {0,L}),
+    Rest = binary_part(B, {L,byte_size(B)-L}),
+    %%{Binary, Rest} = split_binary(B, L),
     X = if 0 < Z -> zlib:uncompress(Binary); true -> Binary end,
     recv(H#handle{seqnum = N+1, raw = iolist_to_binary([R,X])}, Rest);
 recv(#handle{socket=S,timeout=T}=H, ZRaw) ->
