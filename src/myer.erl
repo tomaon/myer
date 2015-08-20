@@ -111,27 +111,27 @@ commit(#myer{}=H) ->
 -spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
 get_server_version(#myer{worker=W})
   when is_pid(W) ->
-    call(W, {version,[]}).
+    myer_client:call(W, {version,[]}).
 
 -spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 next_result(#myer{worker=W})
   when is_pid(W) ->
-    call(W, {next_result,[]}).
+    myer_client:call(W, {next_result,[]}).
 
 -spec ping(myer()) -> {ok,result()}|{error,_}.
 ping(#myer{worker=W})
   when is_pid(W) ->
-    call(W, {ping,[]}).
+    myer_client:call(W, {ping,[]}).
 
 -spec real_query(myer(),binary()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 real_query(#myer{worker=W}, Query)
   when is_pid(W), is_binary(Query) ->
-    call(W, {real_query,[Query]}).
+    myer_client:call(W, {real_query,[Query]}).
 
 -spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
 refresh(#myer{worker=W}, Option)
   when is_pid(W), is_integer(Option) ->
-    call(W, {refresh,[Option]}).
+    myer_client:call(W, {refresh,[Option]}).
 
 -spec rollback(myer()) -> {ok,result()}|{error,_}.
 rollback(#myer{}=H) ->
@@ -140,46 +140,46 @@ rollback(#myer{}=H) ->
 -spec select_db(myer(),binary()) -> {ok,result()}|{error,_}.
 select_db(#myer{worker=W}, Database)
   when is_pid(W), is_binary(Database) ->
-    call(W, {select_db,[Database]}).
+    myer_client:call(W, {select_db,[Database]}).
 
 -spec stat(myer()) -> {ok,binary()}|{error,_}.
 stat(#myer{worker=W})
   when is_pid(W) ->
-    call(W, {stat,[]}).
+    myer_client:call(W, {stat,[]}).
 
 -spec stmt_close(myer(),prepare()) -> ok|{error,_}.
 stmt_close(#myer{worker=W}, #prepare{}=X)
   when is_pid(W) ->
-    call(W, {stmt_close,[X]}).
+    myer_client:call(W, {stmt_close,[X]}).
 
 -spec stmt_execute(myer(),prepare(),[term()])
                   -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
 stmt_execute(#myer{worker=W}, #prepare{param_count=N}=X, Args)
   when is_pid(W), is_list(Args), N == length(Args) ->
-    call(W, {stmt_execute,[X,Args]}).
+    myer_client:call(W, {stmt_execute,[X,Args]}).
 
 -spec stmt_fetch(myer(),prepare())
                 -> {ok,prepare()}|
                    {ok,[field()],[term()],prepare()}|{error,_}.
 stmt_fetch(#myer{worker=W}, #prepare{}=X)
   when is_pid(W) ->
-    call(W, {stmt_fetch,[X]}).
+    myer_client:call(W, {stmt_fetch,[X]}).
 
 -spec stmt_prepare(myer(),binary()) -> {ok,prepare()}|{error,_}.
 stmt_prepare(#myer{worker=W}, Query)
   when is_pid(W), is_binary(Query) ->
-    call(W, {stmt_prepare,[Query]}).
+    myer_client:call(W, {stmt_prepare,[Query]}).
 
 -spec stmt_reset(myer(),prepare()) -> {ok,prepare()}|{error,_}.
 stmt_reset(#myer{worker=W}, #prepare{}=X)
   when is_pid(W) ->
-    call(W, {stmt_reset,[X]}).
+    myer_client:call(W, {stmt_reset,[X]}).
 
 -spec stmt_next_result(myer(),prepare())
                       -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
 stmt_next_result(#myer{worker=W}, #prepare{}=X)
   when is_pid(W) ->
-    call(W, {stmt_next_result,[X]}).
+    myer_client:call(W, {stmt_next_result,[X]}).
 
 %% stmt_send_long_data, TODO
 
@@ -249,19 +249,6 @@ stmt_attr_set(#prepare{}=X, ?STMT_ATTR_PREFETCH_ROWS, Value) ->
 stmt_warning_count(#prepare{result=R}) -> warning_count(R);
 stmt_warning_count(_) -> undefined.
 
-%% == private ==
-
-call(Pid, Command) ->
-    case myer_client:call(Pid, Command) of
-        {ok, {Fields,Rows,Record}} ->
-            {ok, Fields, Rows, Record};
-        {ok, undefined} ->
-            ok;
-        {ok, Record} ->
-            {ok, Record};
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 %% mysql_affected_rows mysql_autocommit mysql_close mysql_commit
 %% mysql_errno mysql_error mysql_get_server_version mysql_insert_id
