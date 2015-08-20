@@ -87,28 +87,28 @@ recv_row([0|L], [H|T], List, Protocol) ->
 
 %% == private ==
 
-cast(Binary, #field{type=binary}) ->
+cast(Binary, #field{cast=binary}) ->
     Binary;
-cast(Binary, #field{type=datetime}) ->
+cast(Binary, #field{cast=datetime}) ->
     case Binary of
         <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
             {{Year,Month,Day},{Hour,Minute,Second}};
         _ ->
             undefined % TODO: second_part, 7->11?
     end;
-cast(Binary, #field{type=date}) ->
+cast(Binary, #field{cast=date}) ->
     <<Year:16/little,Month,Day>> = Binary,
     {Year,Month,Day};
-cast(Binary, #field{type=time}) ->
+cast(Binary, #field{cast=time}) ->
     case Binary of
         <<_Neg,_Day:32/little,Hour,Minute,Second>> ->
             {Hour,Minute,Second};
         _ ->
             undefined % TODO: second_part, 8->12?
     end;
-cast(Binary, #field{type=decimal,decimals=D}) ->
+cast(Binary, #field{cast=decimal,decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, #field{type=bit}) ->
+cast(Binary, #field{cast=bit}) ->
     binary:decode_unsigned(Binary, big);
 cast(_Binary, _Field) ->
     undefined.
@@ -119,7 +119,7 @@ null_fields(Binary, Start, Length, List) ->
     <<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1>> = binary_part(Binary, Start, 1),
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
-restore(Protocol, #field{type={integer,Size},flags=F}) ->
+restore(Protocol, #field{cast={integer,Size},flags=F}) ->
     case recv(Protocol, Size) of
         {ok, Binary, #protocol{}=P} ->
             Data = case ?ISSET(F,?UNSIGNED_FLAG) of
@@ -132,7 +132,7 @@ restore(Protocol, #field{type={integer,Size},flags=F}) ->
                    end,
             {ok, Data, P}
     end;
-restore(Protocol, #field{type={float,Size},flags=F}) ->
+restore(Protocol, #field{cast={float,Size},flags=F}) ->
     case recv(Protocol, Size) of
         {ok, Binary, #protocol{}=P} ->
             Data = case ?ISSET(F,?UNSIGNED_FLAG) of

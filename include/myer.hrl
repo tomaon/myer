@@ -86,9 +86,10 @@
 	  org_name :: binary(),
 	  charsetnr :: non_neg_integer(),
           length :: non_neg_integer(),
-	  type :: atom()|{atom(),integer()},
+          type :: non_neg_integer(),
           flags :: integer(),
-          decimals :: non_neg_integer()
+          decimals :: non_neg_integer(),
+          cast :: atom()|{atom(),integer()}
 	 }).
 
 -type(field() :: #field{}).

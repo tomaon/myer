@@ -43,7 +43,7 @@ recv_field_41(Protocol, Byte) ->
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
                 name = NA, org_name = ON, charsetnr = E, length = L,
-                type = type(T), flags = F, decimals = N}, P7}. % TODO: mask(flags)
+                type = T, flags = F, decimals = N, cast = type(T) }, P7}. % TODO: mask(flags)
 
 -spec recv_field(protocol(),binary()) -> {ok, field(), protocol()}.
 recv_field(Protocol, Byte) ->
@@ -52,7 +52,7 @@ recv_field(Protocol, Byte) ->
     {ok, B,  P3} = recv(P2, 10),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
-                type = type(T), flags = F, decimals = N}, P3}. % TODO: mask(flags)
+                type = T, flags = F, decimals = N, cast = type(T)}, P3}. % TODO: mask(flags)
 
 -spec recv_row(protocol(),binary(),[field()]) -> {ok, [term()], protocol()}.
 recv_row(Protocol, Byte, Fields) ->
@@ -70,36 +70,36 @@ recv_row(Protocol, Byte, [H|T], List) ->
 
 cast(null, _Field) ->
     null;
-cast(Binary, #field{type={integer,_},decimals=D}) ->
+cast(Binary, #field{cast={integer,_},decimals=D}) ->
     binary_to_integer(Binary, 10, D);
-cast(Binary, #field{type={float,_},decimals=D}) ->
+cast(Binary, #field{cast={float,_},decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, #field{type=binary}) ->
+cast(Binary, #field{cast=binary}) ->
     Binary;
-cast(Binary, #field{type=datetime}) ->
+cast(Binary, #field{cast=datetime}) ->
     case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
             {{Year,Month,Day},{Hour,Minute,Second}};
         _ ->
             undefined % TODO: second_part
     end;
-cast(Binary, #field{type=date}) ->
+cast(Binary, #field{cast=date}) ->
     case io_lib:fread("~d-~d-~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day], []} ->
             {Year,Month,Day};
         _ ->
             undefined
     end;
-cast(Binary, #field{type=time}) ->
+cast(Binary, #field{cast=time}) ->
     case io_lib:fread("~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Hour,Minute,Second], []} ->
             {Hour,Minute,Second};
         _ ->
             undefined % TODO: second_part
     end;
-cast(Binary, #field{type=decimal,decimals=D}) ->
+cast(Binary, #field{cast=decimal,decimals=D}) ->
     binary_to_float(Binary, D);
-cast(Binary, #field{type=bit}) ->
+cast(Binary, #field{cast=bit}) ->
     binary:decode_unsigned(Binary, big);
 cast(_Binary, _Field) ->
     undefined.
