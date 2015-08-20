@@ -25,7 +25,7 @@
 
 %% -- private --
 -import(myer_protocol, [binary_to_float/2, binary_to_integer/3,
-                        recv/2, recv_packed_binary/1, recv_packed_binary/2]).
+                        recv/2, recv_packed_binary/2]).
 
 %% == public ==
 
@@ -33,12 +33,12 @@
 
 -spec recv_field_41(protocol(),binary()) -> {ok, field(), protocol()}.
 recv_field_41(Protocol, Byte) ->
-    {ok, CT, P1} = recv_packed_binary(Protocol, Byte),
-    {ok, DB, P2} = recv_packed_binary(P1),
-    {ok, TA, P3} = recv_packed_binary(P2),
-    {ok, OT, P4} = recv_packed_binary(P3),
-    {ok, NA, P5} = recv_packed_binary(P4),
-    {ok, ON, P6} = recv_packed_binary(P5),
+    {ok, CT, P1} = recv_packed_binary(Byte, Protocol),
+    {ok, DB, P2} = recv_packed_binary(undefined, P1),
+    {ok, TA, P3} = recv_packed_binary(undefined, P2),
+    {ok, OT, P4} = recv_packed_binary(undefined, P3),
+    {ok, NA, P5} = recv_packed_binary(undefined, P4),
+    {ok, ON, P6} = recv_packed_binary(undefined, P5),
     {ok, B,  P7} = recv(P6, 13),
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
@@ -47,8 +47,8 @@ recv_field_41(Protocol, Byte) ->
 
 -spec recv_field(protocol(),binary()) -> {ok, field(), protocol()}.
 recv_field(Protocol, Byte) ->
-    {ok, TA, P1} = recv_packed_binary(Protocol, Byte),
-    {ok, NA, P2} = recv_packed_binary(P1),
+    {ok, TA, P1} = recv_packed_binary(Byte, Protocol),
+    {ok, NA, P2} = recv_packed_binary(undefined, P1),
     {ok, B,  P3} = recv(P2, 10),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
@@ -61,7 +61,7 @@ recv_row(Protocol, Byte, Fields) ->
 recv_row(Protocol, undefined, [], List) ->
     {ok, lists:reverse(List), Protocol};
 recv_row(Protocol, Byte, [H|T], List) ->
-    case recv_packed_binary(Protocol, Byte) of
+    case recv_packed_binary(Byte, Protocol) of
         {ok, Binary, #protocol{}=P} ->
             recv_row(P, undefined, T, [cast(Binary,H)|List])
     end.

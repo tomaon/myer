@@ -24,7 +24,7 @@
 
 %% -- private --
 -import(myer_protocol, [binary_to_float/2,
-                        recv/2, recv_packed_binary/1]).
+                        recv/2, recv_packed_binary/2]).
 
 %% @see sql/protocol.cc : Protocol_binary::store*
 %%
@@ -120,7 +120,7 @@ null_fields(Binary, Start, Length, List) ->
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
 restore(Protocol, #field{type={integer,Size},flags=F}) ->
-    case recv(Protocol,Size) of
+    case recv(Protocol, Size) of
         {ok, Binary, #protocol{}=P} ->
             Data = case ?ISSET(F,?UNSIGNED_FLAG) of
                        true ->
@@ -133,7 +133,7 @@ restore(Protocol, #field{type={integer,Size},flags=F}) ->
             {ok, Data, P}
     end;
 restore(Protocol, #field{type={float,Size},flags=F}) ->
-    case recv(Protocol,Size) of
+    case recv(Protocol, Size) of
         {ok, Binary, #protocol{}=P} ->
             Data = case ?ISSET(F,?UNSIGNED_FLAG) of
                        true ->
@@ -146,7 +146,7 @@ restore(Protocol, #field{type={float,Size},flags=F}) ->
             {ok, Data, P}
     end;
 restore(Protocol, Field) ->
-    case recv_packed_binary(Protocol) of
+    case recv_packed_binary(undefined, Protocol) of
         {ok, Binary, #protocol{}=P} ->
             {ok, cast(Binary,Field), P}
     end.

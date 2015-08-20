@@ -27,7 +27,7 @@
 
 %% -- protected --
 -export([binary_to_float/2, binary_to_integer/3]).
--export([recv/2, recv_packed_binary/1, recv_packed_binary/2]).
+-export([recv/2, recv_packed_binary/2]).
 
 %% -- private --
 
@@ -185,14 +185,9 @@ recv(#protocol{handle=H,compress=Z}=P, Length) ->
             {error, Reason, replace(P,Handle)}
     end.
 
--spec recv_packed_binary(protocol())
+-spec recv_packed_binary(undefined|binary(),protocol())
                         -> {ok,null|binary(),protocol()}|{error,_,protocol()}.
-recv_packed_binary(Protocol) ->
-    recv_packed_binary(Protocol, undefined).
-
--spec recv_packed_binary(protocol(),undefined|binary())
-                        -> {ok,null|binary(),protocol()}|{error,_,protocol()}.
-recv_packed_binary(#protocol{}=P, Byte) ->
+recv_packed_binary(Byte, #protocol{}=P) ->
     case recv_packed_integer(Byte, P) of
         {ok, null, Protocol} ->
             {ok, null, Protocol};
