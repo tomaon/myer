@@ -102,8 +102,12 @@ handle_call({setup,Args}, _From, #state{}=S) ->
 handle_call({Func,Args}, _From, #state{handle=H}=S)
   when is_atom(Func), is_list(Args)->
     case apply(myer_protocol, Func, [H|Args]) of
+        {ok, Handle} ->
+            {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->
             {reply, {ok,Term}, S#state{handle = Handle}};
+        {ok, Term1, Term2, Term3, Handle} ->
+            {reply, {ok,Term1,Term2,Term3}, S#state{handle = Handle}};
         {error, Reason, Handle} ->
             {reply, {error,Reason}, S#state{handle = Handle}}
     end;
@@ -148,8 +152,10 @@ setup(Args, #state{handle=undefined}=S) ->
          timer:seconds(proplists:get_value(timeout, Args, 10))
         ],
     case apply(myer_protocol, connect, [L]) of
-        {ok, undefined, Handle} ->
+        {ok, Handle} ->
             setup(Args, S#state{handle = Handle, auth = false});
+        {error, Reason} ->
+            {error, Reason, S};
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end;
