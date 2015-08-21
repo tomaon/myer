@@ -26,7 +26,7 @@
 -export([next_result/1, stmt_next_result/2]).
 
 %% -- protected --
--export([binary_to_float/2, binary_to_integer/3]).
+-export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
 %% -- private --
@@ -170,10 +170,6 @@ binary_to_float(Binary, _Decimals) ->
             end
     end.
 
--spec binary_to_integer(binary(),pos_integer(),non_neg_integer()) -> integer().
-binary_to_integer(Binary, Base, _Decimals) ->
-    binary_to_integer(Binary, Base).
-
 %% -- protected: network --
 
 -spec recv(protocol(),non_neg_integer()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
@@ -200,7 +196,7 @@ recv_packed_binary(Byte, #protocol{}=P) ->
 %% == private ==
 
 binary_to_version(Binary) ->
-    F = fun(E) -> try binary_to_integer(E,10,0) catch _:_ -> E end end,
+    F = fun(E) -> try binary_to_integer(E,10) catch _:_ -> E end end,
     L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
     lists:map(F, lists:sublist(L,3)).
 
