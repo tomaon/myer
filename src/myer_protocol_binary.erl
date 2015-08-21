@@ -20,6 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
+-export([prepare_fields/1]).
 -export([recv_row/3]).
 
 %% -- private --
@@ -67,6 +68,11 @@
 
 %% == public ==
 
+-spec prepare_fields([field()]) -> [field()].
+prepare_fields(Fields) ->
+    lists:map(fun(#field{type=T}=F) -> F#field{cast = cast(T)} end, Fields).
+
+
 -spec recv_row(protocol(),binary(),[field()]) -> {ok, [term()], protocol()}.
 recv_row(Protocol, <<0>>, Fields) ->
     Size = (length(Fields) + (8+1)) div 8,
@@ -87,66 +93,98 @@ recv_row([0|L], [H|T], List, Protocol) ->
 
 %% == private ==
 
-cast(Binary, #field{cast=binary}) ->
-    Binary;
-cast(Binary, #field{cast=datetime}) ->
-    case Binary of
-        <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
-            {{Year,Month,Day},{Hour,Minute,Second}};
-        _ ->
-            undefined % TODO: second_part, 7->11?
-    end;
-cast(Binary, #field{cast=date}) ->
-    <<Year:16/little,Month,Day>> = Binary,
-    {Year,Month,Day};
-cast(Binary, #field{cast=time}) ->
-    case Binary of
-        <<_Neg,_Day:32/little,Hour,Minute,Second>> ->
-            {Hour,Minute,Second};
-        _ ->
-            undefined % TODO: second_part, 8->12?
-    end;
-cast(Binary, #field{cast=decimal,decimals=D}) ->
-    binary_to_float(Binary, D);
-cast(Binary, #field{cast=bit}) ->
-    binary:decode_unsigned(Binary, big);
-cast(_Binary, _Field) ->
-    undefined.
-
 null_fields(_Binary, _Start, 0, List) ->
     lists:sublist(List, 3, length(List));
 null_fields(Binary, Start, Length, List) ->
     <<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1>> = binary_part(Binary, Start, 1),
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
-restore(Protocol, #field{cast={integer,Size},flags=F}) ->
-    case recv(Protocol, Size) of
-        {ok, Binary, #protocol{}=P} ->
-            Data = case ?ISSET(F,?UNSIGNED_FLAG) of
-                       true ->
-                           <<Value:Size/integer-unsigned-little-unit:8>> = Binary,
-                           Value;
-                       false ->
-                           <<Value:Size/integer-signed-little-unit:8>> = Binary,
-                           Value
+restore(#protocol{}=P, #field{cast={integer,Size},flags=F}) ->
+    case recv(P, Size) of
+        {ok, Binary, Protocol} ->
+            Data = case ?ISSET(F, ?UNSIGNED_FLAG) of
+                       true  -> <<Value:Size/integer-unsigned-little-unit:8>> = Binary, Value;
+                       false -> <<Value:Size/integer-signed-little-unit:8>> = Binary, Value
                    end,
-            {ok, Data, P}
+            {ok, Data, Protocol}
     end;
-restore(Protocol, #field{cast={float,Size},flags=F}) ->
-    case recv(Protocol, Size) of
-        {ok, Binary, #protocol{}=P} ->
-            Data = case ?ISSET(F,?UNSIGNED_FLAG) of
-                       true ->
-                           <<Value:Size/float-unsigned-little-unit:8>> = Binary,
-                           Value;
-                       false ->
-                           <<Value:Size/float-signed-little-unit:8>> = Binary,
-                           Value
+restore(#protocol{}=P, #field{cast={float,Size},flags=F}) ->
+    case recv(P, Size) of
+        {ok, Binary, Protocol} ->
+            Data = case ?ISSET(F, ?UNSIGNED_FLAG) of
+                       true  -> <<Value:Size/float-unsigned-little-unit:8>> = Binary, Value;
+                       false -> <<Value:Size/float-signed-little-unit:8>> = Binary, Value
                    end,
-            {ok, Data, P}
+            {ok, Data, Protocol}
     end;
-restore(Protocol, Field) ->
-    case recv_packed_binary(undefined, Protocol) of
-        {ok, Binary, #protocol{}=P} ->
-            {ok, cast(Binary,Field), P}
+restore(#protocol{}=P, #field{cast=C}=F) ->
+    case recv_packed_binary(undefined, P) of
+        {ok, Binary, Protocol} ->
+            {ok, C(Binary,F), Protocol}
     end.
+
+
+%%st(?MYSQL_TYPE_DECIMAL)     -> undefined;
+cast(?MYSQL_TYPE_TINY)        -> {integer,1};
+cast(?MYSQL_TYPE_SHORT)       -> {integer,2};
+cast(?MYSQL_TYPE_LONG)        -> {integer,4};
+cast(?MYSQL_TYPE_FLOAT)       -> {float,4};
+cast(?MYSQL_TYPE_DOUBLE)      -> {float,8};
+%%st(?MYSQL_TYPE_NULL)        -> undefined;
+cast(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/2;
+cast(?MYSQL_TYPE_LONGLONG)    -> {integer,8};
+cast(?MYSQL_TYPE_INT24)       -> {integer,4};
+cast(?MYSQL_TYPE_DATE)        -> fun to_date/2;
+cast(?MYSQL_TYPE_TIME)        -> fun to_time/2;
+cast(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/2;
+cast(?MYSQL_TYPE_YEAR)        -> {integer,2};
+%%st(?MYSQL_TYPE_NEWDATE)     -> undefined;
+%%st(?MYSQL_TYPE_VARCHAR)     -> undefined;
+cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
+%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
+%%st(?MYSQL_TYPE_DATETIME2)   -> undefined;
+%%st(?MYSQL_TYPE_TIME2)       -> undefined;
+cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_decimal/2;
+%%st(?MYSQL_TYPE_ENUM)        -> undefined;
+%%st(?MYSQL_TYPE_SET)         -> undefined;
+%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
+%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined;
+%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined;
+cast(?MYSQL_TYPE_BLOB)        -> fun to_binary/2;
+cast(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/2;
+cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2;
+%%st(?MYSQL_TYPE_GEOMETRY)    -> undefined;
+cast(_)                       -> fun to_undefined/2.
+
+
+to_bit(Binary, _Field) ->
+    binary:decode_unsigned(Binary, big).
+
+to_binary(Binary, _Field) ->
+    Binary.
+
+to_date(Binary, _Field) ->
+    <<Year:16/little,Month,Day>> = Binary,
+    {Year,Month,Day}.
+
+to_datetime(Binary, _Field) ->
+    case Binary of
+        <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
+            {{Year,Month,Day},{Hour,Minute,Second}};
+        _ ->
+            undefined % TODO: second_part, 7->11?
+    end.
+
+to_decimal(Binary, #field{decimals=D}) ->
+    binary_to_float(Binary, D).
+
+to_time(Binary, _Time) ->
+    case Binary of
+        <<_Neg,_Day:32/little,Hour,Minute,Second>> ->
+            {Hour,Minute,Second};
+        _ ->
+            undefined % TODO: second_part, 8->12?
+    end.
+
+to_undefined(_Binary, _Field) ->
+    undefined.

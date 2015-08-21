@@ -89,7 +89,7 @@
           type :: non_neg_integer(),
           flags :: integer(),
           decimals :: non_neg_integer(),
-          cast :: atom()|{atom(),integer()}
+          cast :: atom()|{atom(),integer()}|function()
 	 }).
 
 -type(field() :: #field{}).

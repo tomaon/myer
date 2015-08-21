@@ -394,7 +394,8 @@ stmt_execute_post(Byte, Prepare, #protocol{}=P) ->
 stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed_count
     case recv_until_eof(func_recv_field(P), [], [], P) of
         {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
-            stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = Fields}, Protocol);
+            F = myer_protocol_binary:prepare_fields(Fields),
+            stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = F}, Protocol);
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.

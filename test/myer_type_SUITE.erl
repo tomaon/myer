@@ -103,7 +103,13 @@ real_types_test(Config, Table, true) ->
 
     F = fields(Config,Table),
     R = rows(Config,Table),
-    {ok, F, R, _} = real_query(Config, Q).
+
+    {ok, F1, R, _} = real_query(Config, Q),
+
+    F0 = fields_filtered(F),
+    F0 = fields_filtered(F1),
+
+    ok.
 
 real_types_test_11_2_1(Config) -> real_types_test(Config, <<"data_types_11_2_1">>).
 real_types_test_11_2_2(Config) -> real_types_test(Config, <<"data_types_11_2_2">>).
@@ -133,7 +139,11 @@ stmt_types_test(Config, Table, true) ->
 
     F = fields(Config,Table),
     R = rows(Config,Table),
-    {ok, F, R, P1} = stmt_execute(Config, P0, [0]),
+
+    {ok, F1, R, P1} = stmt_execute(Config, P0, [0]),
+
+    F0 = fields_filtered(F),
+    F0 = fields_filtered(F1),
 
     ok = stmt_close(Config, P1).
 
@@ -162,81 +172,81 @@ fields(_Config, <<"data_types_11_2_1">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0}, % 20483, << 14,12,1,0
+             length = 11, type = 3, flags = 20483, decimals = 0}, % 20483, << 14,12,1,0
      F#field{name = <<"ti">>, org_name = <<"ti">>,
-             length = 4, type = {integer,1}, flags = 0, decimals = 0},
+             length = 4, type = 1, flags = 0, decimals = 0},
      F#field{name = <<"si">>, org_name = <<"si">>,
-             length = 6, type = {integer,2}, flags = 0, decimals = 0},
+             length = 6, type = 2, flags = 0, decimals = 0},
      F#field{name = <<"mi">>, org_name = <<"mi">>,
-             length = 9, type = {integer,4}, flags = 0, decimals = 0},
+             length = 9, type = 9, flags = 0, decimals = 0},
      F#field{name = <<"i">>, org_name = <<"i">>,
-             length = 11, type = {integer,4},flags = 0, decimals = 0},
+             length = 11, type = 3, flags = 0, decimals = 0},
      F#field{name = <<"bi">>, org_name = <<"bi">>,
-             length = 20, type = {integer,8}, flags = 0, decimals = 0},
+             length = 20, type = 8, flags = 0, decimals = 0},
      F#field{name = <<"ut">>, org_name = <<"ut">>,
-             length = 3, type = {integer,1}, flags = 32, decimals = 0}, % 32, << 5
+             length = 3, type = 1, flags = 32, decimals = 0}, % 32, << 5
      F#field{name = <<"us">>, org_name = <<"us">>,
-             length = 5, type = {integer,2}, flags = 32, decimals = 0},
+             length = 5, type = 2, flags = 32, decimals = 0},
      F#field{name = <<"um">>, org_name = <<"um">>,
-             length = 8, type = {integer,4}, flags = 32, decimals = 0},
+             length = 8, type = 9, flags = 32, decimals = 0},
      F#field{name = <<"ui">>, org_name = <<"ui">>,
-             length = 10, type = {integer,4},flags = 32, decimals = 0},
+             length = 10, type = 3, flags = 32, decimals = 0},
      F#field{name = <<"ub">>, org_name = <<"ub">>,
-             length = 20, type = {integer,8}, flags = 32, decimals = 0},
+             length = 20, type = 8, flags = 32, decimals = 0},
      F#field{name = <<"ix">>, org_name = <<"ix">>,
-             length = 11, type = {integer,4},flags = 0, decimals = 0}
+             length = 11, type = 3, flags = 0, decimals = 0}
     ];
 fields(_Config, <<"data_types_11_2_2">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"d">>, org_name = <<"d">>,
-             length = 11, type = decimal, flags = 0, decimals = 0},
+             length = 11, type = 246, flags = 0, decimals = 0},
      F#field{name = <<"ds">>, org_name = <<"ds">>,
-             length = 7, type = decimal, flags = 0, decimals = 2},
+             length = 7, type = 246, flags = 0, decimals = 2},
      F#field{name = <<"dm">>, org_name = <<"dm">>,
-             length = 66, type = decimal, flags = 0, decimals = 0},
+             length = 66, type = 246, flags = 0, decimals = 0},
      F#field{name = <<"dd">>, org_name = <<"dd">>,
-             length = 33, type = decimal, flags = 0, decimals = 30},
+             length = 33, type = 246, flags = 0, decimals = 30},
      F#field{name = <<"de">>, org_name = <<"de">>,
-             length = 33, type = decimal, flags = 0, decimals = 15},
+             length = 33, type = 246, flags = 0, decimals = 15},
      F#field{name = <<"n">>, org_name = <<"n">>,
-             length = 11, type = decimal, flags = 0, decimals = 0},
+             length = 11, type = 246, flags = 0, decimals = 0},
      F#field{name = <<"ns">>, org_name = <<"ns">>,
-             length = 7, type = decimal, flags = 0, decimals = 2},
+             length = 7, type = 246, flags = 0, decimals = 2},
      F#field{name = <<"nm">>, org_name = <<"nm">>,
-             length = 66, type = decimal, flags = 0, decimals = 0},
+             length = 66, type = 246, flags = 0, decimals = 0},
      F#field{name = <<"nd">>, org_name = <<"nd">>,
-             length = 33, type = decimal, flags = 0, decimals = 30}
+             length = 33, type = 246, flags = 0, decimals = 30}
     ];
 fields(_Config, <<"data_types_11_2_3">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"f">>, org_name = <<"f">>,
-             length = 12, type = {float,4}, flags = 0, decimals = 31},
+             length = 12, type = 4, flags = 0, decimals = 31},
      F#field{name = <<"d">>, org_name = <<"d">>,
-             length = 22, type = {float,8}, flags = 0, decimals = 31},
+             length = 22, type = 5, flags = 0, decimals = 31},
      F#field{name = <<"r">>, org_name = <<"r">>,
-             length = 22, type = {float,8}, flags = 0, decimals = 31},
+             length = 22, type = 5, flags = 0, decimals = 31},
      F#field{name = <<"uf">>, org_name = <<"uf">>,
-             length = 12, type = {float,4}, flags = 32, decimals = 31},
+             length = 12, type = 4, flags = 32, decimals = 31},
      F#field{name = <<"ud">>, org_name = <<"ud">>,
-             length = 22, type = {float,8}, flags = 32, decimals = 31},
+             length = 22, type = 5, flags = 32, decimals = 31},
      F#field{name = <<"ur">>, org_name = <<"ur">>,
-             length = 22, type = {float,8}, flags = 32, decimals = 31}
+             length = 22, type = 5, flags = 32, decimals = 31}
     ];
 fields(_Config, <<"data_types_11_2_4">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"b">>, org_name = <<"b">>,
-             length = 1, type = bit, flags = 32, decimals = 0}, % 32, << 5
+             length = 1, type = 16, flags = 32, decimals = 0}, % 32, << 5
      F#field{name = <<"bm">>, org_name = <<"bm">>,
-             length = 64, type = bit, flags = 32, decimals = 0}
+             length = 64, type = 16, flags = 32, decimals = 0}
     ];
 fields(Config, <<"data_types_11_3_1">>=B) ->
     F = field(B),
@@ -244,24 +254,24 @@ fields(Config, <<"data_types_11_3_1">>=B) ->
         Version when Version > [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
-                     length = 11, type = {integer,4},flags = 20483, decimals = 0},
+                     length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"d">>, org_name = <<"d">>,
-                     length = 10, type = date, flags = 128, decimals = 0}, % 128, << 7
+                     length = 10, type = 10, flags = 128, decimals = 0}, % 128, << 7
              F#field{name = <<"dt">>, org_name = <<"dt">>,
-                     length = 19, type = datetime, flags = 128, decimals = 0},
+                     length = 19, type = 12, flags = 128, decimals = 0},
              F#field{name = <<"ts">>, org_name = <<"ts">>,
-                     length = 19, type = datetime, flags = 128, decimals = 0}
+                     length = 19, type = 7, flags = 128, decimals = 0}
             ];
         Version when Version > [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
-                     length = 11, type = {integer,4},flags = 20483, decimals = 0},
+                     length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"d">>, org_name = <<"d">>,
-                     length = 10, type = date, flags = 128, decimals = 0}, % 128, << 7
+                     length = 10, type = 10, flags = 128, decimals = 0}, % 128, << 7
              F#field{name = <<"dt">>, org_name = <<"dt">>,
-                     length = 19, type = datetime, flags = 128, decimals = 0},
+                     length = 19, type = 12, flags = 128, decimals = 0},
              F#field{name = <<"ts">>, org_name = <<"ts">>,
-                     length = 19, type = datetime, flags = 224, decimals = 0}  % 224, << 7,6,5
+                     length = 19, type = 7, flags = 224, decimals = 0}  % 224, << 7,6,5
             ]
     end;
 fields(Config, <<"data_types_11_3_2">>=B) ->
@@ -270,110 +280,113 @@ fields(Config, <<"data_types_11_3_2">>=B) ->
         Version when Version > [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
-                     length = 11, type = {integer,4},flags = 20483, decimals = 0},
+                     length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"t">>, org_name = <<"t">>,
-                     length = 10, type = time, flags = 128, decimals = 0} % 128, << 7
+                     length = 10, type = 11, flags = 128, decimals = 0} % 128, << 7
             ];
         Version when Version > [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
-                     length = 11, type = {integer,4},flags = 20483, decimals = 0},
+                     length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"t">>, org_name = <<"t">>,
-                     length = 8, type = time, flags = 128, decimals = 0} % 128, << 7
+                     length = 8, type = 11, flags = 128, decimals = 0} % 128, << 7
             ]
     end;
 fields(_Config, <<"data_types_11_3_3">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"y">>, org_name = <<"y">>,
-             length = 4, type = {integer,2}, flags = 96, decimals = 0} % 96, << 6,5
+             length = 4, type = 13, flags = 96, decimals = 0} % 96, << 6,5
     ];
 fields(_Config, <<"data_types_11_4_1">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"c">>, org_name = <<"c">>, charsetnr = 33,
-             length = 0, type = binary, flags = 0, decimals = 0},
+             length = 0, type = 254, flags = 0, decimals = 0},
      F#field{name = <<"cf">>, org_name = <<"cf">>, charsetnr = 33,
-             length = 15, type = binary, flags = 0, decimals = 0},
+             length = 15, type = 254, flags = 0, decimals = 0},
      F#field{name = <<"cs">>, org_name = <<"cs">>, charsetnr = 33,
-             length = 18, type = binary, flags = 0, decimals = 0},
+             length = 18, type = 254, flags = 0, decimals = 0},
      F#field{name = <<"cm">>, org_name = <<"cm">>, charsetnr = 33,
-             length = 21, type = binary, flags = 0, decimals = 0},
+             length = 21, type = 254, flags = 0, decimals = 0},
      F#field{name = <<"v">>, org_name = <<"v">>, charsetnr = 33,
-             length = 0, type = binary, flags = 0, decimals = 0},
+             length = 0, type = 253, flags = 0, decimals = 0},
      F#field{name = <<"vf">>, org_name = <<"vf">>, charsetnr = 33,
-             length = 15, type = binary, flags = 0, decimals = 0},
+             length = 15, type = 253, flags = 0, decimals = 0},
      F#field{name = <<"vs">>, org_name = <<"vs">>, charsetnr = 33,
-             length = 18, type = binary, flags = 0, decimals = 0},
+             length = 18, type = 253, flags = 0, decimals = 0},
      F#field{name = <<"vm">>, org_name = <<"vm">>, charsetnr = 33,
-             length = 21, type = binary, flags = 0, decimals = 0}
+             length = 21, type = 253, flags = 0, decimals = 0}
     ];
 fields(_Config, <<"data_types_11_4_2">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"b">>, org_name = <<"b">>,
-             length = 0, type = binary, flags = 128, decimals = 0}, % 128 << 7
+             length = 0, type = 254, flags = 128, decimals = 0}, % 128 << 7
      F#field{name = <<"bf">>, org_name = <<"bf">>,
-             length = 5, type = binary, flags = 128, decimals = 0},
+             length = 5, type = 254, flags = 128, decimals = 0},
      F#field{name = <<"bs">>, org_name = <<"bs">>,
-             length = 6, type = binary, flags = 128, decimals = 0},
+             length = 6, type = 254, flags = 128, decimals = 0},
      F#field{name = <<"bm">>, org_name = <<"bm">>,
-             length = 7, type = binary, flags = 128, decimals = 0},
+             length = 7, type = 254, flags = 128, decimals = 0},
      F#field{name = <<"v">>, org_name = <<"v">>,
-             length = 0, type = binary, flags = 128, decimals = 0},
+             length = 0, type = 253, flags = 128, decimals = 0},
      F#field{name = <<"vf">>, org_name = <<"vf">>,
-             length = 5, type = binary, flags = 128, decimals = 0},
+             length = 5, type = 253, flags = 128, decimals = 0},
      F#field{name = <<"vs">>, org_name = <<"vs">>,
-             length = 6, type = binary, flags = 128, decimals = 0},
+             length = 6, type = 253, flags = 128, decimals = 0},
      F#field{name = <<"vm">>, org_name = <<"vm">>,
-             length = 7, type = binary, flags = 128, decimals = 0}
+             length = 7, type = 253, flags = 128, decimals = 0}
     ];
 fields(_Config, <<"data_types_11_4_3">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"tb">>, org_name = <<"tb">>,
-             length = 255, type = binary, flags = 144, decimals = 0}, % 144 << 7,4
+             length = 255, type = 252, flags = 144, decimals = 0}, % 144 << 7,4
      F#field{name = <<"b">>, org_name = <<"b">>,
-             length = 65535, type = binary, flags = 144, decimals = 0},
+             length = 65535, type = 252, flags = 144, decimals = 0},
      F#field{name = <<"mb">>, org_name = <<"mb">>,
-             length = 16777215, type = binary, flags = 144, decimals = 0},
+             length = 16777215, type = 252, flags = 144, decimals = 0},
      F#field{name = <<"lb">>, org_name = <<"lb">>,
-             length = 4294967295, type = binary, flags = 144, decimals = 0},
+             length = 4294967295, type = 252, flags = 144, decimals = 0},
      F#field{name = <<"tt">>, org_name = <<"tt">>, charsetnr = 33,
-             length = 765, type = binary, flags = 16, decimals = 0},  % 16 << 4
+             length = 765, type = 252, flags = 16, decimals = 0},  % 16 << 4
      F#field{name = <<"t">>, org_name = <<"t">>, charsetnr = 33,
-             length = 196605, type = binary, flags = 16, decimals = 0},
+             length = 196605, type = 252, flags = 16, decimals = 0},
      F#field{name = <<"mt">>, org_name = <<"mt">>, charsetnr = 33,
-             length = 50331645, type = binary, flags = 16, decimals = 0},
+             length = 50331645, type = 252, flags = 16, decimals = 0},
      F#field{name = <<"lt">>, org_name = <<"lt">>, charsetnr = 33,
-             length = 4294967295, type = binary, flags = 16, decimals = 0}
+             length = 4294967295, type = 252, flags = 16, decimals = 0}
     ];
 fields(_Config, <<"data_types_11_4_4">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"e">>, org_name = <<"e">>, charsetnr = 33,
-             length = 21, type = binary, flags = 256, decimals = 0} % 256, << 8
+             length = 21, type = 254, flags = 256, decimals = 0} % 256, << 8
     ];
 fields(_Config, <<"data_types_11_4_5">>=B) ->
     F = field(B),
     [
      F#field{name = <<"k">>, org_name = <<"k">>,
-             length = 11, type = {integer,4},flags = 20483, decimals = 0},
+             length = 11, type = 3, flags = 20483, decimals = 0},
      F#field{name = <<"s">>, org_name = <<"s">>, charsetnr = 33,
-             length = 15, type = binary, flags = 2048, decimals = 0} % 2048, << 11
+             length = 15, type = 254, flags = 2048, decimals = 0} % 2048, << 11
     ];
 fields(_Config, _Table) ->
     [].
+
+fields_filtered(List) ->
+    lists:map(fun (E) -> erlang:delete_element(#field.cast, E) end, List).
 
 %% -- rows --
 
