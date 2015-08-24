@@ -49,20 +49,20 @@ end_per_testcase(TestCase, Config) ->
 version_test(Config) -> myer_public_SUITE:version_test(Config).
 
 
-cover_myer_client(Config) ->
+cover_myer_client(_Config) ->
 
-    Handle = ?config(handle, Config),
+    %% Handle = ?config(handle, Config),
 
-    Pid = element(3, Handle),
+    %% Pid = element(3, Handle),
 
-    {error, badarg} = test(myer_client, call, [Pid,?MODULE]),
+    %% {error, badarg} = test(myer_client, call, [Pid,?MODULE]),
 
-    ok = test(myer_client, cast, [Pid,?MODULE]),
+    %% ok = test(myer_client, cast, [Pid,?MODULE]),
 
-    Pid ! ?MODULE,
+    %% Pid ! ?MODULE,
 
     ok.
 
 %% == internal ==
 
-test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
+%%test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
