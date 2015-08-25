@@ -34,8 +34,6 @@
           handle :: tuple()
          }).
 
--define(SOCKET(Handle), element(2,Handle)).     % !CAUTION!
-
 %% == public ==
 
 -spec start_link([property()]) -> {ok,pid()}|ignore|{error,_}.
@@ -69,9 +67,8 @@ handle_cast(_Request, State) ->
 
 handle_info(timeout, State) ->
     initialized(State);
-handle_info({tcp_closed,Socket}, #state{handle=H}=S)
-  when Socket =:= ?SOCKET(H) ->
-    {stop, tcp_closed, S};
+handle_info({tcp_closed,_Socket}, State) ->
+    {stop, tcp_closed, State};
 handle_info({'EXIT',_Pid,Reason}, State) ->
     {stop, Reason, State}.
 
@@ -125,7 +122,7 @@ connected(#state{args=A,handle=H}=S) ->
     end.
 
 authorized(#state{}=S) ->
-    {noreply, S}.
+    {noreply, S#state{args = undefined}}.
 
 
 ready(Func, Args, #state{handle=H}=S) ->
