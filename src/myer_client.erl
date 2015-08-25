@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([start_link/1, start_link/2]).
+-export([start_link/1]).
 -export([call/2]).
 
 %% -- behaviour: gen_server --
@@ -39,20 +39,7 @@
 %% == public ==
 
 -spec start_link([property()]) -> {ok,pid()}|ignore|{error,_}.
-start_link(Args) ->
-    start_link(Args, false).
-
--spec start_link([property()],boolean()) -> {ok,pid()}|ignore|{error,_}.
-start_link(Args, false)
-  when is_list(Args) ->
-    try lists:foldl(fun validate/2, [], proplists:unfold(Args)) of
-        List ->
-            start_link(List, true)
-    catch
-        Reason ->
-            {error, Reason}
-    end;
-start_link(Args, true)
+start_link(Args)
   when is_list(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
@@ -152,62 +139,3 @@ ready(Func, Args, #state{handle=H}=S) ->
         {error, Reason, Handle} ->
             {reply, {error,Reason}, S#state{handle = Handle}}
     end.
-
-
-validate({address=K,Value}, List) -> % inet:ip_address()|inet:hostname(), TODO
-    T = if is_atom(Value)                    -> {K, Value};
-           is_list(Value), 0 < length(Value) -> {K, Value};
-           is_binary(Value), 0 < size(Value) -> {K, binary_to_list(Value)};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({port=K,Value}, List) -> % inet:port_number(), TODO
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({user=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({password=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({database=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({default_character_set=K,Value}, List) -> % non_neg_integer()
-    T = if is_integer(Value), 0 =< Value     -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({compress=K,Value}, List) -> % boolean()
-    T = if is_boolean(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({max_allowed_packet=K,Value}, List) -> % non_neg_integer()
-    T = if is_integer(Value), 0 =< Value      -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({timeout=K,Value}, List) -> % timeout()
-    T = if is_integer(Value), 0=< Value      -> {K, Value};
-           infinity =:= Value                -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({Key,_Value}, _List) ->
-    throw({badarg,Key}).
