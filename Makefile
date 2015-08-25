@@ -9,7 +9,7 @@
 
  OPT  =
  OPT += --sname $(1)@localhost
- OPT += --config priv/conf/$(1)
+ OPT += --config priv/conf/$(1).config
 
 #
 default: compile
