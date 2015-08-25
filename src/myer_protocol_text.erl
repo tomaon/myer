@@ -70,13 +70,13 @@ recv_row(#protocol{}=P, Byte, [#field{cast=C}=H|T], List) ->
 
 %% == internal ==
 
-%%st(?MYSQL_TYPE_DECIMAL)     -> undefined;
+%%st(?MYSQL_TYPE_DECIMAL)     -> undefined
 cast(?MYSQL_TYPE_TINY)        -> fun to_integer/2;
 cast(?MYSQL_TYPE_SHORT)       -> fun to_integer/2;
 cast(?MYSQL_TYPE_LONG)        -> fun to_integer/2;
 cast(?MYSQL_TYPE_FLOAT)       -> fun to_float/2;
 cast(?MYSQL_TYPE_DOUBLE)      -> fun to_float/2;
-%%st(?MYSQL_TYPE_NULL)        -> undefined;
+%%st(?MYSQL_TYPE_NULL)        -> undefined
 cast(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/2;
 cast(?MYSQL_TYPE_LONGLONG)    -> fun to_integer/2;
 cast(?MYSQL_TYPE_INT24)       -> fun to_integer/2;
@@ -84,23 +84,22 @@ cast(?MYSQL_TYPE_DATE)        -> fun to_date/2;
 cast(?MYSQL_TYPE_TIME)        -> fun to_time/2;
 cast(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/2;
 cast(?MYSQL_TYPE_YEAR)        -> fun to_integer/2;
-%%st(?MYSQL_TYPE_NEWDATE)     -> undefined;
-%%st(?MYSQL_TYPE_VARCHAR)     -> undefined;
+%%st(?MYSQL_TYPE_NEWDATE)     -> undefined
+%%st(?MYSQL_TYPE_VARCHAR)     -> undefined
 cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
-%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
-%%st(?MYSQL_TYPE_DATETIME2)   -> undefined;
-%%st(?MYSQL_TYPE_TIME2)       -> undefined;
+%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
+%%st(?MYSQL_TYPE_DATETIME2)   -> undefined
+%%st(?MYSQL_TYPE_TIME2)       -> undefined
 cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/2;
-%%st(?MYSQL_TYPE_ENUM)        -> undefined;
-%%st(?MYSQL_TYPE_SET)         -> undefined;
-%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
-%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined;
-%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined;
+%%st(?MYSQL_TYPE_ENUM)        -> undefined
+%%st(?MYSQL_TYPE_SET)         -> undefined
+%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined
+%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined
+%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined
 cast(?MYSQL_TYPE_BLOB)        -> fun to_binary/2;
 cast(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/2;
-cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2;
+cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2.
 %%st(?MYSQL_TYPE_GEOMETRY)    -> undefined;
-cast(_)                       -> fun to_undefined/2.
 
 
 to_binary(Binary, _Field) ->
@@ -112,17 +111,16 @@ to_bit(Binary, _Field) ->
 to_date(Binary, _Field) ->
     case io_lib:fread("~d-~d-~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day], []} ->
-            {Year,Month,Day};
-        _ ->
-            undefined
+            {Year,Month,Day}
     end.
 
 to_datetime(Binary, _Field) ->
     case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
-            {{Year,Month,Day},{Hour,Minute,Second}};
-        _ ->
-            undefined % TODO: second_part
+            {{Year,Month,Day},{Hour,Minute,Second}}
+            %%
+            %% TODO: second_part
+            %%
     end.
 
 to_float(Binary, #field{decimals=D}) ->
@@ -134,10 +132,8 @@ to_integer(Binary, _Field) ->
 to_time(Binary, _Field) ->
     case io_lib:fread("~d:~d:~d", binary_to_list(Binary)) of
         {ok, [Hour,Minute,Second], []} ->
-            {Hour,Minute,Second};
-        _ ->
-            undefined % TODO: second_part
+            {Hour,Minute,Second}
+            %%
+            %% TODO: second_part
+            %%
     end.
-
-to_undefined(_Binary, _Field) ->
-    undefined.

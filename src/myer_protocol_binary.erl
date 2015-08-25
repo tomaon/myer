@@ -124,13 +124,13 @@ restore(#protocol{}=P, #field{cast=C}=F) ->
     end.
 
 
-%%st(?MYSQL_TYPE_DECIMAL)     -> undefined;
+%%st(?MYSQL_TYPE_DECIMAL)     -> undefined
 cast(?MYSQL_TYPE_TINY)        -> {integer,1};
 cast(?MYSQL_TYPE_SHORT)       -> {integer,2};
 cast(?MYSQL_TYPE_LONG)        -> {integer,4};
 cast(?MYSQL_TYPE_FLOAT)       -> {float,4};
 cast(?MYSQL_TYPE_DOUBLE)      -> {float,8};
-%%st(?MYSQL_TYPE_NULL)        -> undefined;
+%%st(?MYSQL_TYPE_NULL)        -> undefined
 cast(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/2;
 cast(?MYSQL_TYPE_LONGLONG)    -> {integer,8};
 cast(?MYSQL_TYPE_INT24)       -> {integer,4};
@@ -138,23 +138,22 @@ cast(?MYSQL_TYPE_DATE)        -> fun to_date/2;
 cast(?MYSQL_TYPE_TIME)        -> fun to_time/2;
 cast(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/2;
 cast(?MYSQL_TYPE_YEAR)        -> {integer,2};
-%%st(?MYSQL_TYPE_NEWDATE)     -> undefined;
-%%st(?MYSQL_TYPE_VARCHAR)     -> undefined;
+%%st(?MYSQL_TYPE_NEWDATE)     -> undefined
+%%st(?MYSQL_TYPE_VARCHAR)     -> undefined
 cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
-%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
-%%st(?MYSQL_TYPE_DATETIME2)   -> undefined;
-%%st(?MYSQL_TYPE_TIME2)       -> undefined;
+%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
+%%st(?MYSQL_TYPE_DATETIME2)   -> undefined
+%%st(?MYSQL_TYPE_TIME2)       -> undefined
 cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_decimal/2;
-%%st(?MYSQL_TYPE_ENUM)        -> undefined;
-%%st(?MYSQL_TYPE_SET)         -> undefined;
-%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
-%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined;
-%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined;
+%%st(?MYSQL_TYPE_ENUM)        -> undefined
+%%st(?MYSQL_TYPE_SET)         -> undefined
+%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined
+%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined
+%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined
 cast(?MYSQL_TYPE_BLOB)        -> fun to_binary/2;
 cast(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/2;
-cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2;
-%%st(?MYSQL_TYPE_GEOMETRY)    -> undefined;
-cast(_)                       -> fun to_undefined/2.
+cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2.
+%%st(?MYSQL_TYPE_GEOMETRY)    -> undefined
 
 
 to_bit(Binary, _Field) ->
@@ -170,9 +169,10 @@ to_date(Binary, _Field) ->
 to_datetime(Binary, _Field) ->
     case Binary of
         <<Year:16/little,Month,Day,Hour,Minute,Second>> ->
-            {{Year,Month,Day},{Hour,Minute,Second}};
-        _ ->
-            undefined % TODO: second_part, 7->11?
+            {{Year,Month,Day},{Hour,Minute,Second}}
+            %%
+            %% TODO: second_part, 7->11?
+            %%
     end.
 
 to_decimal(Binary, #field{decimals=D}) ->
@@ -181,10 +181,8 @@ to_decimal(Binary, #field{decimals=D}) ->
 to_time(Binary, _Time) ->
     case Binary of
         <<_Neg,_Day:32/little,Hour,Minute,Second>> ->
-            {Hour,Minute,Second};
-        _ ->
-            undefined % TODO: second_part, 8->12?
+            {Hour,Minute,Second}
+            %%
+            %% TODO: second_part, 8->12?
+            %%
     end.
-
-to_undefined(_Binary, _Field) ->
-    undefined.

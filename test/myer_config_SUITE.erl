@@ -18,11 +18,12 @@
          auth_test_oldnopwd/1,
          auth_test_pwderr/1,
          auth_test_nodb/1]).
--export([conf_test_address_atom/1, conf_test_address_list/1, conf_test_address_err/1,
-         conf_test_port_err/1,
+-export([conf_test_address_atom/1, conf_test_address_list/1,
+         conf_test_address_binary/1, conf_test_address_err/1,
+         conf_test_port_integer/1, conf_test_port_err/1,
          conf_test_user_atom/1, conf_test_user_list/1, conf_test_user_err/1,
-         conf_test_password_atom/1, conf_test_password_list1/1,
-         conf_test_password_list2/1, conf_test_password_err/1,
+         conf_test_password_atom/1, conf_test_password_list1/1, conf_test_password_list2/1,
+         conf_test_password_binary1/1, conf_test_password_binary2/1, conf_test_password_err/1,
          conf_test_database_atom/1, conf_test_database_list1/1,
          conf_test_database_list2/1, conf_test_database_err/1,
          conf_test_default_character_set_integer/1,
@@ -30,7 +31,7 @@
          conf_test_compress_boolean/1, conf_test_compress_err/1,
          conf_test_max_allowed_packet_integer/1,
          conf_test_max_allowed_packet_err/1,
-         conf_test_timeout_integer/1, conf_test_timeout_err/1,
+         conf_test_timeout_integer/1, conf_test_timeout_atom/1, conf_test_timeout_err/1,
          conf_test_other/1]).
 
 %% == callback: ct ==
@@ -60,19 +61,22 @@ groups() -> [
                              ]},
 
              {conf_test, [], [
-                              conf_test_address_atom, conf_test_address_list, conf_test_address_err,
-                              conf_test_port_err,
-                              conf_test_user_atom, conf_test_user_list, conf_test_user_err,
-                              conf_test_password_atom, conf_test_password_list1,
-                              conf_test_password_list2, conf_test_password_err,
+                              conf_test_address_atom, conf_test_address_list,
+                              conf_test_address_binary, conf_test_address_err,
+                              conf_test_port_integer, conf_test_port_err,
+                              conf_test_user_atom, conf_test_user_list,
+                              conf_test_user_err, conf_test_password_atom,
+                              conf_test_password_list1, conf_test_password_list2,
+                              conf_test_password_binary1, conf_test_password_binary2,
+                              conf_test_password_err,
                               conf_test_database_atom, conf_test_database_list1,
                               conf_test_database_list2, conf_test_database_err,
                               conf_test_default_character_set_integer,
                               conf_test_default_character_set_err,
                               conf_test_compress_boolean, conf_test_compress_err,
                               conf_test_max_allowed_packet_integer,
-                              conf_test_max_allowed_packet_err,
-                              conf_test_timeout_integer, conf_test_timeout_err,
+                              conf_test_max_allowed_packet_err, conf_test_timeout_integer,
+                              conf_test_timeout_atom, conf_test_timeout_err,
                               conf_test_other
                              ]}
             ].
@@ -149,7 +153,9 @@ auth_test_pwderr(Config) ->
          {user, <<"test">>},
          {password, <<>>}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -193,16 +199,42 @@ conf_test_address_list(Config) ->
             ct:fail(Reason)
     end.
 
+conf_test_address_binary(Config) ->
+    L = [
+         {user, <<"test">>},
+         {password, <<"test">>},
+         {address, atom_to_binary(ct:get_config(hostname),latin1)}
+        ],
+    try test(Config, L)
+    catch
+        _:Reason ->
+            ct:fail(Reason)
+    end.
+
 conf_test_address_err(Config) ->
     L = [
          {user, <<"test">>},
          {password, <<"test">>},
          {address, <<>>}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
+    end.
+
+conf_test_port_integer(Config) ->
+    L = [
+         {user, <<"test">>},
+         {password, <<"test">>},
+         {port, 3306}
+        ],
+    try test(Config, L)
+    catch
+        _:Reason ->
+            ct:fail(Reason)
     end.
 
 conf_test_port_err(Config) ->
@@ -211,7 +243,9 @@ conf_test_port_err(Config) ->
          {password, <<"test">>},
          {port, nobody}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -222,7 +256,9 @@ conf_test_user_atom(Config) ->
          {user, test},
          {password, <<"test">>}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -244,7 +280,9 @@ conf_test_user_err(Config) ->
          {user, nobody},
          {password, <<"test">>}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -255,7 +293,9 @@ conf_test_password_atom(Config) ->
          {user, <<"test">>},
          {password, test}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -283,12 +323,36 @@ conf_test_password_list2(Config) ->
             ct:fail(Reason)
     end.
 
+conf_test_password_binary1(Config) ->
+    L = [
+         {user, <<"test">>},
+         {password, <<"test">>}
+        ],
+    try test(Config, L)
+    catch
+        _:Reason ->
+            ct:fail(Reason)
+    end.
+
+conf_test_password_binary2(Config) ->
+    L = [
+         {user, <<"test">>},
+         {password, <<"">>}
+        ],
+    try test(Config, L)
+    catch
+        _:Reason ->
+            ct:fail(Reason)
+    end.
+
 conf_test_password_err(Config) ->
     L = [
          {user, <<"test">>},
          {password, nobody}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -300,7 +364,9 @@ conf_test_database_atom(Config) ->
          {password, <<"test">>},
          {database, binary_to_atom(get_env(database),latin1)}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -336,7 +402,9 @@ conf_test_database_err(Config) ->
          {password, <<"test">>},
          {database, nowhere}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -360,7 +428,9 @@ conf_test_default_character_set_err(Config) ->
          {password, <<"test">>},
          {default_character_set, false}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -384,7 +454,9 @@ conf_test_compress_err(Config) ->
          {password, <<"test">>},
          {compress, "false"}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -408,7 +480,9 @@ conf_test_max_allowed_packet_err(Config) ->
          {password, <<"test">>},
          {max_allowed_packet, nobody}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -426,13 +500,27 @@ conf_test_timeout_integer(Config) ->
             ct:fail(Reason)
     end.
 
-conf_test_timeout_err(Config) ->
+conf_test_timeout_atom(Config) ->
     L = [
          {user, <<"test">>},
          {password, <<"test">>},
          {timeout, infinity}
         ],
     try test(Config, L)
+    catch
+        _:Reason ->
+            ct:fail(Reason)
+    end.
+
+conf_test_timeout_err(Config) ->
+    L = [
+         {user, <<"test">>},
+         {password, <<"test">>},
+         {timeout, nobody}
+        ],
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok
@@ -442,7 +530,9 @@ conf_test_other(Config) ->
     L = [
          {nobody, false}
         ],
-    try test(Config, L)
+    try test(Config, L) of
+        _ ->
+            ct:fail(ebadarg)
     catch
         _:_ ->
             ok

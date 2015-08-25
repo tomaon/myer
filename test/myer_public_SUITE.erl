@@ -827,6 +827,7 @@ cover_myer(_Config) ->
     undefined = call(stmt_field_count,   [?MODULE]),
     undefined = call(stmt_insert_id,     [?MODULE]),
     undefined = call(stmt_param_count,   [?MODULE]),
+    undefined = call(stmt_attr_get,      [?MODULE,?STMT_ATTR_CURSOR_TYPE]),
     undefined = call(stmt_warning_count, [?MODULE]),
 
     ok.
