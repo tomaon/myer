@@ -35,14 +35,14 @@
 
 all() -> [
           version_test,
-          {group, groups_private}
+          {group, groups_internal}
          ].
 
 groups() -> [
 
-             {groups_private, [sequence], [
-                                           {group, group_normal}
-                                          ]},
+             {groups_internal, [sequence], [
+                                            {group, group_normal}
+                                           ]},
 
              {group_normal, [sequence], [
                                          {group,real_test},

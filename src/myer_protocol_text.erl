@@ -23,7 +23,7 @@
 -export([recv_field_41/2, recv_field/2]).
 -export([recv_row/3]).
 
-%% -- private --
+%% -- internal --
 -import(myer_protocol, [binary_to_float/2,
                         recv/2, recv_packed_binary/2]).
 
@@ -68,7 +68,7 @@ recv_row(#protocol{}=P, Byte, [#field{cast=C}=H|T], List) ->
             recv_row(Protocol, undefined, T, [C(Binary,H)|List])
     end.
 
-%% == private ==
+%% == internal ==
 
 %%st(?MYSQL_TYPE_DECIMAL)     -> undefined;
 cast(?MYSQL_TYPE_TINY)        -> fun to_integer/2;

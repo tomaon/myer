@@ -28,7 +28,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
-%% -- private --
+%% -- internal --
 -record(state, {
           args :: [property()],
           handle :: tuple()
@@ -75,7 +75,7 @@ handle_info({tcp_closed,Socket}, #state{handle=H}=S)
 handle_info({'EXIT',_Pid,Reason}, State) ->
     {stop, Reason, State}.
 
-%% == private ==
+%% == internal ==
 
 cleanup(#state{handle=H}=S)
   when undefined =/= H ->

@@ -1,7 +1,7 @@
 %% =============================================================================
 %% =============================================================================
 
--module(myer_private_SUITE).
+-module(myer_internal_SUITE).
 
 -include("internal.hrl").
 
@@ -18,12 +18,12 @@
 
 all() -> [
           version_test,
-          {group, groups_private}
+          {group, groups_internal}
          ].
 
 groups() -> [
 
-             {groups_private, [sequence], [
+             {groups_internal, [sequence], [
                                            {group, group_normal}
                                           ]},
 

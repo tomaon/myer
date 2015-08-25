@@ -29,7 +29,7 @@
 -export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
-%% -- private --
+%% -- internal --
 
 -record(handshake, {
 	  version :: [non_neg_integer()],
@@ -193,7 +193,7 @@ recv_packed_binary(Byte, #protocol{}=P) ->
             recv(Protocol, Length)
     end.
 
-%% == private ==
+%% == internal ==
 
 binary_to_version(Binary) ->
     F = fun(E) -> try binary_to_integer(E,10) catch _:_ -> E end end,
@@ -249,7 +249,7 @@ reset(#protocol{handle=H}=P) ->
 zreset(#protocol{handle=H}=P) ->
     P#protocol{handle = myer_network:zreset(H)}.
 
-%% -- private: loop,auth --
+%% -- internal: loop,auth --
 
 auth_pre(User, Password, <<>>, #protocol{caps=C}=P) ->
     Protocol = P#protocol{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
@@ -270,7 +270,7 @@ auth_alt_pre(Password, #protocol{seed=S,plugin=A}=P) ->
 auth_alt_post(<<0>>, #protocol{caps=C}=P) ->
     recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
 
-%% -- private: loop,close --
+%% -- internal: loop,close --
 
 close_pre(#protocol{}=P) ->
     {ok, [<<?COM_QUIT>>,reset(P)]}.
@@ -279,7 +279,7 @@ close_post(#protocol{handle=H}=P) ->
     _ = myer_network:close(H),
     {ok, [P#protocol{handle = undefined}]}.
 
-%% -- private: loop,connect --
+%% -- internal: loop,connect --
 
 connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
     case myer_network:connect(Address, Port, MaxLength, Timeout) of
@@ -298,7 +298,7 @@ connect_post(<<10>>, #protocol{}=P) -> % "always 10"
             {error, Reason, Protocol}
     end.
 
-%% -- private: loop,next_result --
+%% -- internal: loop,next_result --
 
 next_result_pre(#protocol{}=P) ->
     {ok, [zreset(P)]}.
@@ -308,7 +308,7 @@ next_result_pre(#protocol{}=P) ->
 ping_pre(#protocol{}=P) ->
     {ok, [<<?COM_PING>>,reset(P)]}.
 
-%% -- private: loop,real_query --
+%% -- internal: loop,real_query --
 
 real_query_pre(Query, #protocol{}=P) ->
     {ok, [<<?COM_QUERY,Query/binary>>,reset(P)]}.
@@ -425,7 +425,7 @@ stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-%% -- private: loop,stmt_next_result --
+%% -- internal: loop,stmt_next_result --
 
 stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
     {ok, [X,zreset(P)]}.
@@ -438,7 +438,7 @@ stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-%% -- private: loop,stmt_prepare --
+%% -- internal: loop,stmt_prepare --
 
 stmt_prepare_pre(Query, #protocol{}=P) ->
     {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(P)]}.
@@ -471,7 +471,7 @@ stmt_prepare_recv_fields(_Result, #prepare{field_count=N}=X, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-%% -- private: loop,stmt_reset --
+%% -- internal: loop,stmt_reset --
 
 stmt_reset_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
     {ok, [X,<<?COM_STMT_RESET,S:32/little>>,reset(P)]}.
@@ -484,7 +484,7 @@ stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-%% -- private: network --
+%% -- internal: network --
 
 recv_eof(Term, #protocol{caps=C}=P) ->
     case recv(P, 0) of
@@ -585,7 +585,7 @@ send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
 	    {error, Reason, P#protocol{handle = Handle}}
     end.
 
-%% -- private: sql* --
+%% -- internal: sql* --
 
 %% -----------------------------------------------------------------------------
 %% << sql-common/pack.c : *

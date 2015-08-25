@@ -31,7 +31,7 @@ scramble(<<>>, _Seed, _Plugin) ->
 scramble(Password, Seed, _Plugin) ->
     scramble_323(Password, Seed).
 
-%% == private ==
+%% == internal ==
 
 %% -----------------------------------------------------------------------------
 %% << sql/password.c : scramble/3, check_scramble/3

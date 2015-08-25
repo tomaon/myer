@@ -24,7 +24,7 @@
 -export([recv/3, send/3]).
 -export([reset/1, zreset/1]).
 
-%% -- private --
+%% -- internal --
 -record(handle, {
           socket :: socket(),
           maxlength :: non_neg_integer(),
@@ -96,7 +96,7 @@ reset(#handle{}=H) ->
 zreset(#handle{seqnum=N}=H) ->
     H#handle{zseqnum = N}.
 
-%% == private ==
+%% == internal ==
 
 buffered(Handle, _Length, _Compress, 0, List) ->
     {ok, iolist_to_binary(lists:reverse(List)), Handle};

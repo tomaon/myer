@@ -23,7 +23,7 @@
 -export([stat/1, caps/1, flags/1, type/1]).
 -export([md5/1]).
 
-%% -- private --
+%% -- internal --
 -define(BCHECK(B,K,V), (case B band K of 0 -> ""; _ -> V end)).
 
 %% == public ==

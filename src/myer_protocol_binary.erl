@@ -23,7 +23,7 @@
 -export([prepare_fields/1]).
 -export([recv_row/3]).
 
-%% -- private --
+%% -- internal --
 -import(myer_protocol, [binary_to_float/2,
                         recv/2, recv_packed_binary/2]).
 
@@ -91,7 +91,7 @@ recv_row([0|L], [H|T], List, Protocol) ->
             recv_row(L, T, [Value|List], P)
     end.
 
-%% == private ==
+%% == internal ==
 
 null_fields(_Binary, _Start, 0, List) ->
     lists:sublist(List, 3, length(List));
