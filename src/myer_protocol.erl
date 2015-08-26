@@ -25,7 +25,7 @@
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
 
-%% -- protected --
+%% -- private --
 -export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
@@ -154,7 +154,7 @@ stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
     loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
 
 
-%% == protected ==
+%% == private ==
 
 -spec binary_to_float(binary(),non_neg_integer()) -> float().
 binary_to_float(Binary, _Decimals) ->
@@ -169,8 +169,6 @@ binary_to_float(Binary, _Decimals) ->
                     undefined % for v5.1 (out_of_range)
             end
     end.
-
-%% -- protected: network --
 
 -spec recv(protocol(),non_neg_integer()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
 recv(#protocol{handle=H,compress=Z}=P, Length) ->
@@ -303,7 +301,7 @@ connect_post(<<10>>, #protocol{}=P) -> % "always 10"
 next_result_pre(#protocol{}=P) ->
     {ok, [zreset(P)]}.
 
-%% -- priate: loop,ping --
+%% -- internal: loop,ping --
 
 ping_pre(#protocol{}=P) ->
     {ok, [<<?COM_PING>>,reset(P)]}.
@@ -339,17 +337,17 @@ real_query_recv_rows(Fields, #protocol{}=P) ->
             {error, Reason, P}
     end.
 
-%% -- priate: loop,refresh --
+%% -- internal: loop,refresh --
 
 refresh_pre(Options, #protocol{}=P) ->
     {ok, [<<?COM_REFRESH,Options>>,reset(P)]}.
 
-%% -- priate: loop,select_db --
+%% -- internal: loop,select_db --
 
 select_db_pre(Database, #protocol{}=P) ->
     {ok, [<<?COM_INIT_DB,Database/binary>>,reset(P)]}.
 
-%% -- priate: loop,stat --
+%% -- internal: loop,stat --
 
 stat_pre(#protocol{}=P) ->
     {ok, [<<?COM_STATISTICS>>,reset(P)]}.
@@ -362,7 +360,7 @@ stat_post(Byte, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-%% -- priate: loop,stmt_close --
+%% -- internal: loop,stmt_close --
 
 stmt_close_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
     {ok, [X,<<?COM_STMT_CLOSE,S:32/little>>,reset(P)]}.
@@ -370,7 +368,7 @@ stmt_close_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
 stmt_close_post(_Prepare, #protocol{}=P) ->
     {ok, [P]}.
 
-%% -- priate: loop,stmt_execute --
+%% -- internal: loop,stmt_execute --
 
 stmt_execute_pre(Prepare, Args, #protocol{}=P) ->
     B = stmt_execute_to_binary(Prepare, Args),
@@ -411,7 +409,7 @@ stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) -
             {error, Reason, Protocol}
     end.
 
-%% -- priate: loop,stmt_fetch --
+%% -- internal: loop,stmt_fetch --
 
 stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
     B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
