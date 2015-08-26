@@ -22,6 +22,8 @@
 %% == ~/include/mysql_com.h ==
 
 %% -- define --
+-define(MAX_PACKET_LENGTH, 16777215).
+
 -define(SERVER_STATUS_IN_TRANS,                 (1 bsl  0)).
 -define(SERVER_STATUS_AUTOCOMMIT,               (1 bsl  1)).
 -define(SERVER_MORE_RESULTS_EXISTS,             (1 bsl  3)).

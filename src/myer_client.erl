@@ -96,7 +96,7 @@ initialized(#state{args=A,handle=undefined}=S) ->
          proplists:get_value(port, A, 3306),
          proplists:get_value(default_character_set, A, ?CHARSET_utf8_general_ci),
          proplists:get_value(compress, A, false),
-         proplists:get_value(max_allowed_packet, A, 4194304),
+         proplists:get_value(max_allowed_packet, A, ?MAX_PACKET_LENGTH),
          timer:seconds(proplists:get_value(timeout, A, 10))
         ],
     case apply(myer_protocol, connect, [L]) of

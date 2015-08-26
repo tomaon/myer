@@ -39,21 +39,13 @@
 
 -type(handle() :: #handle{}).
 
--define(MAX_PACKET_LENGTH, 16777215).
-
 %% == public ==
 
 -spec connect(inet:ip_address()|inet:hostname(),inet:port_number(),
               [gen_tcp:connect_option()],timeout()) -> {ok,handle()}|{error,_}.
-connect(Address, Port, MaxLength, Timeout) ->
-    L = [
-         {active, false},
-         {keepalive, true},
-         binary,
-         {packet, raw},
-         {packet_size, MaxLength} % ??
-        ],
-    try gen_tcp:connect(Address, Port, L, Timeout) of
+connect(Address, Port, Options, Timeout) ->
+    MaxLength = proplists:get_value(packet_size, Options), % TODO
+    try gen_tcp:connect(Address, Port, Options, Timeout) of
         {ok, Socket} ->
             {ok, #handle{socket = Socket, maxlength = MaxLength, timeout = Timeout}};
         {error, Reason} ->
@@ -74,12 +66,12 @@ recv(Handle, Length, Compress) ->
     buffered(Handle, Length, Compress, Length, []).
 
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_,handle()}.
-send(#handle{}=H, Binary, Compress)
-  when ?MAX_PACKET_LENGTH =< size(Binary) ->
-    B = binary_part(Binary, {0,?MAX_PACKET_LENGTH}),
-    R = binary_part(Binary, {?MAX_PACKET_LENGTH,byte_size(Binary)-?MAX_PACKET_LENGTH}),
+send(#handle{maxlength=M}=H, Binary, Compress)
+  when M =< size(Binary) ->
+    B = binary_part(Binary, {0,M}),
+    R = binary_part(Binary, {M,byte_size(Binary)-M}),
     %%{B, R} = split_binary(Binary, ?MAX_PACKET_LENGTH),
-    case send(H, B, ?MAX_PACKET_LENGTH, Compress) of
+    case send(H, B, M, Compress) of
         {ok, Handle} ->
             send(Handle, R, Compress);
         {error, Reason, Handle} ->
@@ -180,8 +172,8 @@ send(#handle{socket=S,seqnum=N}=H, Binary, Size, false) ->
         {error, Reason} ->
 	    {error, Reason, H}
     end;
-send(#handle{seqnum=N}=H, Binary, Size, true) ->
-    L = if ?MAX_PACKET_LENGTH - 4 >= Size -> [<<Size:24/little,N,Binary/binary>>];
-           true                           -> [<<Size:24/little,N>>, Binary]
+send(#handle{maxlength=M,seqnum=N}=H, Binary, Size, true) ->
+    L = if M - 4 >= Size -> [<<Size:24/little,N,Binary/binary>>];
+           true          -> [<<Size:24/little,N>>, Binary]
         end,
     send(H#handle{seqnum = N+1, zseqnum = N}, L).

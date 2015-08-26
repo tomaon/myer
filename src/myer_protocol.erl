@@ -280,7 +280,14 @@ close_post(#protocol{handle=H}=P) ->
 %% -- internal: loop,connect --
 
 connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
-    case myer_network:connect(Address, Port, MaxLength, Timeout) of
+    L = [
+         {active, false},
+         {keepalive, true},
+         binary,
+         {packet, raw},
+         {packet_size, MaxLength} % ??
+        ],
+    case myer_network:connect(Address, Port, L, Timeout) of
         {ok, Handle} ->
             {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = false,
                             caps = default_caps(Compress), charset = Charset}]};
