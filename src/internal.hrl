@@ -175,10 +175,3 @@
 	 }).
 
 -type(prepare() :: #prepare{}).
-
-
--type(hostname() :: inet:hostname()).
--type(ip_address() :: inet:ip_address()).
--type(port_number() :: inet:port_number()).
--type(property() :: proplists:property()).
--type(socket() :: port()).                      % gen_tcp:socket()

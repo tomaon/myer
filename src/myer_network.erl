@@ -26,7 +26,7 @@
 
 %% -- internal --
 -record(handle, {
-          socket :: socket(),
+          socket :: port(),
           maxlength :: non_neg_integer(),
           timeout :: timeout(),
           seqnum = 0 :: non_neg_integer(),
@@ -43,8 +43,8 @@
 
 %% == public ==
 
--spec connect(ip_address()|hostname(),port_number(),non_neg_integer(),timeout())
-             -> {ok,handle()}|{error,_}.
+-spec connect(inet:ip_address()|inet:hostname(),inet:port_number(),
+              [gen_tcp:connect_option()],timeout()) -> {ok,handle()}|{error,_}.
 connect(Address, Port, MaxLength, Timeout) ->
     L = [
          {active, false},

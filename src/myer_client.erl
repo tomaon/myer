@@ -30,13 +30,13 @@
 
 %% -- internal --
 -record(state, {
-          args :: [property()],
+          args :: proplists:proplist(),
           handle :: tuple()
          }).
 
 %% == public ==
 
--spec start_link([property()]) -> {ok,pid()}|ignore|{error,_}.
+-spec start_link([proplists:proplist()]) -> {ok,pid()}|ignore|{error,_}.
 start_link(Args)
   when is_list(Args) ->
     gen_server:start_link(?MODULE, Args, []).
