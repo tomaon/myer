@@ -11,7 +11,6 @@
          init_per_testcase/2]).
 
 %% -- public --
--export([version_test/1]).
 -export([auth_test_pwd/1,
          auth_test_nopwd/1,
          auth_test_oldpwd/1,
@@ -37,7 +36,6 @@
 %% == callback: ct ==
 
 all() -> [
-          version_test,
           {group, groups_internal}
          ].
 
@@ -92,15 +90,11 @@ init_per_group(Group, Config) ->
 end_per_group(_Group, Config) ->
     proplists:delete(env, Config).
 
-init_per_testcase(version_test, Config) ->
-    Config;
 init_per_testcase(_Testcase, Config) ->
     ok = set_env(?config(env,Config)),
     Config.
 
 %% == public ==
-
-version_test(Config) -> myer_public_SUITE:version_test(Config).
 
 %% -- auth_* --
 

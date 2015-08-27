@@ -11,7 +11,6 @@
          init_per_testcase/2, end_per_testcase/2]).
 
 %% -- public --
--export([version_test/1]).
 -export([real_types_test_11_2_1/1,
          real_types_test_11_2_2/1,
          real_types_test_11_2_3/1, real_types_test_11_2_4/1,
@@ -34,7 +33,6 @@
 %% == callback: ct ==
 
 all() -> [
-          version_test,
           {group, groups_internal}
          ].
 
@@ -87,8 +85,6 @@ end_per_testcase(TestCase, Config) ->
     myer_public_SUITE:end_per_testcase(TestCase, Config).
 
 %% == public ==
-
-version_test(Config) -> myer_public_SUITE:version_test(Config).
 
 %% -- real_* --
 

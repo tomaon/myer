@@ -28,7 +28,8 @@ groups() -> [
 
              {group_normal, [sequence], [
                                          cover_myer_client_cast,
-                                         cover_myer_client_info1, cover_myer_client_info2
+                                         cover_myer_client_info1,
+                                         cover_myer_client_info2  % TODO, @see tmp/x1
                                         ]}
             ].
 
