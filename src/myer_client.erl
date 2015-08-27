@@ -69,6 +69,9 @@ handle_info(timeout, State) ->
     initialized(State);
 handle_info({tcp_closed,_Socket}, State) ->
     {stop, tcp_closed, State};
+handle_info({'EXIT',Socket,normal}, State)
+  when is_port(Socket) ->
+    {stop, port_closed, State};
 handle_info({'EXIT',_Pid,Reason}, State) ->
     {stop, Reason, State}.
 
