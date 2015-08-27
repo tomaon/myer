@@ -67,8 +67,8 @@ handle_cast(_Request, State) ->
 
 handle_info(timeout, State) ->
     initialized(State);
-handle_info({tcp_closed,_Socket}, State) ->
-    {stop, tcp_closed, State};
+handle_info({tcp_closed,_Socket}, #state{}=S) ->
+    {stop, tcp_closed, S#state{handle = undefined}};
 handle_info({'EXIT',Socket,normal}, #state{}=S)
   when is_port(Socket) ->
     {stop, port_closed, S#state{handle = undefined}};
