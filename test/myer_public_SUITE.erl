@@ -794,7 +794,7 @@ stmt_test_blob(Config) ->
                         {ok, P} = stmt_execute(Config,A,[E,B]),
                         1 = stmt_affected_rows(P), 0 = stmt_warning_count(P),
 
-                        { [E,myer_debug:md5(B)], P}
+                        { [E,crypto:hash(md5,B)], P} % TODO
                 end,
             {L1, C1} = lists:mapfoldl(F, C0, D),
 

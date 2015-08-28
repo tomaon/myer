@@ -21,7 +21,6 @@
 
 %% -- public --
 -export([stat/1, caps/1, flags/1, type/1]).
--export([md5/1]).
 
 %% -- internal --
 -define(BCHECK(B,K,V), (case B band K of 0 -> ""; _ -> V end)).
@@ -148,8 +147,3 @@ type(T)
     proplists:get_value(T, L, "unknown");
 type(_) ->
     "?".
-
--spec md5(binary()) -> binary().
-md5(Binary)
-  when is_binary(Binary) ->
-    list_to_binary([ io_lib:format("~2.16.0b",[E]) || <<E>> <= crypto:hash(md5,Binary) ]).
