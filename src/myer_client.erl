@@ -113,9 +113,9 @@ initialized(#state{args=A,handle=undefined}=S) ->
 
 connected(#state{args=A,handle=H}=S) ->
     L = [
-         baseline_lists:get_as_boolean(user, 1, A, <<"root">>),
-         baseline_lists:get_as_boolean(password, 1, A, <<"">>),
-         baseline_lists:get_as_boolean(database, 1, A, <<"">>)
+         baseline_lists:get_as_binary(user, 1, A, <<"root">>),
+         baseline_lists:get_as_binary(password, 1, A, <<"">>),
+         baseline_lists:get_as_binary(database, 1, A, <<"">>)
         ],
     case apply(myer_protocol, auth, [H|L]) of
         {ok, _Result, Handle} ->
