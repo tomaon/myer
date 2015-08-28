@@ -29,22 +29,6 @@
 -export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
-%% -- internal --
-
--record(handshake, {
-	  version :: [non_neg_integer()],
-	  tid :: non_neg_integer(),
-	  seed :: binary(),
-	  caps :: integer(),
-	  charset :: non_neg_integer(),
-	  status :: integer(),
-	  plugin :: binary()
-	 }).
-
--record(plugin, {
-          name :: binary()
-         }).
-
 %% == public ==
 
 -spec connect([term()]) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.

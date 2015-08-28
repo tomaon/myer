@@ -179,6 +179,24 @@
 
 -type(prepare() :: #prepare{}).
 
+-record(handshake, {
+	  version :: [non_neg_integer()],
+	  tid :: non_neg_integer(),
+	  seed :: binary(),
+	  caps :: integer(),
+	  charset :: non_neg_integer(),
+	  status :: integer(),
+	  plugin :: binary()
+	 }).
+
+-type(handshake() :: #handshake{}).
+
+-record(plugin, {
+          name :: binary()
+         }).
+
+-type(plugin() :: #plugin{}).
+
 %% == type ==
 
 -type(properties() :: [{atom(),term()}]).
