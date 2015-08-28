@@ -280,7 +280,7 @@ close_post(#protocol{handle=H}=P) ->
 %% -- internal: loop,connect --
 
 connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
-    case myer_socket:connect(Address, Port, MaxLength, Timeout) of
+    case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
         {ok, Handle} ->
             {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = false,
                             caps = default_caps(Compress), charset = Charset}]};

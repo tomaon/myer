@@ -95,12 +95,12 @@ loaded(Args, #state{}=S) ->
 
 initialized(#state{args=A,handle=undefined}=S) ->
     L = [
-         baseline_lists:get_as_list(address, 1, A, "localhost"),
-         baseline_lists:get_as_integer(port, 1, A, 3306),
-         baseline_lists:get_as_integer(default_character_set, 1, A, ?CHARSET_utf8_general_ci),
-         baseline_lists:get_as_boolean(compress, 1, A, false),
-         baseline_lists:get_as_integer(max_allowed_packet, 1, A, 4194304, ?MAX_PACKET_LENGTH, ?MIN_PACKET_LENGTH),
-         timer:seconds(baseline_lists:get_as_integer(timeout, 1, A, 10))
+         get(address, A),
+         get(port, A),
+         get(default_character_set, A),
+         get(compress, A),
+         get(max_allowed_packet, A),
+         get(timeout, A)
         ],
     case apply(myer_protocol, connect, [L]) of
         {ok, Handle} ->
@@ -113,9 +113,9 @@ initialized(#state{args=A,handle=undefined}=S) ->
 
 connected(#state{args=A,handle=H}=S) ->
     L = [
-         baseline_lists:get_as_binary(user, 1, A, <<"root">>),
-         baseline_lists:get_as_binary(password, 1, A, <<"">>),
-         baseline_lists:get_as_binary(database, 1, A, <<"">>)
+         get(user, A),
+         get(password, A),
+         get(database, A)
         ],
     case apply(myer_protocol, auth, [H|L]) of
         {ok, _Result, Handle} ->
@@ -139,3 +139,8 @@ ready(Func, Args, #state{handle=H}=S) ->
         {error, Reason, Handle} ->
             {reply, {error,Reason}, S#state{handle = Handle}}
     end.
+
+%% == internal ==
+
+get(Key, List) ->
+    baseline_lists:get(Key, 1, List, undefined).

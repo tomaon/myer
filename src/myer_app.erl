@@ -26,17 +26,12 @@
 %% == behaviour: application ==
 
 start(_StartType, StartArgs) ->
-    try validate(baseline_app:args(myer,StartArgs)) of
-        List ->
-            baseline_sup:start_link({local, myer_sup},
-                                    {
-                                      {one_for_one, 10, timer:seconds(5)},
-                                      [ get_childspec(E) || E <- List ]
-                                    })
-    catch
-        Reason ->
-            {error, Reason}
-    end.
+    baseline_sup:start_link({local, myer_sup},
+                            {
+                              {one_for_one, 10, timer:seconds(5)},
+                              [ get_childspec(E) || E <- baseline_app:args(myer,StartArgs) ]
+                            }).
+
 
 stop([]) ->
     void.
@@ -59,7 +54,7 @@ get_childspec({Name,Args}) ->
                 myer_client,
                 start_link,
                 [
-                 Args
+                 update(Args)
                 ]
               },
               temporary,
@@ -77,63 +72,16 @@ get_childspec({Name,Args}) ->
       []
     }.
 
-validate(Args) ->
-    [ {N,lists:foldl(fun validate/2,[],A)} || {N,A} <- Args ].
-
-validate({address=K,Value}, List)            -> % inet:ip_address()|inet:hostname(), TODO
-    T = if is_atom(Value)                    -> {K, Value};
-           is_list(Value), 0 < length(Value) -> {K, Value};
-           is_binary(Value), 0 < size(Value) -> {K, binary_to_list(Value)};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({port=K,Value}, List)               -> % inet:port_number(), TODO
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({user=K,Value}, List)               -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({password=K,Value}, List)           -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({database=K,Value}, List) ->           % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({default_character_set=K,Value}, List) -> % non_neg_integer()
-    T = if is_integer(Value), 0 =< Value     -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({compress=K,Value}, List)           -> % boolean()
-    T = if is_boolean(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({max_allowed_packet=K,Value}, List) -> % non_neg_integer()
-    T = if is_integer(Value), 0 =< Value     -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({timeout=K,Value}, List)            -> % timeout()
-    T = if is_integer(Value), 0=< Value      -> {K, Value};
-           infinity =:= Value                -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({Key,_Value}, _List) ->
-    throw({badarg,Key}).
+update(Args) ->
+    L = [
+         {address,               fun baseline_lists:get/4,            ["localhost"]},
+         {port,                  fun baseline_lists:get_as_integer/4, [3306]},
+         {user,                  fun baseline_lists:get_as_binary/4,  [<<"root">>]},
+         {password,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
+         {database,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
+         {default_character_set, fun baseline_lists:get_as_integer/4, [?CHARSET_utf8_general_ci]},
+         {compress,              fun baseline_lists:get_as_boolean/4, [false]},
+         {max_allowed_packet,    fun baseline_lists:get_as_integer/6, [4194304,?MAX_PACKET_LENGTH,?MIN_PACKET_LENGTH]},
+         {timeout,               fun baseline_lists:get_as_integer/4, [10]} % != infinity
+        ],
+    [ {K,apply(F,[K|[1|[Args|A]]])} || {K,F,A} <- L ].
