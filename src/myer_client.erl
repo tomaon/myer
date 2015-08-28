@@ -30,13 +30,13 @@
 
 %% -- internal --
 -record(state, {
-          args :: proplists:proplist(),
+          args :: properties(),
           handle :: tuple()
          }).
 
 %% == public ==
 
--spec start_link([proplists:proplist()]) -> {ok,pid()}|ignore|{error,_}.
+-spec start_link(properties()) -> {ok,pid()}|ignore|{error,_}.
 start_link(Args)
   when is_list(Args) ->
     gen_server:start_link(?MODULE, Args, []).
@@ -95,12 +95,12 @@ loaded(Args, #state{}=S) ->
 
 initialized(#state{args=A,handle=undefined}=S) ->
     L = [
-         proplists:get_value(address, A, "localhost"),
-         proplists:get_value(port, A, 3306),
-         proplists:get_value(default_character_set, A, ?CHARSET_utf8_general_ci),
-         proplists:get_value(compress, A, false),
-         proplists:get_value(max_allowed_packet, A, ?MAX_PACKET_LENGTH),
-         timer:seconds(proplists:get_value(timeout, A, 10))
+         baseline_lists:get_as_list(address, 1, A, "localhost"),
+         baseline_lists:get_as_integer(port, 1, A, 3306),
+         baseline_lists:get_as_integer(default_character_set, 1, A, ?CHARSET_utf8_general_ci),
+         baseline_lists:get_as_boolean(compress, 1, A, false),
+         baseline_lists:get_as_integer(max_allowed_packet, 1, A, 4194304, ?MAX_PACKET_LENGTH, ?MIN_PACKET_LENGTH),
+         timer:seconds(baseline_lists:get_as_integer(timeout, 1, A, 10))
         ],
     case apply(myer_protocol, connect, [L]) of
         {ok, Handle} ->
@@ -113,9 +113,9 @@ initialized(#state{args=A,handle=undefined}=S) ->
 
 connected(#state{args=A,handle=H}=S) ->
     L = [
-         proplists:get_value(user, A, <<"root">>),
-         proplists:get_value(password, A, <<"">>),
-         proplists:get_value(database, A, <<"">>)
+         baseline_lists:get_as_boolean(user, 1, A, <<"root">>),
+         baseline_lists:get_as_boolean(password, 1, A, <<"">>),
+         baseline_lists:get_as_boolean(database, 1, A, <<"">>)
         ],
     case apply(myer_protocol, auth, [H|L]) of
         {ok, _Result, Handle} ->

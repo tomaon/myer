@@ -22,7 +22,8 @@
 %% == ~/include/mysql_com.h ==
 
 %% -- define --
--define(MAX_PACKET_LENGTH, 16777215).
+-define(MAX_PACKET_LENGTH, 16#FFFFFF). % 16777215
+-define(MIN_PACKET_LENGTH, 16#00FFFF). %    65535, TODO
 
 -define(SERVER_STATUS_IN_TRANS,                 (1 bsl  0)).
 -define(SERVER_STATUS_AUTOCOMMIT,               (1 bsl  1)).
@@ -177,3 +178,7 @@
 	 }).
 
 -type(prepare() :: #prepare{}).
+
+%% == type ==
+
+-type(properties() :: [{atom(),term()}]).
