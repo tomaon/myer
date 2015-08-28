@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([connect/1, close/1, auth/4, ping/1, stat/1, version/1]).
+-export([connect/1, close/1, auth/5, ping/1, stat/1, version/1]).
 -export([real_query/2, refresh/2, select_db/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
@@ -42,11 +42,11 @@ close(#protocol{handle=undefined}=P) ->
 close(#protocol{}=P) ->
     loop([P], [fun close_pre/1, fun send/2, fun close_post/1]).
 
--spec auth(protocol(),binary(),binary(),binary()) -> {ok,result(),protocol()}|{error,_,protocol()}.
-auth(#protocol{handle=H}=P, User, Password, Database)
+-spec auth(protocol(),binary(),binary(),binary(),handshake()) -> {ok,result(),protocol()}|{error,_,protocol()}.
+auth(#protocol{handle=H}=P, User, Password, Database, #handshake{}=R)
   when undefined =/= H, is_binary(User), is_binary(Password), is_binary(Database) ->
-    case loop([User,Password,Database,P],
-              [fun auth_pre/4, fun send/2, fun recv_status/1, fun auth_post/2]) of
+    case loop([User,Password,Database,R,P],
+              [fun auth_pre/5, fun send/2, fun recv_status/1, fun auth_post/2]) of
         {ok, #plugin{}=X, Protocol} ->
             auth_alt([Password,merge(Protocol,X)]);
         {ok, Result, Protocol}->
@@ -233,10 +233,10 @@ zreset(#protocol{handle=H}=P) ->
 
 %% -- internal: loop,auth --
 
-auth_pre(User, Password, <<>>, #protocol{caps=C}=P) ->
+auth_pre(User, Password, <<>>, #handshake{}, #protocol{caps=C}=P) ->
     Protocol = P#protocol{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
     {ok, [auth_to_binary(User,Password,<<>>,Protocol),Protocol]};
-auth_pre(User, Password, Database, #protocol{caps=C}=P) ->
+auth_pre(User, Password, Database, #handshake{}, #protocol{caps=C}=P) ->
     Protocol = P#protocol{caps = (C bxor ?CLIENT_NO_SCHEMA)},
     {ok, [auth_to_binary(User,Password,Database,Protocol),Protocol]}.
 

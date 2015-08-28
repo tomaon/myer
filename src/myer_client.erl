@@ -107,21 +107,23 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
          get(timeout, A)
         ],
     case apply(M, connect, [L]) of
-        {ok, #protocol{}=H, #handshake{caps=C,version=V}} ->
-            connected(S#state{handle = H, caps = C, maxlength = X, version = V});
+        {ok, #protocol{}=H, #handshake{caps=C,version=V}=R} ->
+            connected(S#state{handle = H, caps = C, maxlength = X, version = V}, R);
         {error, Reason} ->
             {error, Reason, S};
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end.
 
-connected(#state{module=M,args=A,handle=H}=S) ->
+connected(#state{module=M,args=A,handle=H}=S, #handshake{}=R) ->
     L = [
+         H,
          get(user, A),
          get(password, A),
-         get(database, A)
+         get(database, A),
+         R
         ],
-    case apply(M, auth, [H|L]) of
+    case apply(M, auth, L) of
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
