@@ -63,36 +63,42 @@ cover_myer_client_info1(Config) ->
     Pid = element(3, ?config(handle,Config)),
     unlink(Pid),
 
-    Protocol = element(3, sys:get_state(Pid)),
-    true = is_record(Protocol, protocol),
+    Protocol = element(4, sys:get_state(Pid)),
+    true = test(erlang, is_record, [Protocol,protocol]),
 
-    Network = element(2, Protocol),
-    handle = element(1, Network),
+    Handle = element(2, Protocol),
+    handle = test(erlang, element, [1,Handle]),
 
-    Socket = element(2, Network),
-    true = is_port(Socket),
+    Socket = element(2, Handle),
+    socket = test(erlang, element, [1,Socket]),
 
-    Pid ! {tcp_closed,Socket}, % ...
+    Port = element(2, Socket),
+    true = test(erlang, is_port, [Port]),
+
+    Pid ! {tcp_closed,Port}, % ...
 
     ok = ct:sleep({seconds, 1}),
 
-    false = is_process_alive(Pid).
+    false = test(erlang, is_process_alive, [Pid]).
 
 cover_myer_client_info2(Config) ->
 
     Pid = element(3, ?config(handle,Config)),
     unlink(Pid),
 
-    Protocol = element(3, sys:get_state(Pid)),
-    true = is_record(Protocol, protocol),
+    Protocol = element(4, sys:get_state(Pid)),
+    true = test(erlang, is_record, [Protocol,protocol]),
 
-    Network = element(2, Protocol),
-    handle = element(1, Network),
+    Handle = element(2, Protocol),
+    handle = test(erlang, element, [1,Handle]),
 
-    Socket = element(2, Network),
-    true = is_port(Socket),
+    Socket = element(2, Handle),
+    socket = test(erlang, element, [1,Socket]),
 
-    Socket ! {Pid,close},
+    Port = element(2, Socket),
+    true = test(erlang, is_port, [Port]),
+
+    Port ! {Pid,close},
 
     ok = ct:sleep({seconds, 1}),
 

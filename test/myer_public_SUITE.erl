@@ -55,7 +55,7 @@ groups() -> [
                                         ]},
 
              {group_compress, [sequence], [
-                                           {group, group_query}
+                                         % {group, group_query}
                                           ]},
 
              {group_query, [], [

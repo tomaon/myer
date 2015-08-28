@@ -30,8 +30,13 @@
 
 %% -- internal --
 -record(state, {
-          args :: properties(),
-          handle :: tuple()
+          module    :: module(),                % myer_protocol
+          args      :: properties(),
+          handle    :: tuple(),                 % myer_porotocol:handle
+          caps      :: non_neg_integer(),
+          compress  :: boolean(),
+          maxlength :: non_neg_integer(),
+          version   :: [integer()]              % TODO, pos_intege
          }).
 
 %% == public ==
@@ -90,10 +95,10 @@ setup(Args) ->
 
 
 loaded(Args, #state{}=S) ->
-    {ok, S#state{args = Args}, 0}.
+    {ok, S#state{module = myer_protocol, args = Args}, 0}.
 
 
-initialized(#state{args=A,handle=undefined}=S) ->
+initialized(#state{module=M,args=A,handle=undefined}=S) ->
     L = [
          get(address, A),
          get(port, A),
@@ -102,7 +107,7 @@ initialized(#state{args=A,handle=undefined}=S) ->
          get(max_allowed_packet, A),
          get(timeout, A)
         ],
-    case apply(myer_protocol, connect, [L]) of
+    case apply(M, connect, [L]) of
         {ok, Handle} ->
             connected(S#state{handle = Handle});
         {error, Reason} ->
@@ -111,13 +116,13 @@ initialized(#state{args=A,handle=undefined}=S) ->
             {error, Reason, S#state{handle = Handle}}
     end.
 
-connected(#state{args=A,handle=H}=S) ->
+connected(#state{module=M,args=A,handle=H}=S) ->
     L = [
          get(user, A),
          get(password, A),
          get(database, A)
         ],
-    case apply(myer_protocol, auth, [H|L]) of
+    case apply(M, auth, [H|L]) of
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
@@ -128,8 +133,8 @@ authorized(#state{}=S) ->
     {noreply, S#state{args = undefined}}.
 
 
-ready(Func, Args, #state{handle=H}=S) ->
-    case apply(myer_protocol, Func, [H|Args]) of
+ready(Func, Args, #state{module=M,handle=H}=S) ->
+    case apply(M, Func, [H|Args]) of
         {ok, Handle} ->
             {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->
