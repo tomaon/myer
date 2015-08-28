@@ -172,11 +172,11 @@ binary_to_float(Binary, _Decimals) ->
 
 -spec recv(protocol(),non_neg_integer()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
 recv(#protocol{handle=H,compress=Z}=P, Length) ->
-    case myer_network:recv(H, Length, Z) of
+    case myer_socket:recv(H, Length, Z) of
         {ok, Binary, Handle} ->
             {ok, Binary, P#protocol{handle = Handle}};
-        {error, Reason, Handle} ->
-            {error, Reason, P#protocol{handle = Handle}}
+        {error, Reason} ->
+            {error, Reason, P}
     end.
 
 -spec recv_packed_binary(undefined|binary(),protocol())
@@ -242,10 +242,10 @@ merge(#protocol{}=P, #plugin{name=N}) ->
     P#protocol{plugin = N}.
 
 reset(#protocol{handle=H}=P) ->
-    P#protocol{handle = myer_network:reset(H)}.
+    P#protocol{handle = myer_socket:reset(H)}.
 
 zreset(#protocol{handle=H}=P) ->
-    P#protocol{handle = myer_network:zreset(H)}.
+    P#protocol{handle = myer_socket:zreset(H)}.
 
 %% -- internal: loop,auth --
 
@@ -274,20 +274,13 @@ close_pre(#protocol{}=P) ->
     {ok, [<<?COM_QUIT>>,reset(P)]}.
 
 close_post(#protocol{handle=H}=P) ->
-    _ = myer_network:close(H),
+    _ = myer_socket:close(H),
     {ok, [P#protocol{handle = undefined}]}.
 
 %% -- internal: loop,connect --
 
 connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
-    L = [
-         {active, false},
-         {keepalive, true},
-         binary,
-         {packet, raw},
-         {packet_size, MaxLength} % ??
-        ],
-    case myer_network:connect(Address, Port, L, Timeout) of
+    case myer_socket:connect(Address, Port, MaxLength, Timeout) of
         {ok, Handle} ->
             {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = false,
                             caps = default_caps(Compress), charset = Charset}]};
@@ -575,19 +568,19 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
     end.
 
 send(Binary, #protocol{handle=H,compress=Z}=P) ->
-    case myer_network:send(H, Binary, Z) of
+    case myer_socket:send(H, Binary, Z) of
 	{ok, Handle} ->
 	    {ok, [P#protocol{handle = Handle}]};
-	{error, Reason, Handle} ->
-	    {error, Reason, P#protocol{handle = Handle}}
+	{error, Reason} ->
+	    {error, Reason, P}
     end.
 
 send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
-    case myer_network:send(H, Binary, Z) of
+    case myer_socket:send(H, Binary, Z) of
 	{ok, Handle} ->
 	    {ok, [Term,P#protocol{handle = Handle}]};
-	{error, Reason, Handle} ->
-	    {error, Reason, P#protocol{handle = Handle}}
+	{error, Reason} ->
+	    {error, Reason, P}
     end.
 
 %% -- internal: sql* --
