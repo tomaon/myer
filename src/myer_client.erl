@@ -34,9 +34,8 @@
           args      :: properties(),
           handle    :: tuple(),                 % myer_porotocol:handle
           caps      :: non_neg_integer(),
-          compress  :: boolean(),
           maxlength :: non_neg_integer(),
-          version   :: [integer()]              % TODO, pos_intege
+          version   :: [integer()]              % TODO, pos_integer
          }).
 
 %% == public ==
@@ -104,12 +103,12 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
          get(port, A),
          get(default_character_set, A),
          get(compress, A),
-         get(max_allowed_packet, A),
+         X = get(max_allowed_packet, A),
          get(timeout, A)
         ],
     case apply(M, connect, [L]) of
-        {ok, Handle} ->
-            connected(S#state{handle = Handle});
+        {ok, #protocol{}=H, #handshake{caps=C,version=V}} ->
+            connected(S#state{handle = H, caps = C, maxlength = X, version = V});
         {error, Reason} ->
             {error, Reason, S};
         {error, Reason, Handle} ->

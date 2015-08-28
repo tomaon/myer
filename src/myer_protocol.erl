@@ -275,7 +275,8 @@ connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
 connect_post(<<10>>, #protocol{}=P) -> % "always 10"
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
-            {ok, [merge(Protocol,binary_to_handshake(Binary))]};
+            H = binary_to_handshake(Binary),
+            {ok, [merge(Protocol,H),H]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
