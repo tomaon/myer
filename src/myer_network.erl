@@ -145,8 +145,8 @@ recv(#handle{socket=S,timeout=T}=H, ZRaw) ->
     case gen_tcp:recv(S, 0, T) of
         {ok, Packet} ->
             recv(H, iolist_to_binary([ZRaw,Packet]));
-	{error, Reason} ->
-	    {error, Reason, H}
+        {error, Reason} ->
+            {error, Reason, H}
     end.
 
 send(#handle{zseqnum=N}=H, []) ->
@@ -170,7 +170,7 @@ send(#handle{socket=S,seqnum=N}=H, Binary, Size, false) ->
         ok ->
             {ok, H#handle{seqnum = N+1}};
         {error, Reason} ->
-	    {error, Reason, H}
+            {error, Reason, H}
     end;
 send(#handle{maxlength=M,seqnum=N}=H, Binary, Size, true) ->
     L = if M - 4 >= Size -> [<<Size:24/little,N,Binary/binary>>];

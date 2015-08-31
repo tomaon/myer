@@ -51,7 +51,7 @@ scramble(Password, Seed) ->
 %% -----------------------------------------------------------------------------
 scramble_323(Password, Seed) when is_list(Password), is_list(Seed), length(Seed) > 7 ->
     Hash = fun(S) ->
-		   {L,R,_} = lists:foldl(
+                   {L,R,_} = lists:foldl(
                                fun(E, {L,R,A}) when E =/= 16#20, E =/= 16#09 ->
                                        T = L bxor (((L band 63) + A) * E + (L bsl 8)),
                                        {T, R + ((R bsl 8) bxor T), A + E};
@@ -61,25 +61,25 @@ scramble_323(Password, Seed) when is_list(Password), is_list(Seed), length(Seed)
                                {1345345333, 16#12345671, 7},
                                S
                               ),
-		   {L band ((1 bsl 31) -1), R band ((1 bsl 31) -1)}
-	   end,
+                   {L band ((1 bsl 31) -1), R band ((1 bsl 31) -1)}
+           end,
     Rand = fun({{PL,PR}, {SL,SR}}) ->
-		   X = 16#3FFFFFFF,
+                   X = 16#3FFFFFFF,
                    {(PL bxor SL) rem X, (PR bxor SR) rem X, X};
-	      ({L,R,X}) ->
-		   NL = (L * 3 + R) rem X,
-		   NR = (NL + R + 33) rem X,
-		   {NL / X, {NL,NR,X}}
-	   end,
+              ({L,R,X}) ->
+                   NL = (L * 3 + R) rem X,
+                   NR = (NL + R + 33) rem X,
+                   {NL / X, {NL,NR,X}}
+           end,
     S = lists:sublist(Seed, 8),
     {NV, L} = lists:foldl(
-		fun(_, {V,A}) ->
-			{T,NV} = Rand(V),
-			{NV, [(trunc(T * 31) + 64)|A]}
-		end,
-		{Rand({Hash(Password), Hash(S)}), []},
-		lists:seq(1, 8)
-	       ),
+                fun(_, {V,A}) ->
+                        {T,NV} = Rand(V),
+                        {NV, [(trunc(T * 31) + 64)|A]}
+                end,
+                {Rand({Hash(Password), Hash(S)}), []},
+                lists:seq(1, 8)
+               ),
     {T, _} = Rand(NV),
     B = trunc(T * 31),
     list_to_binary([E bxor B || E <- lists:reverse(L)]);
