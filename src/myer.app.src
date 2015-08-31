@@ -13,7 +13,7 @@
                    %              {user, <<"root">>},
                    %              {password, <<"">>},
                    %              {database, <<"">>},
-                   %              {default_character_set, 33}, % 33=CHARSET_utf8_general_ci
+                   %              {default_character_set, 45}, % 45=CHARSET_utf8bm4_general_ci
                    %              {compress, false},
                    %              {max_allowed_packet, 4194304},
                    %              {timeout, 10}

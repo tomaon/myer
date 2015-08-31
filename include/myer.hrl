@@ -58,38 +58,46 @@
 
 %% @see "SELECT * FROM information_schema.collations ORDER BY id"
 
-%% -- ~/strings/ctype-binary.c --
+%% -- ~/strings/ctype-bin.c --
 -define(CHARSET_binary,                    63). % default?
 %% -- ~/strings/ctype-latin1.c --
--define(CHARSET_latin1_swedish_ci,          8).
+-define(CHARSET_latin1,                     8).
 -define(CHARSET_latin1_bin,                47).
 %% -- ~/strings/ctype-utf8.c --
 -define(CHARSET_utf8_general_ci,           33).
+-define(CHARSET_utf8_tolower_ci,           56).
 -define(CHARSET_utf8_general_mysql500_ci, 223).
 -define(CHARSET_utf8_bin,                  83).
+-define(CHARSET_utf8_general_cs,          254).
+-define(CHARSET_filename,                  17).
+-define(CHARSET_utf8mb4_general_ci,        45).
+-define(CHARSET_utf8mb4_bin,               46).
 %% -- ~/strings/ctype-ucs2.c --
 -define(CHARSET_utf16_general_ci,          54).
 -define(CHARSET_utf16_bin,                 55).
-%%efine(CHARSET_utf16le_general_ci,        56). > 5.6
-%%efine(CHARSET_utf16le_bin,               62). > 5.6
+-define(CHARSET_utf16le_general_ci,        56). % > 5.6
+-define(CHARSET_utf16le_bin,               62). % > 5.6
 -define(CHARSET_utf32_general_ci,          60).
 -define(CHARSET_utf32_bin,                 61).
+-define(CHARSET_ucs2_general_ci,           35).
+-define(CHARSET_ucs2_general_mysql500_ci, 159).
+-define(CHARSET_ucs2_bin,                  90).
 
 %% == record ==
 
 -record(field, {
-	  catalog :: binary(),
-	  db :: binary(),
+          catalog :: binary(),
+          db :: binary(),
           table :: binary(),
-	  org_table :: binary(),
+          org_table :: binary(),
           name :: binary(),
-	  org_name :: binary(),
-	  charsetnr :: non_neg_integer(),
+          org_name :: binary(),
+          charsetnr :: non_neg_integer(),
           length :: non_neg_integer(),
           type :: non_neg_integer(),
           flags :: integer(),
           decimals :: non_neg_integer(),
           cast :: atom()|{atom(),integer()}|function()
-	 }).
+         }).
 
 -type(field() :: #field{}).
