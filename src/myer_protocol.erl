@@ -20,7 +20,8 @@
 -include("internal.hrl").
 
 %% -- public --
--export([connect/1, close/1, auth/5, ping/1, stat/1, version/1]).
+-export([connect/1, close/1, auth/5]).
+-export([ping/1, stat/1]).
 -export([real_query/2, refresh/2, select_db/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
@@ -33,8 +34,8 @@
 
 -spec connect([term()]) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 connect(Args)
-  when is_list(Args), 6 =:= length(Args) ->
-    loop(Args, [fun connect_pre/6, fun recv_status/1, fun connect_post/2]).
+  when is_list(Args), 5 =:= length(Args) ->
+    loop(Args, [fun connect_pre/5, fun recv_status/1, fun connect_post/2]).
 
 -spec close(protocol()) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 close(#protocol{handle=undefined}=P) ->
@@ -46,9 +47,9 @@ close(#protocol{}=P) ->
 auth(#protocol{handle=H}=P, User, Password, Database, #handshake{}=R)
   when undefined =/= H, is_binary(User), is_binary(Password), is_binary(Database) ->
     case loop([User,Password,Database,R,P],
-              [fun auth_pre/5, fun send/2, fun recv_status/1, fun auth_post/2]) of
+              [fun auth_pre/5, fun send/3, fun recv_status/2, fun auth_post/3]) of
         {ok, #plugin{}=X, Protocol} ->
-            auth_alt([Password,merge(Protocol,X)]);
+            auth_alt([Password,merge(R,X),Protocol]);
         {ok, Result, Protocol}->
             {ok, Result, Protocol};
         {error, Reason, Protocol} ->
@@ -56,7 +57,7 @@ auth(#protocol{handle=H}=P, User, Password, Database, #handshake{}=R)
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/2, fun send/2, fun recv_status/1, fun auth_alt_post/2]).
+    loop(Args, [fun auth_alt_pre/3, fun send/3, fun recv_status/2, fun auth_alt_post/3]).
 
 -spec ping(protocol()) -> {ok,result(),protocol()}|{error,_,protocol()}.
 ping(#protocol{handle=H}=P)
@@ -67,11 +68,6 @@ ping(#protocol{handle=H}=P)
 stat(#protocol{handle=H}=P)
   when undefined =/= H ->
     loop([P], [fun stat_pre/1, fun send/2, fun recv_status/1, fun stat_post/2]).
-
--spec version(protocol()) -> {ok,[non_neg_integer()],protocol()}.
-version(#protocol{handle=H,version=V}=P)
-  when undefined =/= H ->
-    {ok, V, P}.
 
 -spec real_query(protocol(),binary())
                 -> {ok,result(),protocol()}|
@@ -220,10 +216,8 @@ loop(Args, [H|T]) ->
             {error, Reason, Protocol}
     end.
 
-merge(#protocol{caps=I}=P, #handshake{version=V,seed=S,caps=C,plugin=A}) ->
-    P#protocol{version = V, seed = S, caps = (I band C), plugin = A}; % ignore: charset
-merge(#protocol{}=P, #plugin{name=N}) ->
-    P#protocol{plugin = N}.
+merge(#handshake{}=H, #plugin{name=N}) ->
+    H#handshake{plugin = N}.
 
 reset(#protocol{handle=H}=P) ->
     P#protocol{handle = myer_socket:reset(H)}.
@@ -233,23 +227,23 @@ zreset(#protocol{handle=H}=P) ->
 
 %% -- internal: loop,auth --
 
-auth_pre(User, Password, <<>>, #handshake{}, #protocol{caps=C}=P) ->
-    Protocol = P#protocol{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
-    {ok, [auth_to_binary(User,Password,<<>>,Protocol),Protocol]};
-auth_pre(User, Password, Database, #handshake{}, #protocol{caps=C}=P) ->
-    Protocol = P#protocol{caps = (C bxor ?CLIENT_NO_SCHEMA)},
-    {ok, [auth_to_binary(User,Password,Database,Protocol),Protocol]}.
+auth_pre(User, Password, <<>>, #handshake{caps=C}=H, Protocol) ->
+    Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
+    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake,Protocol),Protocol]};
+auth_pre(User, Password, Database, #handshake{caps=C}=H, Protocol) ->
+    Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
+    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake,Protocol),Protocol]}.
 
-auth_post(<<254>>, #protocol{}=P) ->
+auth_post(<<254>>, _Handshake, #protocol{}=P) ->
     recv_plugin(P);
-auth_post(<<0>>, #protocol{caps=C}=P) ->
+auth_post(<<0>>, _Handshake, #protocol{caps=C}=P) ->
     recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
 
-auth_alt_pre(Password, #protocol{seed=S,plugin=A}=P) ->
+auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Protocol) ->
     Scrambled = myer_auth:scramble(Password, S, A),
-    {ok, [<<Scrambled/binary,0>>,P]}.
+    {ok, [H,<<Scrambled/binary,0>>,Protocol]}.
 
-auth_alt_post(<<0>>, #protocol{caps=C}=P) ->
+auth_alt_post(<<0>>, _Handshake, #protocol{caps=C}=P) ->
     recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
 
 %% -- internal: loop,close --
@@ -263,20 +257,20 @@ close_post(#protocol{handle=H}=P) ->
 
 %% -- internal: loop,connect --
 
-connect_pre(Address, Port, Charset, Compress, MaxLength, Timeout) ->
+connect_pre(Address, Port, Compress, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
         {ok, Handle} ->
-            {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = false,
-                            caps = default_caps(Compress), charset = Charset}]};
+            {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = Compress,
+                            caps = default_caps(Compress)}]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-connect_post(<<10>>, #protocol{}=P) -> % "always 10"
+connect_post(<<10>>, #protocol{caps=C}=P) -> % "always 10"
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
             H = binary_to_handshake(Binary),
-            {ok, [merge(Protocol,H),H]};
+            {ok, [Protocol,H#handshake{caps = (H#handshake.caps band C)}]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -317,7 +311,7 @@ real_query_recv_fields(N, #protocol{}=P) ->
 real_query_recv_rows(Fields, #protocol{}=P) ->
     case recv_until_eof(fun myer_protocol_text:recv_row/3, [Fields], [], P) of
         {ok, [Result,Rows,Protocol]} ->
-	    {ok, [Fields,Rows,Result,Protocol]};
+            {ok, [Fields,Rows,Result,Protocol]};
         {error, Reason, P} ->
             {error, Reason, P}
     end.
@@ -389,7 +383,7 @@ stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P
 stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
         {ok, [Result,Rows,Protocol]} ->
-	    {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
+            {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -403,7 +397,7 @@ stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
 stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
         {ok, [Result,Rows,Protocol]} ->
-	    {ok, [F,Rows,X#prepare{result = Result},Protocol]};
+            {ok, [F,Rows,X#prepare{result = Result},Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -426,10 +420,10 @@ stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
 stmt_prepare_pre(Query, #protocol{}=P) ->
     {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(P)]}.
 
-stmt_prepare_post(<<0>>, #protocol{version=V}=P) ->
+stmt_prepare_post(<<0>>, #protocol{}=P) ->
     case recv(P, 0) of
-	{ok, Binary, Protocol} ->
-            stmt_prepare_recv_params(binary_to_prepare(V,Binary), Protocol);
+        {ok, Binary, Protocol} ->
+            stmt_prepare_recv_params(binary_to_prepare(Binary), Protocol);
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -471,7 +465,7 @@ stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
 
 recv_eof(Term, #protocol{caps=C}=P) ->
     case recv(P, 0) of
-	{ok, Binary, Protocol} ->
+        {ok, Binary, Protocol} ->
             {ok, [binary_to_eof(C,Binary),Term,Protocol]};
         {error, Reason, P} ->
             {error, Reason, P}
@@ -479,7 +473,7 @@ recv_eof(Term, #protocol{caps=C}=P) ->
 
 recv_error(#protocol{caps=C}=P) ->
     case recv(P, 0) of
-	{ok, Binary, Protocol} ->
+        {ok, Binary, Protocol} ->
             {error, binary_to_reason(C,Binary,0,byte_size(Binary)), Protocol};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
@@ -487,7 +481,7 @@ recv_error(#protocol{caps=C}=P) ->
 
 recv_plugin(#protocol{}=P) ->
     case recv(P, 0) of
-	{ok, Binary, Protocol} ->
+        {ok, Binary, Protocol} ->
             {ok, [binary_to_plugin(Binary),Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
@@ -495,7 +489,7 @@ recv_plugin(#protocol{}=P) ->
 
 recv_result(#protocol{caps=C}=P) ->
     case recv(P, 0) of
-	{ok, Binary, Protocol} ->
+        {ok, Binary, Protocol} ->
             {ok, [binary_to_result(C,Binary,0,byte_size(Binary)),Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
@@ -506,7 +500,7 @@ recv_result(<<0>>, Protocol) ->
 
 recv_status(#protocol{}=P) ->
     case recv(P, 1) of
-	{ok, <<255>>, Protocol} ->
+        {ok, <<255>>, Protocol} ->
             recv_error(Protocol);
         {ok, Byte, Protocol} ->
             {ok, [Byte,Protocol]};
@@ -516,7 +510,7 @@ recv_status(#protocol{}=P) ->
 
 recv_status(Term, #protocol{}=P) ->
     case recv(P, 1) of
-	{ok, <<255>>, Protocol} ->
+        {ok, <<255>>, Protocol} ->
             recv_error(Protocol);
         {ok, Byte, Protocol} ->
             {ok, [Byte,Term,Protocol]};
@@ -536,7 +530,7 @@ recv_until_eof(Func, Args, List, #protocol{}=P) ->
     case recv(P, 1) of
         {ok, <<255>>, Protocol} ->
             recv_error(Protocol);
-	{ok, <<254>>, Protocol} ->
+        {ok, <<254>>, Protocol} ->
             recv_eof(lists:reverse(List), Protocol);
         {ok, Byte, Protocol} ->
             recv_until_eof(Func, Args, List, Byte, Protocol);
@@ -554,18 +548,18 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
 
 send(Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_socket:send(H, Binary, Z) of
-	{ok, Handle} ->
-	    {ok, [P#protocol{handle = Handle}]};
-	{error, Reason} ->
-	    {error, Reason, P}
+        {ok, Handle} ->
+            {ok, [P#protocol{handle = Handle}]};
+        {error, Reason} ->
+            {error, Reason, P}
     end.
 
 send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
     case myer_socket:send(H, Binary, Z) of
-	{ok, Handle} ->
-	    {ok, [Term,P#protocol{handle = Handle}]};
-	{error, Reason} ->
-	    {error, Reason, P}
+        {ok, Handle} ->
+            {ok, [Term,P#protocol{handle = Handle}]};
+        {error, Reason} ->
+            {error, Reason, P}
     end.
 
 %% -- internal: sql* --
@@ -621,7 +615,8 @@ recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 %% << sql-common/client.c : send_client_reply_packet/3
 %% -----------------------------------------------------------------------------
 auth_to_binary(User, Password, Database,
-               #protocol{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
+               #handshake{seed=S,caps=C,charset=E,plugin=P},
+               #protocol{maxlength=M})
   when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -641,7 +636,8 @@ auth_to_binary(User, Password, Database,
       P/binary
     >>;
 auth_to_binary(User, Password, Database,
-               #protocol{maxlength=M,seed=S,caps=C,plugin=P}) ->
+               #handshake{seed=S,caps=C,plugin=P},
+               #protocol{maxlength=M}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -783,7 +779,7 @@ binary_to_plugin(Binary) ->
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
 %% -----------------------------------------------------------------------------
-binary_to_prepare(_Version, Binary) -> % < 5.0.0, warning_count=undefined
+binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
     <<S:32/little, F:16/little, P:16/little, 0, W:16/little>> = Binary,
     #prepare{stmt_id = S, field_count = F, param_count = P, warning_count = W,
              flags = ?CURSOR_TYPE_NO_CURSOR, prefetch_rows = 1, execute = 0}.

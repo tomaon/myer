@@ -35,7 +35,7 @@
           handle    :: tuple(),                 % myer_porotocol:handle
           caps      :: non_neg_integer(),
           maxlength :: non_neg_integer(),
-          version   :: [integer()]              % TODO, pos_integer
+          version   :: [integer()]              % TODO, non_neg_integer
          }).
 
 %% == public ==
@@ -71,6 +71,9 @@ handle_cast(_Request, State) ->
 
 handle_info(timeout, State) ->
     initialized(State);
+handle_info({Pid,version}, #state{version=V}=S) ->
+    Pid ! {self(), V},
+    {noreply, S};
 handle_info({tcp_closed,_Socket}, #state{}=S) ->
     {stop, tcp_closed, S#state{handle = undefined}};
 handle_info({'EXIT',Socket,normal}, #state{}=S)
@@ -101,7 +104,6 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
     L = [
          get(address, A),
          get(port, A),
-         get(default_character_set, A),
          get(compress, A),
          X = get(max_allowed_packet, A),
          get(timeout, A)
@@ -121,7 +123,7 @@ connected(#state{module=M,args=A,handle=H}=S, #handshake{}=R) ->
          get(user, A),
          get(password, A),
          get(database, A),
-         R
+         R#handshake{charset = get(default_character_set,A)}
         ],
     case apply(M, auth, L) of
         {ok, _Result, Handle} ->

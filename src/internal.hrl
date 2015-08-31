@@ -134,20 +134,20 @@
 %% == record ==
 
 -record(result, {
-	  affected_rows :: non_neg_integer(),
-	  insert_id :: non_neg_integer(),
-	  status :: integer(),
-	  warning_count :: non_neg_integer(),
-	  message :: binary()
-	 }).
+          affected_rows :: non_neg_integer(),
+          insert_id :: non_neg_integer(),
+          status :: integer(),
+          warning_count :: non_neg_integer(),
+          message :: binary()
+         }).
 
 -type(result() :: #result{}).
 
 -record(reason, {
-	  errno :: non_neg_integer(),
-	  state :: binary(),
-	  message :: binary()
-	 }).
+          errno :: non_neg_integer(),
+          state :: binary(),
+          message :: binary()
+         }).
 
 -type(reason() :: #reason{}).
 
@@ -155,39 +155,35 @@
           handle :: tuple(),
           maxlength :: non_neg_integer(),
           compress :: boolean(),
-          version :: [integer()],
-          seed :: binary(),
-          caps :: integer(),
-          charset :: non_neg_integer(),
-          plugin :: binary()
+          caps :: integer()
          }).
 
 -type(protocol() :: #protocol{}).
 
 -record(prepare, {
-	  stmt_id :: non_neg_integer(),
-	  field_count :: non_neg_integer(),
-	  fields :: list(),
-	  param_count :: non_neg_integer(),
-	  params :: list(),
-	  warning_count :: non_neg_integer(),
+          stmt_id :: non_neg_integer(),
+          field_count :: non_neg_integer(),
+          fields :: list(),
+          param_count :: non_neg_integer(),
+          params :: list(),
+          warning_count :: non_neg_integer(),
           flags :: non_neg_integer(),
           prefetch_rows :: non_neg_integer(),
           result :: tuple(),
           execute :: non_neg_integer()
-	 }).
+         }).
 
 -type(prepare() :: #prepare{}).
 
 -record(handshake, {
-	  version :: [non_neg_integer()],
-	  tid :: non_neg_integer(),
-	  seed :: binary(),
-	  caps :: integer(),
-	  charset :: non_neg_integer(),
-	  status :: integer(),
-	  plugin :: binary()
-	 }).
+          version :: [non_neg_integer()],
+          tid :: non_neg_integer(),
+          seed :: binary(),
+          caps :: integer(),
+          charset :: non_neg_integer(),
+          status :: integer(),
+          plugin :: binary()
+         }).
 
 -type(handshake() :: #handshake{}).
 

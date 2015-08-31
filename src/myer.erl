@@ -111,7 +111,8 @@ commit(#myer{}=H) ->
 -spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
 get_server_version(#myer{worker=W})
   when is_pid(W) ->
-    myer_client:call(W, {version,[]}).
+    W ! {self(), version}, % TODO
+    receive {W, Version} -> {ok, Version} end.
 
 -spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 next_result(#myer{worker=W})
