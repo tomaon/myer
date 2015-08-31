@@ -21,6 +21,7 @@
 
 %% -- public --
 -export([connect/4, close/1]).
+-export([recv/1]).
 -export([recv/3, send/3]).
 -export([reset/1, zreset/1]).
 
@@ -63,16 +64,34 @@ connect(Address, Port, MaxLength, Timeout) ->
 close(#handle{socket=S}) ->
     baseline_socket:close(S).
 
+
+-spec recv(handle()) -> {ok,binary(),handle()}|{error,_}.
+recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
+    case baseline_socket:recv(S, 4, T) of
+        {ok, <<L:24/little,N>>, S1} ->
+            case baseline_socket:recv(S1, L, T) of
+                {ok, Packet, S2} ->
+                    {ok, Packet, H#handle{socket = S2, seqnum = N+1}};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
 -spec recv(handle(),non_neg_integer(),boolean()) -> {ok,binary(),handle()}|{error,_}.
 recv(#handle{buf=B,start=S,length=L}=H, 0, _Compress) ->
-    {ok, binary_part(B,S,L), H#handle{buf = <<>>, start = 0, length = 0}};
+    {ok, binary_part(B,{S,L}), H#handle{buf = <<>>, start = 0, length = 0}};
 recv(#handle{buf=B,start=S,length=L}=H, Length, false)
   when L >= Length ->
-    {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
-recv(#handle{buf=B,start=S,length=L}=H, Length, Compress) ->
-    case update(H, binary_part(B,S,L), L) of
-        {ok, Handle} ->
-            recv(Handle, Length, Compress);
+    {ok, binary_part(B,{S,Length}), H#handle{start = S+Length, length = L-Length}};
+recv(Handle, Length, Compress) ->
+    case recv(Handle) of
+        {ok, Packet, #handle{buf=B,start=S,length=L}=H} ->
+            R = binary_part(B, {S,L}),
+            recv(H#handle{buf = <<R/binary,Packet/binary>>,
+                          start = 0, length = L+byte_size(Packet)}, Length, Compress);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -80,6 +99,7 @@ recv(#handle{buf=B,start=S,length=L}=H, Length, Compress) ->
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_}.
 send(Handle, Binary, Compress) ->
     send(Handle, Binary, 0, byte_size(Binary), Compress).
+
 
 -spec reset(handle()) -> handle().
 reset(#handle{}=H) ->
@@ -91,21 +111,6 @@ zreset(#handle{seqnum=N}=H) ->
 
 %% == internal ==
 
-update(#handle{socket=S,timeout=T,seqnum=N}=H, Binary, Length) ->
-    case baseline_socket:recv(S, 4, T) of
-        {ok, <<L:24/little,N>>, S1} ->
-            case baseline_socket:recv(S1, L, T) of
-                {ok, Packet, S2} ->
-                    {ok, H#handle{socket = S2, seqnum = N+1,
-                                  buf = <<Binary/binary,Packet/binary>>,
-                                  start = 0, length = Length+L}};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
 send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length, false)
   when M >= Length ->
     B = binary_part(Binary, {Start,Length}),
@@ -113,7 +118,7 @@ send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length, false)
         ok ->
             {ok, H#handle{seqnum = N+1}};
         {error, Reason} ->
-	    {error, Reason}
+            {error, Reason}
     end;
 send(_Handle, _Binary, _Start, _Length, true) ->
     {error, notimplemented};
@@ -121,6 +126,15 @@ send(#handle{maxlength=M}=H, Binary, Start, Length, Compress) ->
     case send(H, Binary, Start, M, Compress) of
         {ok, Handle} ->
             send(Handle, Binary, Start+M, Length-M, Compress);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+update(#handle{}=H, Binary, Length) ->
+    case recv(H) of
+        {ok, Packet, H2} ->
+            {ok, H2#handle{buf = <<Binary/binary,Packet/binary>>,
+                           start = 0, length = Length+byte_size(Packet)}};
         {error, Reason} ->
             {error, Reason}
     end.
