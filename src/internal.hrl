@@ -54,7 +54,7 @@
 -define(CLIENT_IGNORE_SIGPIPE,                  (1 bsl 12)).
 -define(CLIENT_TRANSACTIONS,                    (1 bsl 13)).
 -define(CLIENT_RESERVED,                        (1 bsl 14)).
--define(CLIENT_SECURE_CONNECTION,               (1 bsl 15)).
+-define(CLIENT_SECURE_CONNECTION,               (1 bsl 15)). % CLIENT_RESERVED2?
 -define(CLIENT_MULTI_STATEMENTS,                (1 bsl 16)).
 -define(CLIENT_MULTI_RESULTS,                   (1 bsl 17)).
 -define(CLIENT_PS_MULTI_RESULTS,                (1 bsl 18)).
@@ -62,6 +62,8 @@
 -define(CLIENT_CONNECT_ATTRS,                   (1 bsl 20)).
 -define(CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA,  (1 bsl 21)).
 -define(CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS,    (1 bsl 22)).
+-define(CLIENT_SESSION_TRACK,                   (1 bsl 23)).
+-define(CLIENT_DEPRECATE_EOF,                   (1 bsl 24)).
 -define(CLIENT_SSL_VERIFY_SERVER_CERT,          (1 bsl 30)).
 -define(CLIENT_REMEMBER_OPTIONS,                (1 bsl 31)).
 

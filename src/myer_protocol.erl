@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([connect/1, close/1, auth/5]).
+-export([connect/1, close/2, auth/1]).
 -export([ping/1, stat/1]).
 -export([real_query/2, refresh/2, select_db/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
@@ -32,24 +32,21 @@
 
 %% == public ==
 
--spec connect([term()]) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
+-spec connect([term()]) -> {ok,handshake(),tuple()}|{error,_}|{error,_,tuple()}.
 connect(Args)
   when is_list(Args), 4 =:= length(Args) ->
     loop(Args, [fun connect_pre/4, fun recv_status2/3, fun connect_post/4]).
 
--spec close(protocol()) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
-close(#protocol{handle=undefined}=P) ->
-    {ok, P};
-close(#protocol{}=P) ->
-    loop([P], [fun close_pre/1, fun send/2, fun close_post/1]).
+-spec close(non_neg_integer(),tuple()) -> ok|{error,_,tuple()}.
+close(Caps,Socket) ->
+    loop([Caps,Socket], [fun close_pre/2, fun send2/3, fun close_post/2]).
 
--spec auth(protocol(),binary(),binary(),binary(),handshake()) -> {ok,result(),protocol()}|{error,_,protocol()}.
-auth(#protocol{handle=H}=P, User, Password, Database, #handshake{}=R)
-  when undefined =/= H, is_binary(User), is_binary(Password), is_binary(Database) ->
-    case loop([User,Password,Database,R,P],
-              [fun auth_pre/5, fun send/3, fun recv_status/2, fun auth_post/3]) of
-        {ok, #plugin{}=X, Protocol} ->
-            auth_alt([Password,merge(R,X),Protocol]);
+-spec auth([term()]) -> {ok,result(),tuple()}|{error,_,tuple()}.
+auth(Args)
+  when is_list(Args), 5 =:= length(Args) ->
+    case loop(Args, [fun auth_pre/5, fun send/4, fun recv_status2/3, fun auth_post/4]) of
+        {ok, #plugin{name=N}, #handshake{}=H, Socket} ->
+            auth_alt([lists:nth(3,Args),H#handshake{plugin = N},Socket]);
         {ok, Result, Protocol}->
             {ok, Result, Protocol};
         {error, Reason, Protocol} ->
@@ -57,7 +54,7 @@ auth(#protocol{handle=H}=P, User, Password, Database, #handshake{}=R)
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/3, fun send/3, fun recv_status/2, fun auth_alt_post/3]).
+    loop(Args, [fun auth_alt_pre/4, fun send/4, fun recv_status2/3, fun auth_alt_post/4]).
 
 -spec ping(protocol()) -> {ok,result(),protocol()}|{error,_,protocol()}.
 ping(#protocol{handle=H}=P)
@@ -189,12 +186,24 @@ default_caps(Caps) ->
          ?CLIENT_LONG_FLAG,
          ?CLIENT_CONNECT_WITH_DB,
          ?CLIENT_NO_SCHEMA,
+         %%?CLIENT_LOCAL_FILES
+         %%?CLIENT_IGNORE_SPACE
          ?CLIENT_PROTOCOL_41,
+         %%?CLIENT_INTERACTIVE
+         %%?CLIENT_IGNORE_SIGPIPE
          ?CLIENT_TRANSACTIONS,
+         %?CLIENT_RESERVED
          ?CLIENT_SECURE_CONNECTION,
          ?CLIENT_MULTI_STATEMENTS,
          ?CLIENT_MULTI_RESULTS,
          ?CLIENT_PS_MULTI_RESULTS
+         %%?CLIENT_REMEMBER_OPTIONS
+         %%?CLIENT_PLUGIN_AUTH                         % TODO
+         %%?CLIENT_CONNECT_ATTRS
+         %%?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+         %%?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS
+         %%?CLIENT_SESSION_TRACK
+         %%?CLIENT_DEPRECATE_EOF
         ],
     lists:foldl(fun(E,A) -> A bor E end, Caps, L).
 
@@ -216,9 +225,6 @@ loop(Args, [H|T]) ->
             {error, Reason, Protocol}
     end.
 
-merge(#handshake{}=H, #plugin{name=N}) ->
-    H#handshake{plugin = N}.
-
 reset(#protocol{handle=H}=P) ->
     P#protocol{handle = myer_socket:reset(H)}.
 
@@ -227,33 +233,50 @@ zreset(#protocol{handle=H}=P) ->
 
 %% -- internal: loop,auth --
 
-auth_pre(User, Password, <<>>, #handshake{caps=C}=H, Protocol) ->
+auth_pre(User, Password, <<>>, #handshake{caps=C}=H, Socket) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
-    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake,Protocol),Protocol]};
-auth_pre(User, Password, Database, #handshake{caps=C}=H, Protocol) ->
+    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),C,Socket]};
+auth_pre(User, Password, Database, #handshake{caps=C}=H, Socket) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
-    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake,Protocol),Protocol]}.
+    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
 
-auth_post(<<254>>, _Handshake, #protocol{}=P) ->
-    recv_plugin(P, #plugin{});
-auth_post(<<0>>, _Handshake, #protocol{}=P) ->
-    recv_result(P).
+send(Term, Binary, Caps, S) ->
+    case myer_socket:send(S, Binary, ?ISSET(Caps,?CLIENT_COMPRESS)) of
+        {ok, Socket} ->
+            {ok, [Term,Caps,Socket]};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
-auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Protocol) ->
+auth_post(<<254>>, _Handshake, Caps, Socket) ->
+    recv_plugin(#plugin{}, Caps, Socket);
+auth_post(<<0>>, _Handshake, Caps, Socket) ->
+    recv_result(#protocol{handle = Socket, caps = Caps}).
+
+auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Caps, Socket) ->
     Scrambled = myer_auth:scramble(Password, S, A),
-    {ok, [H,<<Scrambled/binary,0>>,Protocol]}.
+    {ok, [<<Scrambled/binary,0>>,H,Caps, Socket]}.
 
-auth_alt_post(<<0>>, _Handshake, #protocol{}=P) ->
-    recv_result(P).
+auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
+    recv_result(#protocol{handle = Socket, caps = Caps}).
 
 %% -- internal: loop,close --
 
-close_pre(#protocol{}=P) ->
-    {ok, [<<?COM_QUIT>>,reset(P)]}.
+close_pre(Caps, Socket) ->
+    {ok, [<<?COM_QUIT>>,Caps,Socket]}.
 
-close_post(#protocol{handle=H}=P) ->
-    _ = myer_socket:close(H),
-    {ok, [P#protocol{handle = undefined}]}.
+send2(Binary, Caps, S) ->
+    io:format("send2: ~p,~p,~p~n", [Binary,Caps,S]),
+    case myer_socket:send(S, Binary, ?ISSET(Caps,?CLIENT_COMPRESS)) of
+        {ok, Socket} ->
+            {ok, [Caps,Socket]};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+close_post(_Caps, Socket) ->
+    _ = myer_socket:close(Socket),
+    {ok, [undefined]}.
 
 %% -- internal: loop,connect --
 
@@ -271,9 +294,17 @@ recv(Term, Caps, Socket) ->
 recv_status2(Term, Caps, S) ->
     case recv(1, Caps, S) of
         {ok, <<255>>, Socket} ->
-            recv_error(Socket);
+            recv_error(Caps, Socket);
         {ok, Byte, Socket} ->
             {ok, [Byte,Term,Caps,Socket]};
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
+recv_error(Caps, S) ->
+    case recv(0, Caps, S) of
+        {ok, Binary, Socket} ->
+            {error, binary_to_reason(Caps,Binary,0,byte_size(Binary)), Socket};
         {error, Reason} ->
             {error, Reason, S}
     end.
@@ -613,8 +644,7 @@ recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 %% << sql-common/client.c : send_client_reply_packet/3
 %% -----------------------------------------------------------------------------
 auth_to_binary(User, Password, Database,
-               #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P},
-               #protocol{})
+               #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
   when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -634,8 +664,7 @@ auth_to_binary(User, Password, Database,
       P/binary
     >>;
 auth_to_binary(User, Password, Database,
-               #handshake{maxlength=M,seed=S,caps=C,plugin=P},
-               #protocol{}) ->
+               #handshake{maxlength=M,seed=S,caps=C,plugin=P}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -778,11 +807,11 @@ recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H, Caps, Socket) 
 %% -----------------------------------------------------------------------------
 %% << sql/auth/sql_authentication.cc : send_plugin_request_packet/3
 %% -----------------------------------------------------------------------------
-recv_plugin(S, #plugin{name=undefined}=P) ->
-    {ok, Binary, Socket} = recv(S, <<0>>),
-    recv_plugin(Socket, P#plugin{name = Binary});
-recv_plugin(S, #plugin{}=P) ->
-    {ok, [P,S]}.
+recv_plugin(#plugin{name=undefined}=P, Caps, Socket) ->
+    {ok, B, S} = recv(Socket, <<0>>),
+    recv_plugin(P#plugin{name = B}, Caps, S);
+recv_plugin(#plugin{}=P, Caps, Socket) ->
+    {ok, [P,Caps,Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2

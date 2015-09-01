@@ -84,9 +84,9 @@ handle_info({'EXIT',_Pid,Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{handle=H}=S)
+cleanup(#state{handle=H,caps=C}=S)
   when undefined =/= H ->
-    _ = myer_protocol:close(H),
+    _ = myer_protocol:close(C,H),
     cleanup(S#state{handle = undefined});
 cleanup(#state{}) ->
     baseline:flush().
@@ -112,23 +112,25 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
         {ok, Handshake, Handle} ->
             connected(S#state{handle = Handle}, Handshake);
         {error, Reason} ->
-            {error, Reason, S};
+            {stop, {error,Reason}, S};
         {error, Reason, Handle} ->
-            {error, Reason, S#state{handle = Handle}}
+            {stop, {error,Reason}, S#state{handle = Handle}}
     end.
 
 connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,version=V}=H) ->
     case apply(M, auth, [
-                         #protocol{handle = X, caps = C}, % TODO
-                         get(user, A),
-                         get(password, A),
-                         get(database, A),
-                         H#handshake{charset = get(default_character_set,A)}
+                         [
+                          get(user, A),
+                          get(password, A),
+                          get(database, A),
+                          H#handshake{charset = get(default_character_set,A)},
+                          X
+                         ]
                         ]) of
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle, caps = C, maxlength = L, version = V});
         {error, Reason, Handle} ->
-            {error, Reason, S#state{handle = Handle}}
+            {stop, {error,Reason}, S#state{handle = Handle, caps = C}}
     end.
 
 authorized(#state{}=S) ->
