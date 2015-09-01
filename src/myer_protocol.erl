@@ -30,12 +30,14 @@
 -export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
+-export([default_caps/1]).
+
 %% == public ==
 
 -spec connect([term()]) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 connect(Args)
-  when is_list(Args), 5 =:= length(Args) ->
-    loop(Args, [fun connect_pre/5, fun recv_status/1, fun connect_post/2]).
+  when is_list(Args), 4 =:= length(Args) ->
+    loop(Args, [fun connect_pre/4, fun recv_status/1, fun connect_post/2]).
 
 -spec close(protocol()) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 close(#protocol{handle=undefined}=P) ->
@@ -151,8 +153,8 @@ binary_to_float(Binary, _Decimals) ->
     end.
 
 -spec recv(protocol(),non_neg_integer()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
-recv(#protocol{handle=H,compress=Z}=P, Length) ->
-    case myer_socket:recv(H, Length, Z) of
+recv(#protocol{handle=H,caps=C}=P, Length) ->
+    case myer_socket:recv(H, Length, ?ISSET(C,?CLIENT_COMPRESS)) of
         {ok, Binary, Handle} ->
             {ok, Binary, P#protocol{handle = Handle}};
         {error, Reason} ->
@@ -236,15 +238,15 @@ auth_pre(User, Password, Database, #handshake{caps=C}=H, Protocol) ->
 
 auth_post(<<254>>, _Handshake, #protocol{}=P) ->
     recv_plugin(P);
-auth_post(<<0>>, _Handshake, #protocol{caps=C}=P) ->
-    recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
+auth_post(<<0>>, _Handshake, #protocol{}=P) ->
+    recv_result(P).
 
 auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Protocol) ->
     Scrambled = myer_auth:scramble(Password, S, A),
     {ok, [H,<<Scrambled/binary,0>>,Protocol]}.
 
-auth_alt_post(<<0>>, _Handshake, #protocol{caps=C}=P) ->
-    recv_result(P#protocol{compress = ?ISSET(C,?CLIENT_COMPRESS)}).
+auth_alt_post(<<0>>, _Handshake, #protocol{}=P) ->
+    recv_result(P).
 
 %% -- internal: loop,close --
 
@@ -257,20 +259,19 @@ close_post(#protocol{handle=H}=P) ->
 
 %% -- internal: loop,connect --
 
-connect_pre(Address, Port, Compress, MaxLength, Timeout) ->
+connect_pre(Address, Port, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
         {ok, Handle} ->
-            {ok, [#protocol{handle = Handle, maxlength = MaxLength, compress = Compress,
-                            caps = default_caps(Compress)}]};
+            {ok, [#protocol{handle = Handle, maxlength = MaxLength,
+                            caps = default_caps(false)}]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-connect_post(<<10>>, #protocol{caps=C}=P) -> % "always 10"
+connect_post(<<10>>, #protocol{}=P) -> % "always 10"
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
-            H = binary_to_handshake(Binary),
-            {ok, [Protocol,H#handshake{caps = (H#handshake.caps band C)}]};
+            {ok, [Protocol,binary_to_handshake(Binary)]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -546,16 +547,16 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-send(Binary, #protocol{handle=H,compress=Z}=P) ->
-    case myer_socket:send(H, Binary, Z) of
+send(Binary, #protocol{handle=H,caps=C}=P) ->
+    case myer_socket:send(H, Binary, ?ISSET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [P#protocol{handle = Handle}]};
         {error, Reason} ->
             {error, Reason, P}
     end.
 
-send(Term, Binary, #protocol{handle=H,compress=Z}=P) ->
-    case myer_socket:send(H, Binary, Z) of
+send(Term, Binary, #protocol{handle=H,caps=C}=P) ->
+    case myer_socket:send(H, Binary, ?ISSET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [Term,P#protocol{handle = Handle}]};
         {error, Reason} ->

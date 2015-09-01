@@ -104,30 +104,32 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
     L = [
          get(address, A),
          get(port, A),
-         get(compress, A),
          X = get(max_allowed_packet, A),
          get(timeout, A)
         ],
     case apply(M, connect, [L]) of
-        {ok, #protocol{}=H, #handshake{caps=C,version=V}=R} ->
-            connected(S#state{handle = H, caps = C, maxlength = X, version = V}, R);
+        {ok, Handle, Handshake} ->
+            connected(S#state{handle = Handle, maxlength = X}, Handshake);
         {error, Reason} ->
             {error, Reason, S};
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end.
 
-connected(#state{module=M,args=A,handle=H}=S, #handshake{}=R) ->
+connected(#state{module=M,args=A,handle=H}=S, #handshake{caps=C,version=V}=R) ->
     L = [
          H,
          get(user, A),
          get(password, A),
          get(database, A),
-         R#handshake{charset = get(default_character_set,A)}
+         R#handshake{
+           caps = X = C band myer_protocol:default_caps(get(compress,A)),
+           charset = get(default_character_set,A)
+}
         ],
     case apply(M, auth, L) of
         {ok, _Result, Handle} ->
-            authorized(S#state{handle = Handle});
+            authorized(S#state{handle = Handle, caps = X, version = V});
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end.

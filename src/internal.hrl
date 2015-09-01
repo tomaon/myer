@@ -154,7 +154,6 @@
 -record(protocol, {
           handle :: tuple(),
           maxlength :: non_neg_integer(),
-          compress :: boolean(),
           caps :: integer()
          }).
 
