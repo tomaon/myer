@@ -584,16 +584,16 @@ unpack_binary(Binary, Start, Length) ->
         {null, S, L} ->
             {null, S, L};
         {Len, S, L} ->
-            {binary_part(Binary,{S,Len}), S+Len, L-Len}
+            {binary_part(Binary,S,Len), S+Len, L-Len}
     end.
 
 unpack_integer(_Binary, Start, 0) ->
     {0, Start, 0};
 unpack_integer(Binary, Start, Length) ->
-    case binary_part(Binary, {Start,1}) of
-        <<254>> -> <<L:64/little>> = binary_part(Binary, {Start+1,8}), {L, Start+9, Length-9};
-        <<253>> -> <<L:24/little>> = binary_part(Binary, {Start+1,4}), {L, Start+5, Length-5};
-        <<252>> -> <<L:16/little>> = binary_part(Binary, {Start+1,2}), {L, Start+3, Length-3};
+    case binary_part(Binary, Start, 1) of
+        <<254>> -> <<L:64/little>> = binary_part(Binary, Start+1, 8), {L, Start+9, Length-9};
+        <<253>> -> <<L:24/little>> = binary_part(Binary, Start+1, 4), {L, Start+5, Length-5};
+        <<252>> -> <<L:16/little>> = binary_part(Binary, Start+1, 2), {L, Start+3, Length-3};
         <<251>> -> {null, Start+1, Length-1};
         <<L>> -> {L, Start+1, Length-1}
     end.
@@ -732,22 +732,22 @@ binary_to_handshake(#handshake{version=undefined}=H, Binary, Start, Length) ->
     [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
     binary_to_handshake(H#handshake{version = binary_to_version(B)}, Binary, Start+L, Length-L);
 binary_to_handshake(#handshake{tid=undefined}=H, Binary, Start, Length) ->
-    <<N:32/little>> = binary_part(Binary, {Start,4}),
+    <<N:32/little>> = binary_part(Binary, Start, 4),
     binary_to_handshake(H#handshake{tid = N}, Binary, Start+4, Length-4);
 binary_to_handshake(#handshake{seed=undefined}=H, Binary, Start, Length) ->
-    [B, _] = binary:split(binary_part(Binary,{Start,Length}), <<0>>), L = byte_size(B)+1,
+    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
     binary_to_handshake(H#handshake{seed = B}, Binary, Start+L, Length-L);
 binary_to_handshake(#handshake{caps=undefined}=H, Binary, Start, Length) ->
-    <<I:16/little>> = binary_part(Binary, {Start,2}),
+    <<I:16/little>> = binary_part(Binary, Start, 2),
     binary_to_handshake(H#handshake{caps = I}, Binary, Start+2, Length-2);
 binary_to_handshake(#handshake{version=V,seed=S1,caps=C1,charset=undefined}=H, Binary, Start, Length)
   when V >= [4,1,1]; ?ISSET(C1,?CLIENT_PROTOCOL_41) ->
     <<E>> = binary_part(Binary, Start, 1),
-    <<I:16/little>> = binary_part(Binary, {Start+1,2}),
-    <<C2:16/little>> = binary_part(Binary, {Start+3,2}),
+    <<I:16/little>> = binary_part(Binary, Start+1, 2),
+    <<C2:16/little>> = binary_part(Binary, Start+3, 2),
     %% _X
     %% 0:10/integer-unit:8
-    [S2, _] = binary:split(binary_part(Binary,{Start+16,Length-16}), <<0>>), L2 = byte_size(S2)+1,
+    [S2, _] = binary:split(binary_part(Binary,Start+16,Length-16), <<0>>), L2 = byte_size(S2)+1,
     S = <<S1/binary, S2/binary>>,
     C = (C2 bsl 16) bor C1,
     binary_to_handshake(H#handshake{seed = S, caps = C, charset = E, status = I}, Binary, Start+16+L2, Length-16-L2);
@@ -789,14 +789,14 @@ binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
 %% -----------------------------------------------------------------------------
 binary_to_reason(Caps, Binary, Start, Length)
   when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
-    <<E:16/little>> = binary_part(Binary, {Start,2}),
-    <<$#>> = binary_part(Binary, {Start+2,1}),
-    S = binary_part(Binary, {Start+3,5}),
-    M = binary_part(Binary, {Start+8,Length-8}),
+    <<E:16/little>> = binary_part(Binary, Start, 2),
+    <<$#>> = binary_part(Binary, Start+2, 1),
+    S = binary_part(Binary, Start+3, 5),
+    M = binary_part(Binary, Start+8, Length-8),
     #reason{errno = E, state = S, message = M};
 binary_to_reason(_Caps, Binary, Start, Length) ->
-    <<E:16/little>> = binary_part(Binary, {Start,2}),
-    M = binary_part(Binary, {Start+2,Length-2}),
+    <<E:16/little>> = binary_part(Binary, Start, 2),
+    M = binary_part(Binary, Start+2, Length-2),
     #reason{errno = E, message = M}.
 
 %% -----------------------------------------------------------------------------
@@ -806,12 +806,12 @@ binary_to_result(Caps, Binary, Start, Length)
   when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
     {A, S1, L1} = unpack_integer(Binary, Start, Length),
     {I, S2, L2} = unpack_integer(Binary, S1, L1),
-    <<S:16/little, W:16/little>> = binary_part(Binary, {S2,4}),
+    <<S:16/little, W:16/little>> = binary_part(Binary, S2, 4),
     {M, _, 0} = unpack_binary(Binary, S2+4, L2-4),
     #result{affected_rows = A, insert_id = I, status = S, warning_count = W, message = M};
 binary_to_result(_Caps, Binary, Start, Length) ->
     {N, S1, L1} = unpack_integer(Binary, Start, Length),
     {I, S2, L2} = unpack_integer(Binary, S1, L1),
-    <<S:16/little>> = binary_part(Binary, {S2,2}), % < 4.0 -> S:8 ?
+    <<S:16/little>> = binary_part(Binary, S2, 2), % < 4.0 -> S:8 ?
     {M, _, 0} = unpack_binary(Binary, S2+2, L2-2),
     #result{affected_rows = N, insert_id = I, status = S, message = M}.

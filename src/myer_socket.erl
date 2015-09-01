@@ -82,14 +82,14 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
 
 -spec recv(handle(),non_neg_integer(),boolean()) -> {ok,binary(),handle()}|{error,_}.
 recv(#handle{buf=B,start=S,length=L}=H, 0, _Compress) ->
-    {ok, binary_part(B,{S,L}), H#handle{buf = <<>>, start = 0, length = 0}};
+    {ok, binary_part(B,S,L), H#handle{buf = <<>>, start = 0, length = 0}};
 recv(#handle{buf=B,start=S,length=L}=H, Length, false)
   when L >= Length ->
-    {ok, binary_part(B,{S,Length}), H#handle{start = S+Length, length = L-Length}};
+    {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
 recv(Handle, Length, Compress) ->
     case recv(Handle) of
         {ok, Packet, #handle{buf=B,start=S,length=L}=H} ->
-            R = binary_part(B, {S,L}),
+            R = binary_part(B, S, L),
             recv(H#handle{buf = <<R/binary,Packet/binary>>,
                           start = 0, length = L+byte_size(Packet)}, Length, Compress);
         {error, Reason} ->
@@ -113,7 +113,7 @@ zreset(#handle{seqnum=N}=H) ->
 
 send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length, false)
   when M >= Length ->
-    B = binary_part(Binary, {Start,Length}),
+    B = binary_part(Binary, Start, Length),
     case baseline_socket:send(S, <<Length:24/little,N,B/binary>>) of
         ok ->
             {ok, H#handle{seqnum = N+1}};
