@@ -30,14 +30,12 @@
 -export([binary_to_float/2]).
 -export([recv/2, recv_packed_binary/2]).
 
--export([default_caps/1]).
-
 %% == public ==
 
 -spec connect([term()]) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 connect(Args)
   when is_list(Args), 4 =:= length(Args) ->
-    loop(Args, [fun connect_pre/4, fun recv_status/1, fun connect_post/2]).
+    loop(Args, [fun connect_pre/4, fun recv_status2/3, fun connect_post/4]).
 
 -spec close(protocol()) -> {ok,protocol()}|{error,_}|{error,_,protocol()}.
 close(#protocol{handle=undefined}=P) ->
@@ -261,15 +259,27 @@ close_post(#protocol{handle=H}=P) ->
 
 connect_pre(Address, Port, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
-        {ok, Handle} ->
-            {ok, [#protocol{handle = Handle,
-                            caps = default_caps(false)}]};
+        {ok, Socket} ->
+            {ok, [MaxLength,default_caps(false),Socket]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-connect_post(<<10>>, #protocol{}=P) -> % "always 10"
-    recv_handshake(P, #handshake{}).
+recv(Term, Caps, Socket) ->
+    myer_socket:recv(Socket, Term, ?ISSET(Caps,?CLIENT_COMPRESS)).
+
+recv_status2(Term, Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<255>>, Socket} ->
+            recv_error(Socket);
+        {ok, Byte, Socket} ->
+            {ok, [Byte,Term,Caps,Socket]};
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
+connect_post(<<10>>, MaxLength, Caps, Socket) -> % "always 10"
+    recv_handshake(#handshake{maxlength = MaxLength}, Caps, Socket). % buffered
 
 %% -- internal: loop,next_result --
 
@@ -713,57 +723,57 @@ binary_to_eof(Caps, Binary) % eof -> #result{}
 %% -----------------------------------------------------------------------------
 %% << sql/auth/sql_authentication.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
-recv_handshake(S, #handshake{version=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, <<0>>),
-    recv_handshake(Socket, H#handshake{version = binary_to_version(Binary)});
-recv_handshake(S, #handshake{tid=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, 4),
-    recv_handshake(Socket, H#handshake{tid = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{seed1=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, <<0>>),
-    recv_handshake(Socket, H#handshake{seed1 = Binary});
-recv_handshake(S, #handshake{caps1=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, 2),
-    recv_handshake(Socket, H#handshake{caps1 = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{charset=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, 1),
-    recv_handshake(Socket, H#handshake{charset = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{status=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, 2),
-    recv_handshake(Socket, H#handshake{status = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{version=V,caps1=C,caps2=undefined}=H)
+recv_handshake(#handshake{version=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(<<0>>, Caps, Socket),
+    recv_handshake(H#handshake{version = binary_to_version(B)}, Caps, S);
+recv_handshake(#handshake{tid=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(4, Caps, Socket),
+    recv_handshake(H#handshake{tid = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{seed1=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(<<0>>, Caps, Socket),
+    recv_handshake(H#handshake{seed1 = B}, Caps, S);
+recv_handshake(#handshake{caps1=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(2, Caps, Socket),
+    recv_handshake(H#handshake{caps1 = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{charset=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(1, Caps, Socket),
+    recv_handshake(H#handshake{charset = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{status=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(2, Caps, Socket),
+    recv_handshake(H#handshake{status = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, Binary, Socket} = recv(S, 2),
-    recv_handshake(Socket, H#handshake{caps2 = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{caps2=undefined}=H) ->
-    recv_handshake(S, H#handshake{caps2 = 0});
-recv_handshake(S, #handshake{version=V,caps1=C,length=undefined}=H)
+    {ok, B, S} = recv(2, Caps, Socket),
+    recv_handshake(H#handshake{caps2 = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{caps2=undefined}=H, Caps, Socket) ->
+    recv_handshake(H#handshake{caps2 = 0}, Caps, Socket);
+recv_handshake(#handshake{version=V,caps1=C,length=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, Binary, Socket} = recv(S, 1),
-    recv_handshake(Socket, H#handshake{length = binary:decode_unsigned(Binary,little)});
-recv_handshake(S, #handshake{length=undefined}=H) ->
-    recv_handshake(S, H#handshake{length = 8}); % 8?, TODO
-recv_handshake(S, #handshake{version=V,caps1=C,reserved=undefined}=H)
+    {ok, B, S} = recv(1, Caps, Socket),
+    recv_handshake(H#handshake{length = binary:decode_unsigned(B,little)}, Caps, S);
+recv_handshake(#handshake{length=undefined}=H, Caps, Socket) ->
+    recv_handshake(H#handshake{length = 8}, Caps, Socket);   % 8?, TODO
+recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, Binary, Socket} = recv(S, 10),
-    recv_handshake(Socket, H#handshake{reserved = Binary}); % "always 0"
-recv_handshake(S, #handshake{reserved=undefined}=H) ->
-    {ok, Binary, Socket} = recv(S, 13),
-    recv_handshake(Socket, H#handshake{reserved = Binary}); % "always 0"?
-recv_handshake(S, #handshake{version=V,caps1=C,seed2=undefined}=H)
+    {ok, B, S} = recv(10, Caps, Socket),
+    recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"
+recv_handshake(#handshake{reserved=undefined}=H, Caps, Socket) ->
+    {ok, B, S} = recv(13, Caps, Socket),
+    recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"?
+recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, Binary, Socket} = recv(S, <<0>>),
-    recv_handshake(Socket, H#handshake{seed2 = Binary});
-recv_handshake(S, #handshake{seed2=undefined}=H) ->
-    recv_handshake(S, H#handshake{seed2 = <<>>});
-recv_handshake(S, #handshake{version=V,caps1=C,plugin=undefined}=H)
+    {ok, B, S} = recv(<<0>>, Caps, Socket),
+    recv_handshake(H#handshake{seed2 = B}, Caps, S);
+recv_handshake(#handshake{seed2=undefined}=H, Caps, Socket) ->
+    recv_handshake(H#handshake{seed2 = <<>>}, Caps, Socket);
+recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, Binary, Socket} = recv(S, <<0>>),
-    recv_handshake(Socket, H#handshake{plugin = Binary});
-recv_handshake(S, #handshake{plugin=undefined}=H) ->
-    recv_handshake(S, H#handshake{plugin = <<"mysql_native_password">>});
-recv_handshake(S, #handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H) ->
-    {ok, [H#handshake{caps = (C2 bsl 16) bor C1, seed = <<S1/binary, S2/binary>>}, S]}.
+    {ok, B, S} = recv(<<0>>, Caps, Socket),
+    recv_handshake(H#handshake{plugin = B}, Caps, S);
+recv_handshake(#handshake{plugin=undefined}=H, Caps, Socket) ->
+    recv_handshake(H#handshake{plugin = <<"mysql_native_password">>}, Caps, Socket);
+recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H, Caps, Socket) ->
+    {ok, [H#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary, S2/binary>>}, Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/auth/sql_authentication.cc : send_plugin_request_packet/3

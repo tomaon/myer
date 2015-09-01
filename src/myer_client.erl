@@ -30,7 +30,7 @@
 
 %% -- internal --
 -record(state, {
-          module    :: module(),                % myer_protocol
+          module    :: module(),                % myer_protocol -> myer_socket
           args      :: properties(),
           handle    :: tuple(),                 % myer_porotocol:handle
           caps      :: non_neg_integer(),
@@ -101,36 +101,32 @@ loaded(Args, #state{}=S) ->
 
 
 initialized(#state{module=M,args=A,handle=undefined}=S) ->
-    L = [
-         get(address, A),
-         get(port, A),
-         X = get(max_allowed_packet, A),
-         get(timeout, A)
-        ],
-    case apply(M, connect, [L]) of
+    case apply(M, connect, [
+                            [
+                             get(address, A),
+                             get(port, A),
+                             get(max_allowed_packet, A),
+                             get(timeout, A)
+                            ]
+                           ]) of
         {ok, Handshake, Handle} ->
-            connected(S#state{handle = Handle, maxlength = X}, Handshake);
+            connected(S#state{handle = Handle}, Handshake);
         {error, Reason} ->
             {error, Reason, S};
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end.
 
-connected(#state{module=M,args=A,handle=H}=S, #handshake{caps=C,version=V}=R) ->
-    L = [
-         H,
-         get(user, A),
-         get(password, A),
-         get(database, A),
-         R#handshake{
-           maxlength = get(max_allowed_packet, A),
-           caps = X = C band myer_protocol:default_caps(get(compress,A)),
-           charset = get(default_character_set, A)
-}
-        ],
-    case apply(M, auth, L) of
+connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,version=V}=H) ->
+    case apply(M, auth, [
+                         #protocol{handle = X, caps = C}, % TODO
+                         get(user, A),
+                         get(password, A),
+                         get(database, A),
+                         H#handshake{charset = get(default_character_set,A)}
+                        ]) of
         {ok, _Result, Handle} ->
-            authorized(S#state{handle = Handle, caps = X, version = V});
+            authorized(S#state{handle = Handle, caps = C, maxlength = L, version = V});
         {error, Reason, Handle} ->
             {error, Reason, S#state{handle = Handle}}
     end.
