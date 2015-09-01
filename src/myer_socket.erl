@@ -71,7 +71,8 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
         {ok, <<L:24/little,N>>, S1} ->
             case baseline_socket:recv(S1, L, T) of
                 {ok, Packet, S2} ->
-                    {ok, Packet, H#handle{socket = S2, seqnum = N+1}};
+                    {ok, Packet, H#handle{socket = S2, seqnum = N+1,
+                                          buf = <<>>, start = 0, length = 0}};
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -79,22 +80,15 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
             {error, Reason}
     end.
 
-
--spec recv(handle(),non_neg_integer(),boolean()) -> {ok,binary(),handle()}|{error,_}.
+-spec recv(handle(),non_neg_integer()|binary:cp(),boolean())
+          -> {ok,binary(),handle()}|{error,_}.
 recv(#handle{buf=B,start=S,length=L}=H, 0, _Compress) ->
     {ok, binary_part(B,S,L), H#handle{buf = <<>>, start = 0, length = 0}};
-recv(#handle{buf=B,start=S,length=L}=H, Length, false)
-  when L >= Length ->
-    {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
-recv(Handle, Length, Compress) ->
-    case recv(Handle) of
-        {ok, Packet, #handle{buf=B,start=S,length=L}=H} ->
-            R = binary_part(B, S, L),
-            recv(H#handle{buf = <<R/binary,Packet/binary>>,
-                          start = 0, length = L+byte_size(Packet)}, Length, Compress);
-        {error, Reason} ->
-            {error, Reason}
-    end.
+recv(Handle, Term, false)
+  when is_integer(Term) ->
+    recv_binary(Handle, Term);
+recv(Handle, Term, false) ->
+    recv_text(Handle, Term).
 
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_}.
 send(Handle, Binary, Compress) ->
@@ -110,6 +104,42 @@ zreset(#handle{seqnum=N}=H) ->
     H#handle{zseqnum = N}.
 
 %% == internal ==
+
+update(Handle, Binary, Length) ->
+    case recv(Handle) of
+        {ok, Packet, #handle{}=H} ->
+            {ok, H#handle{buf = <<Binary/binary,Packet/binary>>,
+                          start = 0, length = Length+byte_size(Packet)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+recv_binary(#handle{length=L}=H, Length) ->
+    recv_binary(H, Length, L >= Length).
+
+recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
+    {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
+recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
+    case update(H, binary_part(B,S,L), L) of
+        {ok, Handle} ->
+            recv_binary(Handle, Length);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+recv_text(#handle{buf=B,start=S,length=L}=H, Pattern) ->
+    Binary = binary_part(B, S, L),
+    recv_text(H, Pattern, Binary, L, binary:match(Binary,Pattern)).
+
+recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
+    {ok, binary_part(Binary,0,MS), H#handle{start = S+(MS+ML), length = Length-(MS+ML)}};
+recv_text(#handle{}=H, Pattern, Binary, Length, nomatch) ->
+    case update(H, Binary, Length) of
+        {ok, Handle} ->
+            recv_text(Handle, Pattern);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length, false)
   when M >= Length ->
