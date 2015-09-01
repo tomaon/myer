@@ -237,7 +237,7 @@ auth_pre(User, Password, Database, #handshake{caps=C}=H, Protocol) ->
     {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake,Protocol),Protocol]}.
 
 auth_post(<<254>>, _Handshake, #protocol{}=P) ->
-    recv_plugin(P);
+    recv_plugin(P, #plugin{});
 auth_post(<<0>>, _Handshake, #protocol{}=P) ->
     recv_result(P).
 
@@ -471,14 +471,6 @@ recv_error(#protocol{caps=C}=P) ->
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
             {error, binary_to_reason(C,Binary,0,byte_size(Binary)), Protocol};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-recv_plugin(#protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {ok, [binary_to_plugin(Binary),Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -721,7 +713,6 @@ binary_to_eof(Caps, Binary) % eof -> #result{}
 %% -----------------------------------------------------------------------------
 %% << sql/auth/sql_authentication.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
-
 recv_handshake(S, #handshake{version=undefined}=H) ->
     {ok, Binary, Socket} = recv(S, <<0>>),
     recv_handshake(Socket, H#handshake{version = binary_to_version(Binary)});
@@ -771,17 +762,17 @@ recv_handshake(S, #handshake{version=V,caps1=C,plugin=undefined}=H)
     recv_handshake(Socket, H#handshake{plugin = Binary});
 recv_handshake(S, #handshake{plugin=undefined}=H) ->
     recv_handshake(S, H#handshake{plugin = <<"mysql_native_password">>});
-recv_handshake(Protocol, #handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H) ->
-    {ok, [H#handshake{caps = (C2 bsl 16) bor C1, seed = <<S1/binary, S2/binary>>},Protocol]}.
+recv_handshake(S, #handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H) ->
+    {ok, [H#handshake{caps = (C2 bsl 16) bor C1, seed = <<S1/binary, S2/binary>>}, S]}.
 
 %% -----------------------------------------------------------------------------
-%% << sql/protocol.cc : send_plugin_request_packet/3
+%% << sql/auth/sql_authentication.cc : send_plugin_request_packet/3
 %% -----------------------------------------------------------------------------
-binary_to_plugin(<<>>) ->
-    #plugin{name = <<>>};
-binary_to_plugin(Binary) ->
-    [B, <<>>] = binary:split(Binary, <<0>>),
-    #plugin{name = B}.
+recv_plugin(S, #plugin{name=undefined}=P) ->
+    {ok, Binary, Socket} = recv(S, <<0>>),
+    recv_plugin(Socket, P#plugin{name = Binary});
+recv_plugin(S, #plugin{}=P) ->
+    {ok, [P,S]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
