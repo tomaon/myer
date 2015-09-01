@@ -129,12 +129,3 @@ send(#handle{maxlength=M}=H, Binary, Start, Length, Compress) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-update(#handle{}=H, Binary, Length) ->
-    case recv(H) of
-        {ok, Packet, H2} ->
-            {ok, H2#handle{buf = <<Binary/binary,Packet/binary>>,
-                           start = 0, length = Length+byte_size(Packet)}};
-        {error, Reason} ->
-            {error, Reason}
-    end.
