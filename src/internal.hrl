@@ -174,14 +174,21 @@
 -type(prepare() :: #prepare{}).
 
 -record(handshake, {
-          maxlength :: non_neg_integer(),
           version :: [non_neg_integer()],
           tid :: non_neg_integer(),
-          seed :: binary(),
-          caps :: integer(),
+          seed1 :: binary(),
+          caps1 :: non_neg_integer(),
           charset :: non_neg_integer(),
-          status :: integer(),
-          plugin :: binary()
+          status :: non_neg_integer(),
+          caps2 :: non_neg_integer(),
+          length :: non_neg_integer(),
+          reserved :: binary(),
+          seed2 :: binary(),
+          plugin :: binary(),
+
+          maxlength :: non_neg_integer(),
+          seed :: binary(),
+          caps :: integer()
          }).
 
 -type(handshake() :: #handshake{}).

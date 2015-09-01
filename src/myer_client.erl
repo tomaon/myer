@@ -108,7 +108,7 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
          get(timeout, A)
         ],
     case apply(M, connect, [L]) of
-        {ok, Handle, Handshake} ->
+        {ok, Handshake, Handle} ->
             connected(S#state{handle = Handle, maxlength = X}, Handshake);
         {error, Reason} ->
             {error, Reason, S};

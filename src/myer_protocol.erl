@@ -152,9 +152,9 @@ binary_to_float(Binary, _Decimals) ->
             end
     end.
 
--spec recv(protocol(),non_neg_integer()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
-recv(#protocol{handle=H,caps=C}=P, Length) ->
-    case myer_socket:recv(H, Length, ?ISSET(C,?CLIENT_COMPRESS)) of
+-spec recv(protocol(),term()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
+recv(#protocol{handle=H,caps=C}=P, Term) ->
+    case myer_socket:recv(H, Term, ?ISSET(C,?CLIENT_COMPRESS)) of
         {ok, Binary, Handle} ->
             {ok, Binary, P#protocol{handle = Handle}};
         {error, Reason} ->
@@ -269,12 +269,7 @@ connect_pre(Address, Port, MaxLength, Timeout) ->
     end.
 
 connect_post(<<10>>, #protocol{}=P) -> % "always 10"
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {ok, [Protocol,binary_to_handshake(Binary)]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+    recv_handshake(P, #handshake{}).
 
 %% -- internal: loop,next_result --
 
@@ -724,49 +719,60 @@ binary_to_eof(Caps, Binary) % eof -> #result{}
     #result{status = S, warning_count = W}.
 
 %% -----------------------------------------------------------------------------
-%% << sql/sql_acl.cc : send_server_handshake_packet/3
+%% << sql/auth/sql_authentication.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
-binary_to_handshake(Binary) ->
-    binary_to_handshake(#handshake{}, Binary, 0, byte_size(Binary)).
 
-binary_to_handshake(#handshake{version=undefined}=H, Binary, Start, Length) ->
-    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
-    binary_to_handshake(H#handshake{version = binary_to_version(B)}, Binary, Start+L, Length-L);
-binary_to_handshake(#handshake{tid=undefined}=H, Binary, Start, Length) ->
-    <<N:32/little>> = binary_part(Binary, Start, 4),
-    binary_to_handshake(H#handshake{tid = N}, Binary, Start+4, Length-4);
-binary_to_handshake(#handshake{seed=undefined}=H, Binary, Start, Length) ->
-    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
-    binary_to_handshake(H#handshake{seed = B}, Binary, Start+L, Length-L);
-binary_to_handshake(#handshake{caps=undefined}=H, Binary, Start, Length) ->
-    <<I:16/little>> = binary_part(Binary, Start, 2),
-    binary_to_handshake(H#handshake{caps = I}, Binary, Start+2, Length-2);
-binary_to_handshake(#handshake{version=V,seed=S1,caps=C1,charset=undefined}=H, Binary, Start, Length)
-  when V >= [4,1,1]; ?ISSET(C1,?CLIENT_PROTOCOL_41) ->
-    <<E>> = binary_part(Binary, Start, 1),
-    <<I:16/little>> = binary_part(Binary, Start+1, 2),
-    <<C2:16/little>> = binary_part(Binary, Start+3, 2),
-    %% _X
-    %% 0:10/integer-unit:8
-    [S2, _] = binary:split(binary_part(Binary,Start+16,Length-16), <<0>>), L2 = byte_size(S2)+1,
-    S = <<S1/binary, S2/binary>>,
-    C = (C2 bsl 16) bor C1,
-    binary_to_handshake(H#handshake{seed = S, caps = C, charset = E, status = I}, Binary, Start+16+L2, Length-16-L2);
-binary_to_handshake(#handshake{charset=undefined}=H, Binary, Start, Length) ->
-    <<E>> = binary_part(Binary, Start, 1),
-    <<I:16/little>> = binary_part(Binary, Start+1, 2),
-    %% 0:13/integer-unit:8
-    binary_to_handshake(H#handshake{charset = E, status = I}, Binary, Start+16, Length-16);
-binary_to_handshake(#handshake{version=V,caps=C,plugin=undefined}=H, Binary, Start, 0)
+recv_handshake(S, #handshake{version=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, <<0>>),
+    recv_handshake(Socket, H#handshake{version = binary_to_version(Binary)});
+recv_handshake(S, #handshake{tid=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, 4),
+    recv_handshake(Socket, H#handshake{tid = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{seed1=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, <<0>>),
+    recv_handshake(Socket, H#handshake{seed1 = Binary});
+recv_handshake(S, #handshake{caps1=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, 2),
+    recv_handshake(Socket, H#handshake{caps1 = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{charset=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, 1),
+    recv_handshake(Socket, H#handshake{charset = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{status=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, 2),
+    recv_handshake(Socket, H#handshake{status = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{version=V,caps1=C,caps2=undefined}=H)
   when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
-    binary_to_handshake(H#handshake{plugin = <<"mysql_native_password">>}, Binary, Start, 0);
-binary_to_handshake(#handshake{plugin=undefined}=H, Binary, Start, 0) ->
-    binary_to_handshake(H#handshake{plugin = <<>>}, Binary, Start, 0);
-binary_to_handshake(#handshake{plugin=undefined}=H, Binary, Start, Length) ->
-    [B, _] = binary:split(binary_part(Binary,Start,Length), <<0>>), L = byte_size(B)+1,
-    binary_to_handshake(H#handshake{plugin = B}, Binary, Start+L, Length-L);
-binary_to_handshake(Handshake, _Binary, _Start, 0) -> % byte_size(Binary) =:= Start
-    Handshake.
+    {ok, Binary, Socket} = recv(S, 2),
+    recv_handshake(Socket, H#handshake{caps2 = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{caps2=undefined}=H) ->
+    recv_handshake(S, H#handshake{caps2 = 0});
+recv_handshake(S, #handshake{version=V,caps1=C,length=undefined}=H)
+  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+    {ok, Binary, Socket} = recv(S, 1),
+    recv_handshake(Socket, H#handshake{length = binary:decode_unsigned(Binary,little)});
+recv_handshake(S, #handshake{length=undefined}=H) ->
+    recv_handshake(S, H#handshake{length = 8}); % 8?, TODO
+recv_handshake(S, #handshake{version=V,caps1=C,reserved=undefined}=H)
+  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+    {ok, Binary, Socket} = recv(S, 10),
+    recv_handshake(Socket, H#handshake{reserved = Binary}); % "always 0"
+recv_handshake(S, #handshake{reserved=undefined}=H) ->
+    {ok, Binary, Socket} = recv(S, 13),
+    recv_handshake(Socket, H#handshake{reserved = Binary}); % "always 0"?
+recv_handshake(S, #handshake{version=V,caps1=C,seed2=undefined}=H)
+  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+    {ok, Binary, Socket} = recv(S, <<0>>),
+    recv_handshake(Socket, H#handshake{seed2 = Binary});
+recv_handshake(S, #handshake{seed2=undefined}=H) ->
+    recv_handshake(S, H#handshake{seed2 = <<>>});
+recv_handshake(S, #handshake{version=V,caps1=C,plugin=undefined}=H)
+  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+    {ok, Binary, Socket} = recv(S, <<0>>),
+    recv_handshake(Socket, H#handshake{plugin = Binary});
+recv_handshake(S, #handshake{plugin=undefined}=H) ->
+    recv_handshake(S, H#handshake{plugin = <<"mysql_native_password">>});
+recv_handshake(Protocol, #handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H) ->
+    {ok, [H#handshake{caps = (C2 bsl 16) bor C1, seed = <<S1/binary, S2/binary>>},Protocol]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc : send_plugin_request_packet/3
