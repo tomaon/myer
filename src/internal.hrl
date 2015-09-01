@@ -153,7 +153,6 @@
 
 -record(protocol, {
           handle :: tuple(),
-          maxlength :: non_neg_integer(),
           caps :: integer()
          }).
 
@@ -175,6 +174,7 @@
 -type(prepare() :: #prepare{}).
 
 -record(handshake, {
+          maxlength :: non_neg_integer(),
           version :: [non_neg_integer()],
           tid :: non_neg_integer(),
           seed :: binary(),

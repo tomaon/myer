@@ -123,8 +123,9 @@ connected(#state{module=M,args=A,handle=H}=S, #handshake{caps=C,version=V}=R) ->
          get(password, A),
          get(database, A),
          R#handshake{
+           maxlength = get(max_allowed_packet, A),
            caps = X = C band myer_protocol:default_caps(get(compress,A)),
-           charset = get(default_character_set,A)
+           charset = get(default_character_set, A)
 }
         ],
     case apply(M, auth, L) of

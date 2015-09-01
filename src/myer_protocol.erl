@@ -262,7 +262,7 @@ close_post(#protocol{handle=H}=P) ->
 connect_pre(Address, Port, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
         {ok, Handle} ->
-            {ok, [#protocol{handle = Handle, maxlength = MaxLength,
+            {ok, [#protocol{handle = Handle,
                             caps = default_caps(false)}]};
         {error, Reason} ->
             {error, Reason}
@@ -616,8 +616,8 @@ recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 %% << sql-common/client.c : send_client_reply_packet/3
 %% -----------------------------------------------------------------------------
 auth_to_binary(User, Password, Database,
-               #handshake{seed=S,caps=C,charset=E,plugin=P},
-               #protocol{maxlength=M})
+               #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P},
+               #protocol{})
   when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
@@ -637,8 +637,8 @@ auth_to_binary(User, Password, Database,
       P/binary
     >>;
 auth_to_binary(User, Password, Database,
-               #handshake{seed=S,caps=C,plugin=P},
-               #protocol{maxlength=M}) ->
+               #handshake{maxlength=M,seed=S,caps=C,plugin=P},
+               #protocol{}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = myer_auth:scramble(Password, S, P),
     B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
