@@ -42,7 +42,7 @@
 -record(myer, {
           sup :: pid(),
           worker :: pid(),
-          timeout = 3000 :: timeout()
+          timeout = ?NET_WAIT_TIMEOUT :: timeout()
          }).
 
 -type(myer() :: #myer{}).
@@ -78,7 +78,7 @@ checkout(Pool)
             case supervisor:start_child(Sup, []) of
                 {ok, Pid} ->
                     true = link(Pid),
-                    {ok, #myer{sup = Sup, worker = Pid, timeout = timer:minutes(1)}};
+                    {ok, #myer{sup = Sup, worker = Pid}};
                 {error, Reason} ->
                     {error, Reason}
             end

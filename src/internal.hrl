@@ -29,7 +29,7 @@
 
 %%efine(NET_READ_TIMEOUT,         30).
 %%efine(NET_WRITE_TIMEOUT,        60).
-%%efine(NET_WAIT_TIMEOUT,    8*60*60).
+-define(NET_WAIT_TIMEOUT,       3000). % 8*60*60
 
 -define(SERVER_STATUS_IN_TRANS,                 (1 bsl  0)).
 -define(SERVER_STATUS_AUTOCOMMIT,               (1 bsl  1)).
