@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([real_query/2, refresh/2]).
+-export([real_query/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
 
@@ -31,7 +31,7 @@
 
 -export([connect/1, close/1, auth/1]).
 -export([ping/1, stat/1]).
--export([select_db/1]).
+-export([refresh/1, select_db/1]).
 
 -type(socket() :: tuple()). % TODO
 
@@ -68,6 +68,10 @@ ping(Args) ->
 stat(Args) ->
     loop(Args, [fun stat_pre/2, fun send2/3, fun recv_status2/2, fun stat_post/3]).
 
+
+-spec refresh([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+refresh(Args) ->
+    loop(Args, [fun refresh_pre/3, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
 
 -spec select_db([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 select_db(Args) ->
@@ -204,7 +208,6 @@ auth_alt_pre(Socket, Caps, Password, #handshake{seed=S,plugin=A}=H) ->
 auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
     recv_result2(Caps, Socket).
 
-
 %% -- internal: ping --
 
 ping_pre(Socket, Caps) ->
@@ -223,6 +226,10 @@ stat_post(Byte, Caps, S) ->
             {error, Reason, S}
     end.
 
+%% -- internal: refresh --
+
+refresh_pre(Socket, Caps, Options) ->
+    {ok, [<<?COM_REFRESH,Options/little>>,Caps,reset2(Socket)]}.
 
 %% -- internal: select_db --
 
@@ -240,11 +247,6 @@ select_db_pre(Socket, Caps, Database) ->
 real_query(#protocol{handle=H}=P, Query)
   when undefined =/= H, is_binary(Query) ->
     loop([Query,P], [fun real_query_pre/2, fun send/2, fun recv_status/1, fun real_query_post/2]).
-
--spec refresh(protocol(),integer()) -> {ok,result(),protocol()}|{error,_,protocol()}.
-refresh(#protocol{handle=H}=P, Option)
-  when undefined =/= H ->
-    loop([Option,P], [fun refresh_pre/2, fun send/2, fun recv_status/1, fun recv_result/2]).
 
 -spec stmt_prepare(protocol(),binary()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
 stmt_prepare(#protocol{handle=H}=P, Query)
@@ -416,11 +418,6 @@ real_query_recv_rows(Fields, #protocol{}=P) ->
         {error, Reason, P} ->
             {error, Reason, P}
     end.
-
-%% -- internal: loop,refresh --
-
-refresh_pre(Options, #protocol{}=P) ->
-    {ok, [<<?COM_REFRESH,Options>>,reset(P)]}.
 
 %% -- internal: loop,stmt_close --
 

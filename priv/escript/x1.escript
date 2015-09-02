@@ -2,12 +2,15 @@
 %% -*- erlang -*-
 %%! -config priv/conf/n1 -s crypto -s eprof
 
+-include_lib("myer/include/myer.hrl").
+
 %% -- myer --
 run(3, H, myer) ->
     L = [
           %{ping,[]}
           %{stat,[]}
-          {select_db,[<<"test">>]}
+          %{select_db,[<<"test">>]}
+          {refresh, [?REFRESH_GRANT]}
         ],
     [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->
