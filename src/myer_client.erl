@@ -35,7 +35,8 @@
           handle    :: tuple(),                 % myer_porotocol:handle
           caps      :: non_neg_integer(),
           maxlength :: non_neg_integer(),
-          version   :: [integer()]              % TODO, non_neg_integer
+          version   :: [non_neg_integer()],
+          reason    :: reason()
          }).
 
 %% == public ==
@@ -62,9 +63,11 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call({Func,Args}, _From, State)
+handle_call({Func,Args}, _From, #state{reason=undefined}=S)
   when is_atom(Func), is_list(Args)->
-    ready(Func, Args, State).
+    ready(Func, Args, S);
+handle_call(_Request, _From, #state{reason=R}=S) -> % stop?, TODO
+    {reply, {error,R}, S}.
 
 handle_cast(_Request, State) ->
     {stop, enotsup, State}.
@@ -76,6 +79,8 @@ handle_info({Pid,version}, #state{version=V}=S) ->
     {noreply, S};
 handle_info({tcp_closed,_Socket}, #state{}=S) ->
     {stop, tcp_closed, S#state{handle = undefined}};
+%%ndle_info({tcp_error,_Socket}, #state{}=S) ->
+%%  {stop, tcp_error, S#state{handle = undefined}};
 handle_info({'EXIT',Socket,normal}, #state{}=S)
   when is_port(Socket) ->
     {stop, port_closed, S#state{handle = undefined}};
@@ -112,9 +117,9 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
         {ok, Handshake, Handle} ->
             connected(S#state{handle = Handle}, Handshake);
         {error, Reason} ->
-            {stop, {error,Reason}, S};
+            interrupted(S#state{reason = Reason});
         {error, Reason, Handle} ->
-            {stop, {error,Reason}, S#state{handle = Handle}}
+            interrupted(S#state{handle = Handle, reason = Reason})
     end.
 
 connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,version=V}=H) ->
@@ -130,7 +135,7 @@ connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,vers
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle, caps = C, maxlength = L, version = V});
         {error, Reason, Handle} ->
-            {stop, {error,Reason}, S#state{handle = Handle, caps = C}}
+            interrupted(S#state{handle = Handle, caps = C, reason = Reason})
     end.
 
 authorized(#state{}=S) ->
@@ -148,6 +153,10 @@ ready(Func, Args, #state{module=M,handle=H}=S) ->
         {error, Reason, Handle} ->
             {reply, {error,Reason}, S#state{handle = Handle}}
     end.
+
+
+interrupted(#state{}=S) ->
+    {noreply, S}.
 
 %% == internal ==
 
