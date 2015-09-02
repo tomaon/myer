@@ -19,11 +19,17 @@
 
 -include("../include/myer.hrl").
 
-%% == ~/include/mysql_com.h ==
+%% == define ==
+
+%% @see ~/include/mysql_com.h
 
 %% -- define --
 -define(MAX_PACKET_LENGTH, 16#FFFFFF). % 16777215
 -define(MIN_PACKET_LENGTH, 16#00FFFF). %    65535, TODO
+
+%%efine(NET_READ_TIMEOUT,         30).
+%%efine(NET_WRITE_TIMEOUT,        60).
+%%efine(NET_WAIT_TIMEOUT,    8*60*60).
 
 -define(SERVER_STATUS_IN_TRANS,                 (1 bsl  0)).
 -define(SERVER_STATUS_AUTOCOMMIT,               (1 bsl  1)).
@@ -37,7 +43,8 @@
 -define(SERVER_STATUS_METADATA_CHANGED,         (1 bsl 10)).
 -define(SERVER_QUERY_WAS_SLOW,                  (1 bsl 11)).
 -define(SERVER_PS_OUT_PARAMS,                   (1 bsl 12)).
--define(SERVER_STATUS_IN_TRANS_READONLY,        (1 bsl 13)).
+-define(SERVER_STATUS_IN_TRANS_READONLY,        (1 bsl 13)). % > 5.6
+-define(SERVER_SESSION_STATE_CHANGED,           (1 bsl 14)). % > 5.7
 
 -define(CLIENT_LONG_PASSWORD,                   (1 bsl  0)).
 -define(CLIENT_FOUND_ROWS,                      (1 bsl  1)).
@@ -54,16 +61,16 @@
 -define(CLIENT_IGNORE_SIGPIPE,                  (1 bsl 12)).
 -define(CLIENT_TRANSACTIONS,                    (1 bsl 13)).
 -define(CLIENT_RESERVED,                        (1 bsl 14)).
--define(CLIENT_SECURE_CONNECTION,               (1 bsl 15)). % CLIENT_RESERVED2?
+-define(CLIENT_SECURE_CONNECTION,               (1 bsl 15)). % > 5.7, CLIENT_RESERVED2
 -define(CLIENT_MULTI_STATEMENTS,                (1 bsl 16)).
 -define(CLIENT_MULTI_RESULTS,                   (1 bsl 17)).
 -define(CLIENT_PS_MULTI_RESULTS,                (1 bsl 18)).
 -define(CLIENT_PLUGIN_AUTH,                     (1 bsl 19)).
--define(CLIENT_CONNECT_ATTRS,                   (1 bsl 20)).
--define(CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA,  (1 bsl 21)).
--define(CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS,    (1 bsl 22)).
--define(CLIENT_SESSION_TRACK,                   (1 bsl 23)).
--define(CLIENT_DEPRECATE_EOF,                   (1 bsl 24)).
+-define(CLIENT_CONNECT_ATTRS,                   (1 bsl 20)). % > 5.6
+-define(CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA,  (1 bsl 21)). % > 5.6
+-define(CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS,    (1 bsl 22)). % > 5.6
+-define(CLIENT_SESSION_TRACK,                   (1 bsl 23)). % > 5.7
+-define(CLIENT_DEPRECATE_EOF,                   (1 bsl 24)). % > 5.7
 -define(CLIENT_SSL_VERIFY_SERVER_CERT,          (1 bsl 30)).
 -define(CLIENT_REMEMBER_OPTIONS,                (1 bsl 31)).
 
@@ -97,6 +104,11 @@
 -define(COM_STMT_RESET,          26).
 %%efine(COM_SET_OPTION,          27).
 -define(COM_STMT_FETCH,          28).
+%%efine(COM_DAEMON,              29).
+%%efine(COM_BINLOG_DUMP_GTID,    30). % > 5.6
+%%efine(COM_RESET_CONNECTION,    31). % > 5.7
+
+%% (> 5.7, @see ~/include/mysql.h)
 
 %% -- enum: enum_field_types --
 -define(MYSQL_TYPE_DECIMAL,       0). %
@@ -116,9 +128,10 @@
 -define(MYSQL_TYPE_NEWDATE,      14). %
 -define(MYSQL_TYPE_VARCHAR,      15). %
 -define(MYSQL_TYPE_BIT,          16). % BIT
--define(MYSQL_TYPE_TIMESTAMP2,   17). % internal
--define(MYSQL_TYPE_DATETIME2,    18). % internal
--define(MYSQL_TYPE_TIME2,        19). % internal
+-define(MYSQL_TYPE_TIMESTAMP2,   17). % > 5.6, TIMESTAMP
+-define(MYSQL_TYPE_DATETIME2,    18). % > 5.6, DATETIME
+-define(MYSQL_TYPE_TIME2,        19). % > 5.6, TIME
+-define(MYSQL_TYPE_JSON,        245). % > 5.7, JSON
 -define(MYSQL_TYPE_NEWDECIMAL,  246). % DECIMAL,NUMERIC
 -define(MYSQL_TYPE_ENUM,        247). %
 -define(MYSQL_TYPE_SET,         248). %
@@ -129,9 +142,6 @@
 -define(MYSQL_TYPE_VAR_STRING,  253). % VARCHAR,VARBINARY,ENUM,SET
 -define(MYSQL_TYPE_STRING,      254). % CHAR,BINARY
 -define(MYSQL_TYPE_GEOMETRY,    255). %
-
-%% -- --
--define(ISSET(A,B), A band B =/= 0).
 
 %% == record ==
 

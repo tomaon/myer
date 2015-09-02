@@ -206,7 +206,7 @@ insert_id(_) -> undefined.
 more_results(#prepare{result=R}) ->
     more_results(R);
 more_results(#result{status=S})
-  when ?ISSET(S,?SERVER_MORE_RESULTS_EXISTS) ->
+  when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) ->
     true;
 more_results(_) ->
     false.

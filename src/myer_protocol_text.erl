@@ -90,6 +90,7 @@ cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
 %%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
 %%st(?MYSQL_TYPE_DATETIME2)   -> undefined
 %%st(?MYSQL_TYPE_TIME2)       -> undefined
+%%st(?MYSQL_TYPE_JSON)        -> undefined
 cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/2;
 %%st(?MYSQL_TYPE_ENUM)        -> undefined
 %%st(?MYSQL_TYPE_SET)         -> undefined

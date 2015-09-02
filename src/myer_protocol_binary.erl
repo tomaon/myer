@@ -102,7 +102,7 @@ null_fields(Binary, Start, Length, List) ->
 restore(#protocol{}=P, #field{cast={integer,Size},flags=F}) ->
     case recv(P, Size) of
         {ok, Binary, Protocol} ->
-            Data = case ?ISSET(F, ?UNSIGNED_FLAG) of
+            Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/integer-unsigned-little-unit:8>> = Binary, Value;
                        false -> <<Value:Size/integer-signed-little-unit:8>> = Binary, Value
                    end,
@@ -111,7 +111,7 @@ restore(#protocol{}=P, #field{cast={integer,Size},flags=F}) ->
 restore(#protocol{}=P, #field{cast={float,Size},flags=F}) ->
     case recv(P, Size) of
         {ok, Binary, Protocol} ->
-            Data = case ?ISSET(F, ?UNSIGNED_FLAG) of
+            Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/float-unsigned-little-unit:8>> = Binary, Value;
                        false -> <<Value:Size/float-signed-little-unit:8>> = Binary, Value
                    end,
@@ -144,6 +144,7 @@ cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
 %%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
 %%st(?MYSQL_TYPE_DATETIME2)   -> undefined
 %%st(?MYSQL_TYPE_TIME2)       -> undefined
+%%st(?MYSQL_TYPE_JSON)        -> undefined
 cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_decimal/2;
 %%st(?MYSQL_TYPE_ENUM)        -> undefined
 %%st(?MYSQL_TYPE_SET)         -> undefined

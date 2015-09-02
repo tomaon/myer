@@ -106,7 +106,7 @@ stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
 stmt_fetch(#protocol{handle=H}=P, #prepare{result=R}=X)
   when undefined =/= H ->
     case R#result.status of
-        S when ?ISSET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+        S when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
             loop([X,P], [fun stmt_fetch_pre/2, fun send/3, fun stmt_fetch_post/2]);
         _ ->
             {ok, X, P}
@@ -149,7 +149,7 @@ binary_to_float(Binary, _Decimals) ->
 
 -spec recv(protocol(),term()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
 recv(#protocol{handle=H,caps=C}=P, Term) ->
-    case myer_socket:recv(H, Term, ?ISSET(C,?CLIENT_COMPRESS)) of
+    case myer_socket:recv(H, Term, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Binary, Handle} ->
             {ok, Binary, P#protocol{handle = Handle}};
         {error, Reason} ->
@@ -208,7 +208,7 @@ default_caps(Caps) ->
     lists:foldl(fun(E,A) -> A bor E end, Caps, L).
 
 func_recv_field(#protocol{caps=C})
-  when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     fun myer_protocol_text:recv_field_41/2;
 func_recv_field(_Protocol) ->
     fun myer_protocol_text:recv_field/2.
@@ -241,7 +241,7 @@ auth_pre(User, Password, Database, #handshake{caps=C}=H, Socket) ->
     {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
 
 send(Term, Binary, Caps, S) ->
-    case myer_socket:send(S, Binary, ?ISSET(Caps,?CLIENT_COMPRESS)) of
+    case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Socket} ->
             {ok, [Term,Caps,Socket]};
         {error, Reason} ->
@@ -267,7 +267,7 @@ close_pre(Caps, Socket) ->
 
 send2(Binary, Caps, S) ->
     io:format("send2: ~p,~p,~p~n", [Binary,Caps,S]),
-    case myer_socket:send(S, Binary, ?ISSET(Caps,?CLIENT_COMPRESS)) of
+    case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Socket} ->
             {ok, [Caps,Socket]};
         {error, Reason} ->
@@ -289,7 +289,7 @@ connect_pre(Address, Port, MaxLength, Timeout) ->
     end.
 
 recv(Term, Caps, Socket) ->
-    myer_socket:recv(Socket, Term, ?ISSET(Caps,?CLIENT_COMPRESS)).
+    myer_socket:recv(Socket, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)).
 
 recv_status2(Term, Caps, S) ->
     case recv(1, Caps, S) of
@@ -415,7 +415,7 @@ stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed
     end.
 
 stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P)
-  when ?ISSET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+  when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
     {ok, [X#prepare{result = R, execute = E+1},P]};
 stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
@@ -576,7 +576,7 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
     end.
 
 send(Binary, #protocol{handle=H,caps=C}=P) ->
-    case myer_socket:send(H, Binary, ?ISSET(C,?CLIENT_COMPRESS)) of
+    case myer_socket:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [P#protocol{handle = Handle}]};
         {error, Reason} ->
@@ -584,7 +584,7 @@ send(Binary, #protocol{handle=H,caps=C}=P) ->
     end.
 
 send(Term, Binary, #protocol{handle=H,caps=C}=P) ->
-    case myer_socket:send(H, Binary, ?ISSET(C,?CLIENT_COMPRESS)) of
+    case myer_socket:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [Term,P#protocol{handle = Handle}]};
         {error, Reason} ->
@@ -645,12 +645,12 @@ recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 %% -----------------------------------------------------------------------------
 auth_to_binary(User, Password, Database,
                #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
-  when ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     X = myer_auth:scramble(Password, S, P),
-    B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
+    B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
            true                                -> <<X/binary,0>>
         end,
-    D = if ?ISSET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
+    D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
            true                              -> <<0>>
         end,
     <<
@@ -667,10 +667,10 @@ auth_to_binary(User, Password, Database,
                #handshake{maxlength=M,seed=S,caps=C,plugin=P}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = myer_auth:scramble(Password, S, P),
-    B = if ?ISSET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
+    B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
            true                                -> <<X/binary,0>>
         end,
-    D = if ?ISSET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
+    D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
            true                              -> <<>>
         end,
     <<
@@ -745,7 +745,7 @@ stmt_execute_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Args) ->
 binary_to_eof(_Caps, <<>>) -> % FORCE: 4.1.25, TODO
     #result{status = 0, warning_count = 0};
 binary_to_eof(Caps, Binary) % eof -> #result{}
-  when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     <<W:16/little, S:16/little>> = Binary,
     #result{status = S, warning_count = W}.
 
@@ -771,32 +771,32 @@ recv_handshake(#handshake{status=undefined}=H, Caps, Socket) ->
     {ok, B, S} = recv(2, Caps, Socket),
     recv_handshake(H#handshake{status = binary:decode_unsigned(B,little)}, Caps, S);
 recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=H, Caps, Socket)
-  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(2, Caps, Socket),
     recv_handshake(H#handshake{caps2 = binary:decode_unsigned(B,little)}, Caps, S);
 recv_handshake(#handshake{caps2=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{caps2 = 0}, Caps, Socket);
 recv_handshake(#handshake{version=V,caps1=C,length=undefined}=H, Caps, Socket)
-  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(1, Caps, Socket),
     recv_handshake(H#handshake{length = binary:decode_unsigned(B,little)}, Caps, S);
 recv_handshake(#handshake{length=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{length = 8}, Caps, Socket);   % 8?, TODO
 recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=H, Caps, Socket)
-  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(10, Caps, Socket),
     recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"
 recv_handshake(#handshake{reserved=undefined}=H, Caps, Socket) ->
     {ok, B, S} = recv(13, Caps, Socket),
     recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"?
 recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=H, Caps, Socket)
-  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(<<0>>, Caps, Socket),
     recv_handshake(H#handshake{seed2 = B}, Caps, S);
 recv_handshake(#handshake{seed2=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{seed2 = <<>>}, Caps, Socket);
 recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=H, Caps, Socket)
-  when V >= [4,1,1]; ?ISSET(C,?CLIENT_PROTOCOL_41) ->
+  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(<<0>>, Caps, Socket),
     recv_handshake(H#handshake{plugin = B}, Caps, S);
 recv_handshake(#handshake{plugin=undefined}=H, Caps, Socket) ->
@@ -825,7 +825,7 @@ binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
 %% << sql/protocol.cc : net_send_error_packet/4
 %% -----------------------------------------------------------------------------
 binary_to_reason(Caps, Binary, Start, Length)
-  when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     <<E:16/little>> = binary_part(Binary, Start, 2),
     <<$#>> = binary_part(Binary, Start+2, 1),
     S = binary_part(Binary, Start+3, 5),
@@ -840,7 +840,7 @@ binary_to_reason(_Caps, Binary, Start, Length) ->
 %% << sql/protocol.cc : net_send_ok/6
 %% -----------------------------------------------------------------------------
 binary_to_result(Caps, Binary, Start, Length)
-  when ?ISSET(Caps,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     {A, S1, L1} = unpack_integer(Binary, Start, Length),
     {I, S2, L2} = unpack_integer(Binary, S1, L1),
     <<S:16/little, W:16/little>> = binary_part(Binary, S2, 4),
