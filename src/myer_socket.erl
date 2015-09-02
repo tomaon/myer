@@ -23,6 +23,8 @@
 -export([connect/4, close/1]).
 -export([recv/1]).
 -export([recv/3, send/3]).
+-export([remains/1]).
+
 -export([reset/1, zreset/1]).
 
 %% -- internal --
@@ -93,6 +95,11 @@ recv(Handle, Term, false) ->
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_}.
 send(Handle, Binary, Compress) ->
     send(Handle, Binary, 0, byte_size(Binary), Compress).
+
+
+-spec remains(handle()) -> non_neg_integer().
+remains(#handle{length=L}) ->
+    L.
 
 
 -spec reset(handle()) -> handle().

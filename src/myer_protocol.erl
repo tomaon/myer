@@ -47,10 +47,10 @@ auth(Args) ->
     case loop(Args, [fun auth_pre/5, fun send2/4, fun recv_status2/3, fun auth_post/4]) of
         {ok, #plugin{name=N}, #handshake{}=H, Socket} ->
             auth_alt([lists:nth(3,Args),H#handshake{plugin = N},Socket]);
-        {ok, Result, Protocol}->
-            {ok, Result, Protocol};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
+        {ok, #result{}=R, Socket}->
+            {ok, R, Socket};
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
     end.
 
 auth_alt(Args) ->
@@ -66,20 +66,34 @@ loop(Args, [H|T]) ->
             loop(List, T);
         {error, Reason} -> % connect_pre
             {error, Reason};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
     end.
 
 recv(Term, Caps, Socket) ->
     myer_socket:recv(Socket, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)).
 
-recv_error2(Caps, S) ->
-    case recv(0, Caps, S) of
-        {ok, Binary, Socket} ->
-            {error, binary_to_reason(Caps,Binary,0,byte_size(Binary)), Socket};
-        {error, Reason} ->
-            {error, Reason, S}
+recv_error2(Caps, Socket) ->
+    recv_reason(#reason{}, Caps, Socket).
+
+recv_packed_unsigned2(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<254>>, Socket} ->
+            recv_unsigned2(8, Caps, Socket);
+        {ok, <<253>>, Socket} ->
+            recv_unsigned2(3, Caps, Socket);
+        {ok, <<252>>, Socket} ->
+            recv_unsigned2(2, Caps, Socket);
+        {ok, <<251>>, Socket} ->
+            {ok, null, Socket};
+        {ok, <<Int>>, Socket} ->
+            {ok, Int, Socket};
+        {error, Reason, P} ->
+            {error, Reason, P}
     end.
+
+recv_result2(Caps, Socket) ->
+    recv_result(#result{}, Caps, Socket).
 
 recv_status2(Term, Caps, S) ->
     case recv(1, Caps, S) of
@@ -90,6 +104,13 @@ recv_status2(Term, Caps, S) ->
         {error, Reason} ->
             {error, Reason, S}
     end.
+
+recv_unsigned2(Length, Caps, Socket) -> % buffered
+    {ok, B, S} = recv(Length, Caps, Socket),
+    {ok, binary:decode_unsigned(B,little), S}.
+
+remains(Socket) ->
+    myer_socket:remains(Socket).
 
 send2(Binary, Caps, S) ->
     case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
@@ -107,7 +128,7 @@ send2(Term, Binary, Caps, S) ->
             {error, Reason}
     end.
 
-%% -- internal: loop,connect --
+%% -- internal: connect --
 
 connect_pre(Address, Port, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
@@ -120,7 +141,7 @@ connect_pre(Address, Port, MaxLength, Timeout) ->
 connect_post(<<10>>, MaxLength, Caps, Socket) -> % "always 10"
     recv_handshake(#handshake{maxlength = MaxLength}, Caps, Socket). % buffered
 
-%% -- internal: loop,close --
+%% -- internal: close --
 
 close_pre(Caps, Socket) ->
     {ok, [<<?COM_QUIT>>,Caps,Socket]}.
@@ -129,7 +150,7 @@ close_post(_Caps, Socket) ->
     _ = myer_socket:close(Socket),
     {ok, [undefined]}.
 
-%% -- internal: loop,auth --
+%% -- internal: auth --
 
 auth_pre(User, Password, <<>>, #handshake{caps=C}=H, Socket) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
@@ -138,17 +159,17 @@ auth_pre(User, Password, Database, #handshake{caps=C}=H, Socket) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
     {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
 
-auth_post(<<254>>, _Handshake, Caps, Socket) ->
-    recv_plugin(#plugin{}, Caps, Socket);
+auth_post(<<254>>, Handshake, Caps, Socket) ->
+    recv_plugin(#plugin{}, Handshake, Caps, Socket);
 auth_post(<<0>>, _Handshake, Caps, Socket) ->
-    recv_result(#protocol{handle = Socket, caps = Caps}).
+    recv_result2(Caps, Socket).
 
 auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Caps, Socket) ->
     Scrambled = myer_auth:scramble(Password, S, A),
     {ok, [<<Scrambled/binary,0>>,H,Caps, Socket]}.
 
 auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
-    recv_result(#protocol{handle = Socket, caps = Caps}).
+    recv_result2(Caps, Socket).
 
 
 
@@ -817,11 +838,11 @@ recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H, Caps, Socket) 
 %% << sql/sql_acl.cc (< 5.7)         : send_plugin_request_packet/3
 %%    sql/auth/sql_authentication.cc : send_plugin_request_packet/3
 %% -----------------------------------------------------------------------------
-recv_plugin(#plugin{name=undefined}=P, Caps, Socket) ->
-    {ok, B, S} = recv(Socket, <<0>>),
-    recv_plugin(P#plugin{name = B}, Caps, S);
-recv_plugin(#plugin{}=P, Caps, Socket) ->
-    {ok, [P,Caps,Socket]}.
+recv_plugin(#plugin{name=undefined}=P, Handshake, Caps, Socket) ->
+    {ok, B, S} = recv(<<0>>, Caps, Socket),
+    recv_plugin(P#plugin{name = B}, Handshake, Caps, S);
+recv_plugin(#plugin{}=P, Handshake, _Caps, Socket) ->
+    {ok, [P,Handshake,Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
@@ -832,8 +853,28 @@ binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
              flags = ?CURSOR_TYPE_NO_CURSOR, prefetch_rows = 1, execute = 0}.
 
 %% -----------------------------------------------------------------------------
-%% << sql/protocol.cc : net_send_error_packet/4
+%% << sql/protocol.cc (< 5.7) : net_send_error_packet/4
+%%    sql/protocol_classic.cc : net_send_error_packet/7
 %% -----------------------------------------------------------------------------
+recv_reason(#reason{errno=undefined}=R, Caps, Socket) ->
+    {ok, B, S} = recv(2, Caps, Socket),
+    recv_reason(R#reason{errno = binary:decode_unsigned(B,little)}, Caps, S);
+recv_reason(#reason{reserved=undefined}=R, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<$#>>
+    recv_reason(R#reason{reserved = B}, Caps, S);
+recv_reason(#reason{state=undefined}=R, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv(5, Caps, Socket),
+    recv_reason(R#reason{state = B}, Caps, S);
+recv_reason(#reason{message=undefined}=R, Caps, Socket)->
+    {ok, B, S} = recv(remains(Socket), Caps, Socket),
+    recv_reason(R#reason{message = B}, Caps, S);
+recv_reason(#reason{}=R, _Caps, Socket) ->
+    io:format("reason: ~p~n", [R]),
+    {error, R, Socket}. % != ok
+
+
 binary_to_reason(Caps, Binary, Start, Length)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     <<E:16/little>> = binary_part(Binary, Start, 2),
@@ -847,8 +888,29 @@ binary_to_reason(_Caps, Binary, Start, Length) ->
     #reason{errno = E, message = M}.
 
 %% -----------------------------------------------------------------------------
-%% << sql/protocol.cc : net_send_ok/6
+%% << sql/protocol.cc (< 5.7) : net_send_ok/6
+%%    sql/protocol_classic.cc : net_send_ok/7
 %% -----------------------------------------------------------------------------
+recv_result(#result{affected_rows=undefined}=R, Caps, Socket) ->
+    {ok, U, S} = recv_packed_unsigned2(Caps, Socket),
+    recv_result(R#result{affected_rows = U}, Caps, S);
+recv_result(#result{insert_id=undefined}=R, Caps, Socket) ->
+    {ok, U, S} = recv_packed_unsigned2(Caps, Socket),
+    recv_result(R#result{insert_id = U}, Caps, S);
+recv_result(#result{status=undefined}=R, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned2(2, Caps, Socket),
+    recv_result(R#result{status = U}, Caps, S);
+recv_result(#result{warning_count=undefined}=R, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, U, S} = recv_unsigned2(2, Caps, Socket),
+    recv_result(R#result{warning_count = U}, Caps, S);
+recv_result(#result{message=undefined}=R, Caps, Socket) ->
+    {ok, B, S} = recv(remains(Socket), Caps, Socket),
+    recv_result(R#result{message = B}, Caps, S);
+recv_result(#result{}=R, _Caps, Socket) ->
+    {ok, [R,Socket]}.
+
+
 binary_to_result(Caps, Binary, Start, Length)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     {A, S1, L1} = unpack_integer(Binary, Start, Length),

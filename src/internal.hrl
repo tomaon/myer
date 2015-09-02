@@ -157,6 +157,7 @@
 
 -record(reason, {
           errno :: non_neg_integer(),
+          reserved :: binary(),
           state :: binary(),
           message :: binary()
          }).

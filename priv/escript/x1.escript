@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -config priv/conf/n2 -s crypto -s eprof
+%%! -config priv/conf/n1 -s crypto -s eprof
 
 %% -- myer --
 run(2, H, myer) ->
@@ -11,7 +11,8 @@ run(2, H, myer) ->
     [ io:format("myer: ~p=~p~n", F(E)) || E <- tables() ];
 run(p, H, myer) ->
     profiling = eprof:start_profiling([element(3,H)]),
-    run(2, H, myer),
+%   run(2, H, myer),
+    timer:sleep(3000),
     profiling_stopped = eprof:stop_profiling(),
     ok = eprof:analyze();
 run(1, undefined, myer) ->
