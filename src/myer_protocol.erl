@@ -76,14 +76,14 @@ recv(Term, Caps, Socket) ->
 recv_error2(Caps, Socket) ->
     recv_reason(#reason{}, Caps, Socket).
 
-recv_packed_unsigned2(Caps, S) ->
+recv_packed_unsigned(Caps, S) ->
     case recv(1, Caps, S) of
         {ok, <<254>>, Socket} ->
-            recv_unsigned2(8, Caps, Socket);
+            recv_unsigned(8, Caps, Socket);
         {ok, <<253>>, Socket} ->
-            recv_unsigned2(3, Caps, Socket);
+            recv_unsigned(3, Caps, Socket);
         {ok, <<252>>, Socket} ->
-            recv_unsigned2(2, Caps, Socket);
+            recv_unsigned(2, Caps, Socket);
         {ok, <<251>>, Socket} ->
             {ok, null, Socket};
         {ok, <<Int>>, Socket} ->
@@ -105,7 +105,7 @@ recv_status2(Term, Caps, S) ->
             {error, Reason, S}
     end.
 
-recv_unsigned2(Length, Caps, Socket) -> % buffered
+recv_unsigned(Length, Caps, Socket) -> % buffered
     {ok, B, S} = recv(Length, Caps, Socket),
     {ok, binary:decode_unsigned(B,little), S}.
 
@@ -786,30 +786,30 @@ recv_handshake(#handshake{version=undefined}=H, Caps, Socket) ->
     {ok, B, S} = recv(<<0>>, Caps, Socket),
     recv_handshake(H#handshake{version = binary_to_version(B)}, Caps, S);
 recv_handshake(#handshake{tid=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(4, Caps, Socket),
-    recv_handshake(H#handshake{tid = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(4, Caps, Socket),
+    recv_handshake(H#handshake{tid = U}, Caps, S);
 recv_handshake(#handshake{seed1=undefined}=H, Caps, Socket) ->
     {ok, B, S} = recv(<<0>>, Caps, Socket),
     recv_handshake(H#handshake{seed1 = B}, Caps, S);
 recv_handshake(#handshake{caps1=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(2, Caps, Socket),
-    recv_handshake(H#handshake{caps1 = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_handshake(H#handshake{caps1 = U}, Caps, S);
 recv_handshake(#handshake{charset=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(1, Caps, Socket),
-    recv_handshake(H#handshake{charset = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(1, Caps, Socket),
+    recv_handshake(H#handshake{charset = U}, Caps, S);
 recv_handshake(#handshake{status=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(2, Caps, Socket),
-    recv_handshake(H#handshake{status = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_handshake(H#handshake{status = U}, Caps, S);
 recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(2, Caps, Socket),
-    recv_handshake(H#handshake{caps2 = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_handshake(H#handshake{caps2 = U}, Caps, S);
 recv_handshake(#handshake{caps2=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{caps2 = 0}, Caps, Socket);
 recv_handshake(#handshake{version=V,caps1=C,length=undefined}=H, Caps, Socket)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(1, Caps, Socket),
-    recv_handshake(H#handshake{length = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(1, Caps, Socket),
+    recv_handshake(H#handshake{length = U}, Caps, S);
 recv_handshake(#handshake{length=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{length = 8}, Caps, Socket);   % 8?, TODO
 recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=H, Caps, Socket)
@@ -857,8 +857,8 @@ binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
 %%    sql/protocol_classic.cc : net_send_error_packet/7
 %% -----------------------------------------------------------------------------
 recv_reason(#reason{errno=undefined}=R, Caps, Socket) ->
-    {ok, B, S} = recv(2, Caps, Socket),
-    recv_reason(R#reason{errno = binary:decode_unsigned(B,little)}, Caps, S);
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_reason(R#reason{errno = U}, Caps, S);
 recv_reason(#reason{reserved=undefined}=R, Caps, Socket)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     {ok, B, S} = recv(1, Caps, Socket), % <<$#>>
@@ -892,17 +892,17 @@ binary_to_reason(_Caps, Binary, Start, Length) ->
 %%    sql/protocol_classic.cc : net_send_ok/7
 %% -----------------------------------------------------------------------------
 recv_result(#result{affected_rows=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_packed_unsigned2(Caps, Socket),
+    {ok, U, S} = recv_packed_unsigned(Caps, Socket),
     recv_result(R#result{affected_rows = U}, Caps, S);
 recv_result(#result{insert_id=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_packed_unsigned2(Caps, Socket),
+    {ok, U, S} = recv_packed_unsigned(Caps, Socket),
     recv_result(R#result{insert_id = U}, Caps, S);
 recv_result(#result{status=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned2(2, Caps, Socket),
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
     recv_result(R#result{status = U}, Caps, S);
 recv_result(#result{warning_count=undefined}=R, Caps, Socket)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned2(2, Caps, Socket),
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
     recv_result(R#result{warning_count = U}, Caps, S);
 recv_result(#result{message=undefined}=R, Caps, Socket) ->
     {ok, B, S} = recv(remains(Socket), Caps, Socket),

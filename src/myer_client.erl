@@ -142,8 +142,8 @@ authorized(#state{}=S) ->
     {noreply, S#state{args = undefined}}.
 
 
-ready(Func, Args, #state{module=M,handle=H}=S) ->
-    case apply(M, Func, [H|Args]) of
+ready(Func, Args, #state{module=M,handle=H,caps=C}=S) ->
+    case apply(M, Func, [H|[C|Args]]) of
         {ok, Handle} ->
             {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->
