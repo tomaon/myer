@@ -5,7 +5,8 @@
 %% -- myer --
 run(3, H, myer) ->
     L = [
-          {ping,[]}
+          %{ping,[]}
+          {stat,[]}
         ],
     [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->

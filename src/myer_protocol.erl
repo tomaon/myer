@@ -20,7 +20,6 @@
 -include("internal.hrl").
 
 %% -- public --
--export([stat/1]).
 -export([real_query/2, refresh/2, select_db/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
@@ -31,7 +30,7 @@
 
 
 -export([connect/1, close/1, auth/1]).
--export([ping/1]).
+-export([ping/1, stat/1]).
 
 -type(socket() :: tuple()). % TODO
 
@@ -63,6 +62,11 @@ auth_alt(Args) ->
 -spec ping([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 ping(Args) ->
     loop(Args, [fun ping_pre/2, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
+
+
+-spec stat([term()]) -> {ok,binary(),socket()}|{error,_,socket()}.
+stat(Args) ->
+    loop(Args, [fun stat_pre/2, fun send2/3, fun recv_status2/2, fun stat_post/3]).
 
 %% == internal ==
 
@@ -133,6 +137,9 @@ recv_unsigned(Length, Caps, Socket) -> % buffered
 remains(Socket) ->
     myer_socket:remains(Socket).
 
+reset2(Socket) ->
+    myer_socket:reset(Socket).
+
 send2(Binary, Caps, S) ->
     case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Socket} ->
@@ -192,20 +199,30 @@ auth_alt_pre(Socket, Caps, Password, #handshake{seed=S,plugin=A}=H) ->
 auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
     recv_result2(Caps, Socket).
 
+
 %% -- internal: ping --
 
 ping_pre(Socket, Caps) ->
-    {ok, [<<?COM_PING>>,Caps,myer_socket:reset(Socket)]}.
+    {ok, [<<?COM_PING>>,Caps,reset2(Socket)]}.
+
+%% -- internal: stat --
+
+stat_pre(Socket, Caps) ->
+    {ok, [<<?COM_STATISTICS>>,Caps,reset2(Socket)]}.
+
+stat_post(Byte, Caps, S) ->
+    case recv(remains(S), Caps, S) of
+        {ok, Binary, Socket} ->
+            {ok, [list_to_binary([Byte,Binary]),Socket]};
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
 
 
 
 
 %% == public ==
-
--spec stat(protocol()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
-stat(#protocol{handle=H}=P)
-  when undefined =/= H ->
-    loop([P], [fun stat_pre/1, fun send/2, fun recv_status/1, fun stat_post/2]).
 
 -spec real_query(protocol(),binary())
                 -> {ok,result(),protocol()}|
@@ -404,19 +421,6 @@ refresh_pre(Options, #protocol{}=P) ->
 
 select_db_pre(Database, #protocol{}=P) ->
     {ok, [<<?COM_INIT_DB,Database/binary>>,reset(P)]}.
-
-%% -- internal: loop,stat --
-
-stat_pre(#protocol{}=P) ->
-    {ok, [<<?COM_STATISTICS>>,reset(P)]}.
-
-stat_post(Byte, #protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {ok, [iolist_to_binary([Byte,Binary]),Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
 
 %% -- internal: loop,stmt_close --
 
