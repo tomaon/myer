@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([real_query/2, refresh/2, select_db/2]).
+-export([real_query/2, refresh/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
 
@@ -31,6 +31,7 @@
 
 -export([connect/1, close/1, auth/1]).
 -export([ping/1, stat/1]).
+-export([select_db/1]).
 
 -type(socket() :: tuple()). % TODO
 
@@ -63,10 +64,14 @@ auth_alt(Args) ->
 ping(Args) ->
     loop(Args, [fun ping_pre/2, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
 
-
 -spec stat([term()]) -> {ok,binary(),socket()}|{error,_,socket()}.
 stat(Args) ->
     loop(Args, [fun stat_pre/2, fun send2/3, fun recv_status2/2, fun stat_post/3]).
+
+
+-spec select_db([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+select_db(Args) ->
+    loop(Args, [fun select_db_pre/3, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
 
 %% == internal ==
 
@@ -219,6 +224,11 @@ stat_post(Byte, Caps, S) ->
     end.
 
 
+%% -- internal: select_db --
+
+select_db_pre(Socket, Caps, Database) ->
+    {ok, [<<?COM_INIT_DB,Database/binary>>,Caps,reset2(Socket)]}.
+
 
 
 
@@ -235,11 +245,6 @@ real_query(#protocol{handle=H}=P, Query)
 refresh(#protocol{handle=H}=P, Option)
   when undefined =/= H ->
     loop([Option,P], [fun refresh_pre/2, fun send/2, fun recv_status/1, fun recv_result/2]).
-
--spec select_db(protocol(),binary()) -> {ok,result(),protocol()}|{error,_,protocol()}.
-select_db(#protocol{handle=H}=P, Database)
-  when undefined =/= H, is_binary(Database) ->
-    loop([Database,P], [fun select_db_pre/2, fun send/2, fun recv_status/1, fun recv_result/2]).
 
 -spec stmt_prepare(protocol(),binary()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
 stmt_prepare(#protocol{handle=H}=P, Query)
@@ -416,11 +421,6 @@ real_query_recv_rows(Fields, #protocol{}=P) ->
 
 refresh_pre(Options, #protocol{}=P) ->
     {ok, [<<?COM_REFRESH,Options>>,reset(P)]}.
-
-%% -- internal: loop,select_db --
-
-select_db_pre(Database, #protocol{}=P) ->
-    {ok, [<<?COM_INIT_DB,Database/binary>>,reset(P)]}.
 
 %% -- internal: loop,stmt_close --
 
