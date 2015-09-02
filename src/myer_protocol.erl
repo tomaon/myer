@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
+-export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
@@ -32,6 +32,7 @@
 -export([ping/1, stat/1]).
 -export([refresh/1, select_db/1]).
 -export([query/1]).
+-export([stmt_prepare/1]).
 
 -type(socket() :: tuple()). % TODO
 -type(fields() :: [field()]).
@@ -85,8 +86,15 @@ select_db(Args) ->
               {ok,fields(),rows(),result(),socket()}|
               {error,_,socket()}.
 query(Args) ->
-    loop(Args, [fun query_pre/3, fun send2/3, fun recv_status2/2, fun query_post/3]).
+    loop(Args, [fun query_pre/3, fun send2/3, fun recv_status2/2,
+                fun query_post/3, fun recv_fields/3, fun recv_rows/3]).
 
+
+-spec stmt_prepare([term()]) -> {ok,prepare(),socket()}|{error,_,socket()}.
+stmt_prepare(Args) ->
+    loop(Args, [fun stmt_prepare_pre/3, fun send2/3,
+                fun recv_status2/2, fun stmt_prepare_post/3,
+                fun stmt_prepare_recv_params/3, fun stmt_prepare_recv_fields/3]).
 
 %% == internal ==
 
@@ -108,6 +116,20 @@ recv(Term, Caps, Socket) ->
 recv_error(Caps, Socket) ->
     recv_reason(#reason{}, Caps, Socket).
 
+recv_fields_func(Caps)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    fun myer_protocol_text:recv_field_41/2;
+recv_fields_func(_Caps) ->
+    fun myer_protocol_text:recv_field/2.
+
+recv_fields(U, Caps, S) ->
+    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+        {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
+            {ok, [Fields,Caps,Socket]};
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
+    end.
+
 recv_packed_unsigned(Caps, S) ->
     case recv(1, Caps, S) of
         {ok, Byte, Socket} ->
@@ -127,6 +149,14 @@ recv_result2(Caps, Socket) ->
 
 recv_result2(<<0>>, Caps, Socket) ->
     recv_result(#result{}, Caps, Socket).
+
+recv_rows(Fields, Caps, S) ->
+    case recv_until_eof2(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
+        {ok, [Result,Rows,Socket]} ->
+            {ok, [Fields,Rows,Result,Socket]};
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
+    end.
 
 recv_status2(Caps, S) ->
     case recv(1, Caps, S) of
@@ -151,6 +181,27 @@ recv_status2(Term, Caps, S) ->
 recv_unsigned(Length, Caps, Socket) -> % buffered
     {ok, B, S} = recv(Length, Caps, Socket),
     {ok, binary:decode_unsigned(B,little), S}.
+
+recv_until_eof2(Func, Args, List, Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<255>>, Socket} ->
+            recv_error(Caps, Socket);
+        {ok, <<254>>, Socket} ->
+            recv_eof(#result{}, lists:reverse(List), Caps, Socket);
+        {ok, Byte, Socket} ->
+            recv_until_eof2(Func, Args, List, Byte, Caps, Socket);
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
+recv_until_eof2(Func, Args, List, Byte, Caps, Handle) -> % TODO
+    P = #protocol{handle = Handle, caps = Caps},
+    case apply(Func, [P|[Byte|Args]]) of
+        {ok, Term, #protocol{handle=H}} ->
+            recv_until_eof2(Func, Args, [Term|List], Caps, H);
+        {error, Reason} ->
+            {error, Reason, Handle}
+    end.
 
 remains(Socket) ->
     myer_socket:remains(Socket).
@@ -255,60 +306,44 @@ query_post(<<0>>, Caps, Socket) ->
 query_post(Byte, Caps, S) ->
     case recv_packed_unsigned(Byte, Caps, S) of
         {ok, U, Socket} ->
-            query_recv_fields(U, Caps, Socket);
+            {ok, [U,Caps,Socket]};
         {error, Reason, Socket} ->
             {error, Reason, Socket}
     end.
 
-query_recv_fields(U, Caps, S) ->
-    case recv_until_eof2(func_recv_field2(Caps), [], [], Caps, S) of
-        {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
-            query_recv_rows(Fields, Caps, Socket);
+%% -- internal: stmt_prepare --
+
+stmt_prepare_pre(Socket, Caps, Query) ->
+    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,Caps,reset2(Socket)]}.
+
+stmt_prepare_post(<<0>>, Caps, Socket) ->
+    recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR, prefetch_rows = 1}, Caps, Socket).
+
+stmt_prepare_recv_params(#prepare{param_count=0}=P, Caps, Socket) ->
+    {ok, [P#prepare{params = [], result = undefined},Caps,Socket]};
+stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
+    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+        {ok, [Result,Params,Socket]} when N == length(Params)->
+            {ok, [P#prepare{params = Params, result = Result},Caps,Socket]};
         {error, Reason, Socket} ->
             {error, Reason, Socket}
     end.
 
-query_recv_rows(Fields, Caps, S) ->
-    case recv_until_eof2(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
-        {ok, [Result,Rows,Socket]} ->
-            {ok, [Fields,Rows,Result,Socket]};
+stmt_prepare_recv_fields(#prepare{field_count=0}=P, _Caps, Socket) ->
+    {ok, [P,Socket]};
+stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
+    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+        {ok, [Result,Fields,Socket]} when N == length(Fields) ->
+            {ok, [P#prepare{fields = Fields, result = Result},Socket]};
         {error, Reason, Socket} ->
             {error, Reason, Socket}
     end.
 
-recv_until_eof2(Func, Args, List, Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<255>>, Socket} ->
-            recv_error(Caps, Socket);
-        {ok, <<254>>, Socket} ->
-            recv_eof(#result{}, lists:reverse(List), Caps, Socket);
-        {ok, Byte, Socket} ->
-            recv_until_eof2(Func, Args, List, Byte, Caps, Socket);
-        {error, Reason} ->
-            {error, Reason, S}
-    end.
 
-recv_until_eof2(Func, Args, List, Byte, Caps, Handle) -> % TODO
-    P = #protocol{handle = Handle, caps = Caps},
-    case apply(Func, [P|[Byte|Args]]) of
-        {ok, Term, #protocol{handle=H}} ->
-            recv_until_eof2(Func, Args, [Term|List], Caps, H);
-        {error, Reason} ->
-            {error, Reason, Handle}
-    end.
 
-func_recv_field2(Caps)
-  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    fun myer_protocol_text:recv_field_41/2;
-func_recv_field2(_Caps) ->
-    fun myer_protocol_text:recv_field/2.
+%%  TODO,TODO
 
 %% == public ==
-
--spec stmt_prepare(protocol(),binary()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
-stmt_prepare(#protocol{handle=H}=P, Query)
-  when undefined =/= H, is_binary(Query) ->
-    loop([Query,P], [fun stmt_prepare_pre/2, fun send/2, fun recv_status/1, fun stmt_prepare_post/2]).
 
 -spec stmt_close(protocol(),prepare()) -> {ok,undefined,protocol()}|{error,_,protocol()}.
 stmt_close(#protocol{handle=H}=P, #prepare{}=X)
@@ -397,37 +432,6 @@ binary_to_version(Binary) ->
     L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
     lists:map(F, lists:sublist(L,3)).
 
-default_caps(true) ->
-    default_caps(?CLIENT_COMPRESS);
-default_caps(false) ->
-    default_caps(0);
-default_caps(Caps) ->
-    L = [
-         ?CLIENT_LONG_PASSWORD,
-         ?CLIENT_FOUND_ROWS,
-         ?CLIENT_LONG_FLAG,
-         ?CLIENT_CONNECT_WITH_DB,
-         ?CLIENT_NO_SCHEMA,
-         %%?CLIENT_LOCAL_FILES
-         %%?CLIENT_IGNORE_SPACE
-         ?CLIENT_PROTOCOL_41,
-         %%?CLIENT_INTERACTIVE
-         %%?CLIENT_IGNORE_SIGPIPE
-         ?CLIENT_TRANSACTIONS,
-         ?CLIENT_SECURE_CONNECTION, %?CLIENT_RESERVED2
-         ?CLIENT_MULTI_STATEMENTS,
-         ?CLIENT_MULTI_RESULTS,
-         ?CLIENT_PS_MULTI_RESULTS
-         %%?CLIENT_REMEMBER_OPTIONS
-         %%?CLIENT_PLUGIN_AUTH                         % TODO
-         %%?CLIENT_CONNECT_ATTRS
-         %%?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
-         %%?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS
-         %%?CLIENT_SESSION_TRACK
-         %%?CLIENT_DEPRECATE_EOF
-        ],
-    lists:foldl(fun(E,A) -> A bor E end, Caps, L).
-
 func_recv_field(#protocol{caps=C})
   when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     fun myer_protocol_text:recv_field_41/2;
@@ -437,13 +441,10 @@ func_recv_field(_Protocol) ->
 reset(#protocol{handle=H}=P) ->
     P#protocol{handle = myer_socket:reset(H)}.
 
-zreset(#protocol{handle=H}=P) ->
-    P#protocol{handle = myer_socket:zreset(H)}.
-
 %% -- internal: loop,next_result --
 
 next_result_pre(#protocol{}=P) ->
-    {ok, [zreset(P)]}.
+    {ok, [reset(P)]}.
 
 %% -- internal: loop,stmt_close --
 
@@ -511,45 +512,12 @@ stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
 %% -- internal: loop,stmt_next_result --
 
 stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
-    {ok, [X,zreset(P)]}.
+    {ok, [X,reset(P)]}.
 
 stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
     case recv_result(P) of
         {ok, [Result,Protocol]} ->
             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-%% -- internal: loop,stmt_prepare --
-
-stmt_prepare_pre(Query, #protocol{}=P) ->
-    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(P)]}.
-
-stmt_prepare_post(<<0>>, #protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            stmt_prepare_recv_params(binary_to_prepare(Binary), Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-stmt_prepare_recv_params(#prepare{param_count=0}=X, #protocol{}=P) ->
-    stmt_prepare_recv_fields(undefined, X#prepare{params = []}, P);
-stmt_prepare_recv_params(#prepare{param_count=N}=X, #protocol{}=P) ->
-    case recv_until_eof(func_recv_field(P), [], [], P) of
-        {ok, [Result,Params,Protocol]} when N == length(Params)->
-            stmt_prepare_recv_fields(Result, X#prepare{params = Params}, Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-stmt_prepare_recv_fields(Result, #prepare{field_count=0}=X, #protocol{}=P) ->
-    {ok, [X#prepare{result = Result},P]};
-stmt_prepare_recv_fields(_Result, #prepare{field_count=N}=X, #protocol{}=P) ->
-    case recv_until_eof(func_recv_field(P), [], [], P) of
-        {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
-            {ok, [X#prepare{fields = Fields, result = Result}, Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -577,18 +545,18 @@ recv_eof(Term, #protocol{}=P) ->
             {error, Reason, P}
     end.
 
-recv_error(#protocol{caps=C}=P) ->
+recv_error(#protocol{}=P) ->
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
-            {error, binary_to_reason(C,Binary,0,byte_size(Binary)), Protocol};
+            {error, Binary, Protocol};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
 
-recv_result(#protocol{caps=C}=P) ->
+recv_result(#protocol{}=P) ->
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
-            {ok, [binary_to_result(C,Binary,0,byte_size(Binary)),Protocol]};
+            {ok, [Binary,Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
@@ -641,14 +609,6 @@ recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
             {error, Reason, Protocol}
     end.
 
-send(Binary, #protocol{handle=H,caps=C}=P) ->
-    case myer_socket:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
-        {ok, Handle} ->
-            {ok, [P#protocol{handle = Handle}]};
-        {error, Reason} ->
-            {error, Reason, P}
-    end.
-
 send(Term, Binary, #protocol{handle=H,caps=C}=P) ->
     case myer_socket:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
@@ -657,7 +617,40 @@ send(Term, Binary, #protocol{handle=H,caps=C}=P) ->
             {error, Reason, P}
     end.
 
-%% -- internal: sql* --
+%% -----------------------------------------------------------------------------
+%% << include/mysql_com.h : CLIENT_ALL_FLAGS
+%% -----------------------------------------------------------------------------
+
+default_caps(true) ->
+    default_caps(?CLIENT_COMPRESS);
+default_caps(false) ->
+    default_caps(0);
+default_caps(Caps) ->
+    L = [
+         ?CLIENT_LONG_PASSWORD,
+         ?CLIENT_FOUND_ROWS,
+         ?CLIENT_LONG_FLAG,
+         ?CLIENT_CONNECT_WITH_DB,
+         ?CLIENT_NO_SCHEMA,
+         %%?CLIENT_LOCAL_FILES
+         %%?CLIENT_IGNORE_SPACE
+         ?CLIENT_PROTOCOL_41,
+         %%?CLIENT_INTERACTIVE
+         %%?CLIENT_IGNORE_SIGPIPE
+         ?CLIENT_TRANSACTIONS,
+         ?CLIENT_SECURE_CONNECTION, % > 5.7, CLIENT_RESERVED2
+         ?CLIENT_MULTI_STATEMENTS,
+         ?CLIENT_MULTI_RESULTS,
+         ?CLIENT_PS_MULTI_RESULTS
+         %%?CLIENT_REMEMBER_OPTIONS
+         %%?CLIENT_PLUGIN_AUTH                         % TODO
+         %%?CLIENT_CONNECT_ATTRS
+         %%?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+         %%?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS
+         %%?CLIENT_SESSION_TRACK
+         %%?CLIENT_DEPRECATE_EOF
+        ],
+    lists:foldl(fun(E,A) -> A bor E end, Caps, L).
 
 %% -----------------------------------------------------------------------------
 %% << sql-common/pack.c : *
@@ -673,25 +666,6 @@ pack_integer(Value) when Value < 251      -> <<Value>>;
 pack_integer(Value) when Value < 65536    -> <<252, Value:16/little>>;
 pack_integer(Value) when Value < 16777216 -> <<253, Value:24/little>>;
 pack_integer(Value)                       -> <<254, Value:64/little>>.
-
-unpack_binary(Binary, Start, Length) ->
-    case unpack_integer(Binary, Start, Length) of
-        {null, S, L} ->
-            {null, S, L};
-        {Len, S, L} ->
-            {binary_part(Binary,S,Len), S+Len, L-Len}
-    end.
-
-unpack_integer(_Binary, Start, 0) ->
-    {0, Start, 0};
-unpack_integer(Binary, Start, Length) ->
-    case binary_part(Binary, Start, 1) of
-        <<254>> -> <<L:64/little>> = binary_part(Binary, Start+1, 8), {L, Start+9, Length-9};
-        <<253>> -> <<L:24/little>> = binary_part(Binary, Start+1, 4), {L, Start+5, Length-5};
-        <<252>> -> <<L:16/little>> = binary_part(Binary, Start+1, 2), {L, Start+3, Length-3};
-        <<251>> -> {null, Start+1, Length-1};
-        <<L>> -> {L, Start+1, Length-1}
-    end.
 
 recv_packed_integer(undefined, Protocol) ->
     case recv(Protocol, 1) of
@@ -745,64 +719,6 @@ auth_to_binary(User, Password, Database,
       User/binary, 0,
       B/binary,
       D/binary
-    >>.
-
-%% -----------------------------------------------------------------------------
-%% << sql/sql_prepare.cc : *, TODO,TODO,TODO
-%% -----------------------------------------------------------------------------
-
-stmt_execute_fold_args([], _, _, L1, L2, B) ->
-    {lists:reverse(L1), lists:reverse(L2), B};
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_integer(H), 0 > H ->
-    B1 = <<?MYSQL_TYPE_LONGLONG:16/little>>,
-    B2 = <<H:8/integer-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_integer(H) ->
-    B1 = <<(?MYSQL_TYPE_LONGLONG bor (1 bsl 15)):16/little>>,
-    B2 = <<H:8/integer-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_float(H), 0 > H ->
-    B1 = <<?MYSQL_TYPE_DOUBLE:16/little>>,
-    B2 = <<H:8/float-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_float(H) ->
-    B1 = <<(?MYSQL_TYPE_DOUBLE bor (1 bsl 15)):16/little>>,
-    B2 = <<H:8/float-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_binary(H), 65536 > size(H) ->
-    B1 = <<?MYSQL_TYPE_VAR_STRING:16/little>>,
-    B2 = pack_binary(H),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_binary(H) -> % 16777186 < size(H) -> 'incorrect arguments to mysqld_stmt_execute'??
-    B1 = <<?MYSQL_TYPE_BLOB:16/little>>,
-    B2 = pack_binary(H),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([null|T], N, P, L1, L2, B) ->
-    B1 = <<0:16/little>>, % dummy
-    X = 1 bsl ((P band 7) + 8 * (N - P div 8 - 1)),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], L2, B bor X).
-
-stmt_execute_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Args) ->
-    W = (length(Args) + 7) div 8,
-    {T, D, U} = stmt_execute_fold_args(Args, W, 0, [], [], 0),
-    B = if %0 < E -> iolist_to_binary(lists:flatten([<<0>>,D]));
-            true  -> iolist_to_binary(lists:flatten([<<1>>,T,D]))
-        end,
-    <<
-      ?COM_STMT_EXECUTE,
-      S:32/little,         % stmt_id
-      F,                   % flags=0 : CURSOR_TYPE_NO_CURSOR (def)
-      %%                   %       1 : CURSOR_TYPE_READ_ONLY -> open_cursor
-      %%                   %            -> SERVER_STATUS_CURSOR_EXISTS (-> fetch)
-      0,0,0,0,             % ?
-      U:W/unsigned-unit:8, % null_bits
-      B/binary             % types_suppled_by_client,([type],)[data]
     >>.
 
 %% -----------------------------------------------------------------------------
@@ -878,7 +794,7 @@ recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=H, Caps, Socket)
 recv_handshake(#handshake{plugin=undefined}=H, Caps, Socket) ->
     recv_handshake(H#handshake{plugin = <<"mysql_native_password">>}, Caps, Socket);
 recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H, Caps, Socket) ->
-    {ok, [H#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary, S2/binary>>}, Socket]}.
+    {ok, [H#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary,S2/binary>>}, Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_acl.cc (< 5.7)         : send_plugin_request_packet/3
@@ -893,10 +809,23 @@ recv_plugin(#plugin{}=P, Handshake, _Caps, Socket) ->
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
 %% -----------------------------------------------------------------------------
-binary_to_prepare(Binary) -> % < 5.0.0, warning_count=undefined
-    <<S:32/little, F:16/little, P:16/little, 0, W:16/little>> = Binary,
-    #prepare{stmt_id = S, field_count = F, param_count = P, warning_count = W,
-             flags = ?CURSOR_TYPE_NO_CURSOR, prefetch_rows = 1, execute = 0}.
+recv_prepare(#prepare{stmt_id=undefined}=P, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(4, Caps, Socket),
+    recv_prepare(P#prepare{stmt_id=U}, Caps, S);
+recv_prepare(#prepare{field_count=undefined}=P, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_prepare(P#prepare{field_count=U}, Caps, S);
+recv_prepare(#prepare{param_count=undefined}=P, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_prepare(P#prepare{param_count=U}, Caps, S);
+recv_prepare(#prepare{reserved=undefined}=P, Caps, Socket) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<0>>
+    recv_prepare(P#prepare{reserved=B}, Caps, S);
+recv_prepare(#prepare{warning_count=undefined}=P, Caps, Socket) -> % < 5.0, undefined?
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_prepare(P#prepare{warning_count=U}, Caps, S);
+recv_prepare(#prepare{}=P, Caps, Socket) ->
+    {ok, [P,Caps,Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc (< 5.7) : net_send_error_packet/4
@@ -918,19 +847,6 @@ recv_reason(#reason{message=undefined}=R, Caps, Socket)->
     recv_reason(R#reason{message = B}, Caps, S);
 recv_reason(#reason{}=R, _Caps, Socket) ->
     {error, R, Socket}. % != ok
-
-
-binary_to_reason(Caps, Binary, Start, Length)
-  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    <<E:16/little>> = binary_part(Binary, Start, 2),
-    <<$#>> = binary_part(Binary, Start+2, 1),
-    S = binary_part(Binary, Start+3, 5),
-    M = binary_part(Binary, Start+8, Length-8),
-    #reason{errno = E, state = S, message = M};
-binary_to_reason(_Caps, Binary, Start, Length) ->
-    <<E:16/little>> = binary_part(Binary, Start, 2),
-    M = binary_part(Binary, Start+2, Length-2),
-    #reason{errno = E, message = M}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc (< 5.7) : net_send_ok/6
@@ -955,17 +871,59 @@ recv_result(#result{message=undefined}=R, Caps, Socket) ->
 recv_result(#result{}=R, _Caps, Socket) ->
     {ok, [R,Socket]}.
 
+%% -----------------------------------------------------------------------------
+%% << sql/sql_prepare.cc : *, TODO,TODO,TODO
+%% -----------------------------------------------------------------------------
+stmt_execute_fold_args([], _, _, L1, L2, B) ->
+    {lists:reverse(L1), lists:reverse(L2), B};
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_integer(H), 0 > H ->
+    B1 = <<?MYSQL_TYPE_LONGLONG:16/little>>,
+    B2 = <<H:8/integer-unsigned-little-unit:8>>,
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_integer(H) ->
+    B1 = <<(?MYSQL_TYPE_LONGLONG bor (1 bsl 15)):16/little>>,
+    B2 = <<H:8/integer-unsigned-little-unit:8>>,
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_float(H), 0 > H ->
+    B1 = <<?MYSQL_TYPE_DOUBLE:16/little>>,
+    B2 = <<H:8/float-unsigned-little-unit:8>>,
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_float(H) ->
+    B1 = <<(?MYSQL_TYPE_DOUBLE bor (1 bsl 15)):16/little>>,
+    B2 = <<H:8/float-unsigned-little-unit:8>>,
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_binary(H), 65536 > size(H) ->
+    B1 = <<?MYSQL_TYPE_VAR_STRING:16/little>>,
+    B2 = pack_binary(H),
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+  when is_binary(H) -> % 16777186 < size(H) -> 'incorrect arguments to mysqld_stmt_execute'??
+    B1 = <<?MYSQL_TYPE_BLOB:16/little>>,
+    B2 = pack_binary(H),
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+stmt_execute_fold_args([null|T], N, P, L1, L2, B) ->
+    B1 = <<0:16/little>>, % dummy
+    X = 1 bsl ((P band 7) + 8 * (N - P div 8 - 1)),
+    stmt_execute_fold_args(T, N, P+1, [B1|L1], L2, B bor X).
 
-binary_to_result(Caps, Binary, Start, Length)
-  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {A, S1, L1} = unpack_integer(Binary, Start, Length),
-    {I, S2, L2} = unpack_integer(Binary, S1, L1),
-    <<S:16/little, W:16/little>> = binary_part(Binary, S2, 4),
-    {M, _, 0} = unpack_binary(Binary, S2+4, L2-4),
-    #result{affected_rows = A, insert_id = I, status = S, warning_count = W, message = M};
-binary_to_result(_Caps, Binary, Start, Length) ->
-    {N, S1, L1} = unpack_integer(Binary, Start, Length),
-    {I, S2, L2} = unpack_integer(Binary, S1, L1),
-    <<S:16/little>> = binary_part(Binary, S2, 2), % < 4.0 -> S:8 ?
-    {M, _, 0} = unpack_binary(Binary, S2+2, L2-2),
-    #result{affected_rows = N, insert_id = I, status = S, message = M}.
+stmt_execute_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Args) ->
+    W = (length(Args) + 7) div 8,
+    {T, D, U} = stmt_execute_fold_args(Args, W, 0, [], [], 0),
+    B = if %0 < E -> iolist_to_binary(lists:flatten([<<0>>,D]));
+            true  -> iolist_to_binary(lists:flatten([<<1>>,T,D]))
+        end,
+    <<
+      ?COM_STMT_EXECUTE,
+      S:32/little,         % stmt_id
+      F,                   % flags=0 : CURSOR_TYPE_NO_CURSOR (def)
+      %%                   %       1 : CURSOR_TYPE_READ_ONLY -> open_cursor
+      %%                   %            -> SERVER_STATUS_CURSOR_EXISTS (-> fetch)
+      0,0,0,0,             % ?
+      U:W/unsigned-unit:8, % null_bits
+      B/binary             % types_suppled_by_client,([type],)[data]
+    >>.

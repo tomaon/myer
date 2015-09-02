@@ -178,6 +178,7 @@
           param_count :: non_neg_integer(),
           params :: list(),
           warning_count :: non_neg_integer(),
+          reserved :: binary(),
           flags :: non_neg_integer(),
           prefetch_rows :: non_neg_integer(),
           result :: tuple(),

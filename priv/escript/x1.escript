@@ -12,7 +12,8 @@ run(3, H, myer) ->
           %{select_db,[<<"test">>]}
           %{refresh, [?REFRESH_GRANT]}
           %{real_query, [<<"SELECT 1">>]} 
-          {real_query, [<<"SELECT * FROM data_types_11_2_1 WHERE k > 0">>]} 
+          %{real_query, [<<"SELECT * FROM data_types_11_2_1 WHERE k > 0">>]} 
+          {stmt_prepare, [<<"SELECT * FROM data_types_11_2_1 WHERE k > ?">>]} 
         ],
     [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->
