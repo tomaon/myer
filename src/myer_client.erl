@@ -91,7 +91,7 @@ handle_info({'EXIT',_Pid,Reason}, State) ->
 
 cleanup(#state{handle=H,caps=C}=S)
   when undefined =/= H ->
-    _ = myer_protocol:close(C,H),
+    _ = myer_protocol:close([H,C]),
     cleanup(S#state{handle = undefined});
 cleanup(#state{}) ->
     baseline:flush().
@@ -125,11 +125,11 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
 connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,version=V}=H) ->
     case apply(M, auth, [
                          [
+                          X,
                           get(user, A),
                           get(password, A),
                           get(database, A),
-                          H#handshake{charset = get(default_character_set,A)},
-                          X
+                          H#handshake{charset = get(default_character_set,A)}
                          ]
                         ]) of
         {ok, _Result, Handle} ->
@@ -143,7 +143,9 @@ authorized(#state{}=S) ->
 
 
 ready(Func, Args, #state{module=M,handle=H,caps=C}=S) ->
-    case apply(M, Func, [H|[C|Args]]) of
+    case apply(M, Func, [
+                         [H|[C|Args]]
+                        ]) of
         {ok, Handle} ->
             {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->

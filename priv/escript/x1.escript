@@ -3,6 +3,11 @@
 %%! -config priv/conf/n1 -s crypto -s eprof
 
 %% -- myer --
+run(3, H, myer) ->
+    L = [
+          {ping,[]}
+        ],
+    [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->
     F = fun (E) ->
                 Q = <<"SELECT * FROM ", E/binary, " WHERE k > 0">>,
@@ -11,8 +16,7 @@ run(2, H, myer) ->
     [ io:format("myer: ~p=~p~n", F(E)) || E <- tables() ];
 run(p, H, myer) ->
     profiling = eprof:start_profiling([element(3,H)]),
-%   run(2, H, myer),
-    timer:sleep(3000),
+    run(3, H, myer),
     profiling_stopped = eprof:stop_profiling(),
     ok = eprof:analyze();
 run(1, undefined, myer) ->

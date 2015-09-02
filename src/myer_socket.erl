@@ -93,8 +93,8 @@ recv(Handle, Term, false) ->
     recv_text(Handle, Term).
 
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_}.
-send(Handle, Binary, Compress) ->
-    send(Handle, Binary, 0, byte_size(Binary), Compress).
+send(#handle{}=H, Binary, Compress) ->
+    send(H, Binary, 0, byte_size(Binary), Compress).
 
 
 -spec remains(handle()) -> non_neg_integer().

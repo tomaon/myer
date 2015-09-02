@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
--export([ping/1, stat/1]).
+-export([stat/1]).
 -export([real_query/2, refresh/2, select_db/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
@@ -30,19 +30,22 @@
 -export([recv/2, recv_packed_binary/2]).
 
 
--export([connect/1, close/2, auth/1]).
+-export([connect/1, close/1, auth/1]).
+-export([ping/1]).
+
+-type(socket() :: tuple()). % TODO
 
 %% == private ==
 
--spec connect([term()]) -> {ok,handshake(),tuple()}|{error,_}|{error,_,tuple()}.
+-spec connect([term()]) -> {ok,handshake(),socket()}|{error,_}|{error,_,socket()}.
 connect(Args) ->
     loop(Args, [fun connect_pre/4, fun recv_status2/3, fun connect_post/4]).
 
--spec close(non_neg_integer(),tuple()) -> ok|{error,_,tuple()}.
-close(Caps,Socket) ->
-    loop([Caps,Socket], [fun close_pre/2, fun send2/3, fun close_post/2]).
+-spec close([term()]) -> ok|{error,_,socket()}.
+close(Args) ->
+    loop(Args, [fun close_pre/2, fun send2/3, fun close_post/2]).
 
--spec auth([term()]) -> {ok,result(),tuple()}|{error,_,tuple()}.
+-spec auth([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 auth(Args) ->
     case loop(Args, [fun auth_pre/5, fun send2/4, fun recv_status2/3, fun auth_post/4]) of
         {ok, #plugin{name=N}, #handshake{}=H, Socket} ->
@@ -55,6 +58,11 @@ auth(Args) ->
 
 auth_alt(Args) ->
     loop(Args, [fun auth_alt_pre/4, fun send2/4, fun recv_status2/3, fun auth_alt_post/4]).
+
+
+-spec ping([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+ping(Args) ->
+    loop(Args, [fun ping_pre/2, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
 
 %% == internal ==
 
@@ -73,7 +81,7 @@ loop(Args, [H|T]) ->
 recv(Term, Caps, Socket) ->
     myer_socket:recv(Socket, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)).
 
-recv_error2(Caps, Socket) ->
+recv_error(Caps, Socket) ->
     recv_reason(#reason{}, Caps, Socket).
 
 recv_packed_unsigned(Caps, S) ->
@@ -95,10 +103,23 @@ recv_packed_unsigned(Caps, S) ->
 recv_result2(Caps, Socket) ->
     recv_result(#result{}, Caps, Socket).
 
+recv_result2(<<0>>, Caps, Socket) ->
+    recv_result(#result{}, Caps, Socket).
+
+recv_status2(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<255>>, Socket} ->
+            recv_error(Caps, Socket);
+        {ok, Byte, Socket} ->
+            {ok, [Byte,Caps,Socket]};
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
 recv_status2(Term, Caps, S) ->
     case recv(1, Caps, S) of
         {ok, <<255>>, Socket} ->
-            recv_error2(Caps, Socket);
+            recv_error(Caps, Socket);
         {ok, Byte, Socket} ->
             {ok, [Byte,Term,Caps,Socket]};
         {error, Reason} ->
@@ -143,7 +164,7 @@ connect_post(<<10>>, MaxLength, Caps, Socket) -> % "always 10"
 
 %% -- internal: close --
 
-close_pre(Caps, Socket) ->
+close_pre(Socket, Caps) ->
     {ok, [<<?COM_QUIT>>,Caps,Socket]}.
 
 close_post(_Caps, Socket) ->
@@ -152,10 +173,10 @@ close_post(_Caps, Socket) ->
 
 %% -- internal: auth --
 
-auth_pre(User, Password, <<>>, #handshake{caps=C}=H, Socket) ->
+auth_pre(Socket, User, Password, <<>>, #handshake{caps=C}=H) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
     {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),C,Socket]};
-auth_pre(User, Password, Database, #handshake{caps=C}=H, Socket) ->
+auth_pre(Socket, User, Password, Database, #handshake{caps=C}=H) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
     {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
 
@@ -164,24 +185,22 @@ auth_post(<<254>>, Handshake, Caps, Socket) ->
 auth_post(<<0>>, _Handshake, Caps, Socket) ->
     recv_result2(Caps, Socket).
 
-auth_alt_pre(Password, #handshake{seed=S,plugin=A}=H, Caps, Socket) ->
+auth_alt_pre(Socket, Caps, Password, #handshake{seed=S,plugin=A}=H) ->
     Scrambled = myer_auth:scramble(Password, S, A),
     {ok, [<<Scrambled/binary,0>>,H,Caps, Socket]}.
 
 auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
     recv_result2(Caps, Socket).
 
+%% -- internal: ping --
 
+ping_pre(Socket, Caps) ->
+    {ok, [<<?COM_PING>>,Caps,myer_socket:reset(Socket)]}.
 
 
 
 
 %% == public ==
-
--spec ping(protocol()) -> {ok,result(),protocol()}|{error,_,protocol()}.
-ping(#protocol{handle=H}=P)
-  when undefined =/= H ->
-    loop([P], [fun ping_pre/1, fun send/2, fun recv_status/1, fun recv_result/2]).
 
 -spec stat(protocol()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
 stat(#protocol{handle=H}=P)
@@ -314,8 +333,7 @@ default_caps(Caps) ->
          %%?CLIENT_INTERACTIVE
          %%?CLIENT_IGNORE_SIGPIPE
          ?CLIENT_TRANSACTIONS,
-                                                %?CLIENT_RESERVED
-         ?CLIENT_SECURE_CONNECTION,
+         ?CLIENT_SECURE_CONNECTION, %?CLIENT_RESERVED2
          ?CLIENT_MULTI_STATEMENTS,
          ?CLIENT_MULTI_RESULTS,
          ?CLIENT_PS_MULTI_RESULTS
@@ -345,11 +363,6 @@ zreset(#protocol{handle=H}=P) ->
 
 next_result_pre(#protocol{}=P) ->
     {ok, [zreset(P)]}.
-
-%% -- internal: loop,ping --
-
-ping_pre(#protocol{}=P) ->
-    {ok, [<<?COM_PING>>,reset(P)]}.
 
 %% -- internal: loop,real_query --
 
@@ -871,7 +884,6 @@ recv_reason(#reason{message=undefined}=R, Caps, Socket)->
     {ok, B, S} = recv(remains(Socket), Caps, Socket),
     recv_reason(R#reason{message = B}, Caps, S);
 recv_reason(#reason{}=R, _Caps, Socket) ->
-    io:format("reason: ~p~n", [R]),
     {error, R, Socket}. % != ok
 
 
