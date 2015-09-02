@@ -20,7 +20,6 @@
 -include("internal.hrl").
 
 %% -- public --
--export([real_query/2]).
 -export([stmt_prepare/2, stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 -export([next_result/1, stmt_next_result/2]).
 
@@ -32,8 +31,11 @@
 -export([connect/1, close/1, auth/1]).
 -export([ping/1, stat/1]).
 -export([refresh/1, select_db/1]).
+-export([query/1]).
 
 -type(socket() :: tuple()). % TODO
+-type(fields() :: [field()]).
+-type(rows() :: [term()]).
 
 %% == private ==
 
@@ -77,6 +79,15 @@ refresh(Args) ->
 select_db(Args) ->
     loop(Args, [fun select_db_pre/3, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
 
+
+-spec query([term()])
+           -> {ok,result(),socket()}|
+              {ok,fields(),rows(),result(),socket()}|
+              {error,_,socket()}.
+query(Args) ->
+    loop(Args, [fun query_pre/3, fun send2/3, fun recv_status2/2, fun query_post/3]).
+
+
 %% == internal ==
 
 loop(Args, []) ->
@@ -99,19 +110,17 @@ recv_error(Caps, Socket) ->
 
 recv_packed_unsigned(Caps, S) ->
     case recv(1, Caps, S) of
-        {ok, <<254>>, Socket} ->
-            recv_unsigned(8, Caps, Socket);
-        {ok, <<253>>, Socket} ->
-            recv_unsigned(3, Caps, Socket);
-        {ok, <<252>>, Socket} ->
-            recv_unsigned(2, Caps, Socket);
-        {ok, <<251>>, Socket} ->
-            {ok, null, Socket};
-        {ok, <<Int>>, Socket} ->
-            {ok, Int, Socket};
-        {error, Reason, P} ->
-            {error, Reason, P}
+        {ok, Byte, Socket} ->
+            recv_packed_unsigned(Byte, Caps, Socket);
+        {error, Reason} ->
+            {error, Reason, S}
     end.
+
+recv_packed_unsigned(<<254>>, Caps, Socket) -> recv_unsigned(8, Caps, Socket);
+recv_packed_unsigned(<<253>>, Caps, Socket) -> recv_unsigned(3, Caps, Socket);
+recv_packed_unsigned(<<252>>, Caps, Socket) -> recv_unsigned(2, Caps, Socket);
+recv_packed_unsigned(<<251>>, _Caps, Socket) -> {ok, null, Socket};
+recv_packed_unsigned(<<Int>>, _Caps, Socket) -> {ok, Int, Socket}.
 
 recv_result2(Caps, Socket) ->
     recv_result(#result{}, Caps, Socket).
@@ -236,17 +245,65 @@ refresh_pre(Socket, Caps, Options) ->
 select_db_pre(Socket, Caps, Database) ->
     {ok, [<<?COM_INIT_DB,Database/binary>>,Caps,reset2(Socket)]}.
 
+%% -- internal: query --
 
+query_pre(Socket, Caps, Query) ->
+    {ok, [<<?COM_QUERY,Query/binary>>,Caps,reset2(Socket)]}.
 
+query_post(<<0>>, Caps, Socket) ->
+    recv_result2(Caps, Socket);
+query_post(Byte, Caps, S) ->
+    case recv_packed_unsigned(Byte, Caps, S) of
+        {ok, U, Socket} ->
+            query_recv_fields(U, Caps, Socket);
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
+    end.
+
+query_recv_fields(U, Caps, S) ->
+    case recv_until_eof2(func_recv_field2(Caps), [], [], Caps, S) of
+        {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
+            query_recv_rows(Fields, Caps, Socket);
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
+    end.
+
+query_recv_rows(Fields, Caps, S) ->
+    case recv_until_eof2(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
+        {ok, [Result,Rows,Socket]} ->
+            {ok, [Fields,Rows,Result,Socket]};
+        {error, Reason, Socket} ->
+            {error, Reason, Socket}
+    end.
+
+recv_until_eof2(Func, Args, List, Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<255>>, Socket} ->
+            recv_error(Caps, Socket);
+        {ok, <<254>>, Socket} ->
+            recv_eof(#result{}, lists:reverse(List), Caps, Socket);
+        {ok, Byte, Socket} ->
+            recv_until_eof2(Func, Args, List, Byte, Caps, Socket);
+        {error, Reason} ->
+            {error, Reason, S}
+    end.
+
+recv_until_eof2(Func, Args, List, Byte, Caps, Handle) -> % TODO
+    P = #protocol{handle = Handle, caps = Caps},
+    case apply(Func, [P|[Byte|Args]]) of
+        {ok, Term, #protocol{handle=H}} ->
+            recv_until_eof2(Func, Args, [Term|List], Caps, H);
+        {error, Reason} ->
+            {error, Reason, Handle}
+    end.
+
+func_recv_field2(Caps)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    fun myer_protocol_text:recv_field_41/2;
+func_recv_field2(_Caps) ->
+    fun myer_protocol_text:recv_field/2.
 
 %% == public ==
-
--spec real_query(protocol(),binary())
-                -> {ok,result(),protocol()}|
-                   {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
-real_query(#protocol{handle=H}=P, Query)
-  when undefined =/= H, is_binary(Query) ->
-    loop([Query,P], [fun real_query_pre/2, fun send/2, fun recv_status/1, fun real_query_post/2]).
 
 -spec stmt_prepare(protocol(),binary()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
 stmt_prepare(#protocol{handle=H}=P, Query)
@@ -287,7 +344,7 @@ stmt_reset(#protocol{handle=H}=P, #prepare{}=X)
                     {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
 next_result(#protocol{handle=H}=P)
   when undefined =/= H ->
-    loop([P], [fun next_result_pre/1, fun recv_status/1, fun real_query_post/2]).
+    loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
 
 -spec stmt_next_result(protocol(),prepare())
                       -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
@@ -387,37 +444,6 @@ zreset(#protocol{handle=H}=P) ->
 
 next_result_pre(#protocol{}=P) ->
     {ok, [zreset(P)]}.
-
-%% -- internal: loop,real_query --
-
-real_query_pre(Query, #protocol{}=P) ->
-    {ok, [<<?COM_QUERY,Query/binary>>,reset(P)]}.
-
-real_query_post(<<0>>, #protocol{}=P) ->
-    recv_result(P);
-real_query_post(Byte, #protocol{}=P) ->
-    case recv_packed_integer(Byte, P) of
-        {ok, N, Protocol} ->
-            real_query_recv_fields(N, Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-real_query_recv_fields(N, #protocol{}=P) ->
-    case recv_until_eof(func_recv_field(P), [], [], P) of
-        {ok, [_Result,Fields,Protocol]} when N == length(Fields) ->
-            real_query_recv_rows(Fields, Protocol);
-        {error, Reason, P} ->
-            {error, Reason, P}
-    end.
-
-real_query_recv_rows(Fields, #protocol{}=P) ->
-    case recv_until_eof(fun myer_protocol_text:recv_row/3, [Fields], [], P) of
-        {ok, [Result,Rows,Protocol]} ->
-            {ok, [Fields,Rows,Result,Protocol]};
-        {error, Reason, P} ->
-            {error, Reason, P}
-    end.
 
 %% -- internal: loop,stmt_close --
 
@@ -543,10 +569,10 @@ stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
 
 %% -- internal: network --
 
-recv_eof(Term, #protocol{caps=C}=P) ->
+recv_eof(Term, #protocol{}=P) ->
     case recv(P, 0) of
         {ok, Binary, Protocol} ->
-            {ok, [binary_to_eof(C,Binary),Term,Protocol]};
+            {ok, [Binary,Term,Protocol]};
         {error, Reason, P} ->
             {error, Reason, P}
     end.
@@ -566,9 +592,6 @@ recv_result(#protocol{caps=C}=P) ->
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
     end.
-
-recv_result(<<0>>, Protocol) ->
-    recv_result(Protocol).
 
 recv_status(#protocol{}=P) ->
     case recv(P, 1) of
@@ -783,14 +806,23 @@ stmt_execute_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Args) ->
     >>.
 
 %% -----------------------------------------------------------------------------
-%% << sql/protocol.cc : net_send_eof/3
+%% << sql/protocol.cc (< 5.7) : net_send_eof/3
+%%    sql/protocol_classic.cc : net_send_eof/3
 %% -----------------------------------------------------------------------------
-binary_to_eof(_Caps, <<>>) -> % FORCE: 4.1.25, TODO
-    #result{status = 0, warning_count = 0};
-binary_to_eof(Caps, Binary) % eof -> #result{}
+recv_eof(#result{warning_count=undefined}=R, Term, Caps, Socket)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    <<W:16/little, S:16/little>> = Binary,
-    #result{status = S, warning_count = W}.
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_eof(R#result{warning_count = U}, Term, Caps, S);
+recv_eof(#result{warning_count=undefined}=R, Term, Caps, Socket) ->
+    recv_eof(R#result{warning_count = 0}, Term, Caps, Socket);
+recv_eof(#result{status=undefined}=R, Term, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_eof(R#result{status = U}, Term, Caps, S);
+recv_eof(#result{status=undefined}=R, Term, Caps, Socket) ->
+    recv_eof(R#result{status = 0}, Term, Caps, Socket);
+recv_eof(#result{}=R, Term, _Caps, Socket) ->
+    {ok, [R,Term,Socket]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_acl.cc (< 5.7)         : send_server_handshake_packet/3

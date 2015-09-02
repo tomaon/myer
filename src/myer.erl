@@ -127,7 +127,7 @@ ping(#myer{worker=W})
 -spec real_query(myer(),binary()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 real_query(#myer{worker=W}, Query)
   when is_pid(W), is_binary(Query) ->
-    myer_client:call(W, {real_query,[Query]}).
+    myer_client:call(W, {query,[Query]}).
 
 -spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
 refresh(#myer{worker=W}, Option)

@@ -10,7 +10,9 @@ run(3, H, myer) ->
           %{ping,[]}
           %{stat,[]}
           %{select_db,[<<"test">>]}
-          {refresh, [?REFRESH_GRANT]}
+          %{refresh, [?REFRESH_GRANT]}
+          %{real_query, [<<"SELECT 1">>]} 
+          {real_query, [<<"SELECT * FROM data_types_11_2_1 WHERE k > 0">>]} 
         ],
     [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->
