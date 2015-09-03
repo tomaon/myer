@@ -20,14 +20,14 @@
 -include("internal.hrl").
 
 %% -- public --
-%% -export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
+%% -export([stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
 %% -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
 -export([connect/1, close/1, auth/1, version/1]).
 -export([ping/1, stat/1, refresh/1, select_db/1]).
 -export([query/1]).
--export([stmt_prepare/1]).
+-export([stmt_prepare/1, stmt_close/1]).
 
 -export([binary_to_float/2,
          recv/3, recv_packed_binary/3, recv_unsigned/3]).
@@ -91,6 +91,286 @@ query(Args) ->
 stmt_prepare(Args) ->
     loop(Args, [fun stmt_prepare_pre/2, fun send/2, fun stmt_prepare_post/1,
                 fun stmt_prepare_recv_params/2, fun stmt_prepare_recv_fields/2]).
+
+-spec stmt_close([term()]) -> {ok,handle()}|{error,_,handle()}.
+stmt_close(Args) ->
+    loop(Args, [fun stmt_close_pre/2, fun send/2, fun stmt_close_post/1]).
+
+%% -- internal: connect --
+
+connect_pre(Address, Port, MaxLength, Timeout) ->
+    case myer_handle:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
+        {ok, #handle{}=H} ->
+            {ok, [MaxLength,H#handle{caps = default_caps(false)}]};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+connect_post(MaxLength, #handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<10>>, Handle} -> % "always 10"
+            recv_handshake(#handshake{maxlength = MaxLength}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
+    end.
+
+%% -- internal: close --
+
+close_pre(#handle{}=H) ->
+    {ok, [<<?COM_QUIT>>,H]}.
+
+close_post(#handle{}=H) ->
+    _ = myer_handle:close(H),
+    {ok, [undefined]}.
+
+%% -- internal: auth --
+
+auth_pre(#handle{}=H, User, Password, <<>>, Charset, #handshake{caps=C}=R) ->
+    Handshake = R#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB), charset = Charset},
+    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),H]};
+auth_pre(#handle{}=H, User, Password, Database, Charset, #handshake{caps=C}=R) ->
+    Handshake = R#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA), charset = Charset},
+    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),H]}.
+
+auth_post(#handshake{caps=C,version=V}=R, #handle{}=H) ->
+    case recv(1, C, H#handle{caps = C, version = V}) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<254>>, Handle} ->
+            recv_plugin(#plugin{}, R, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
+    end.
+
+
+auth_alt_pre(#handle{}=H, Password, #handshake{seed=S,plugin=P}) ->
+    Scrambled = myer_auth:scramble(Password, S, P),
+    {ok, [<<Scrambled/binary,0>>,H]}.
+
+auth_alt_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
+    end.
+
+%% -- internal: ping --
+
+ping_pre(#handle{}=H) ->
+    {ok, [<<?COM_PING>>,reset(H)]}.
+
+%% -- internal: stat --
+
+stat_pre(#handle{}=H) ->
+    {ok, [<<?COM_STATISTICS>>,reset(H)]}.
+
+stat_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle);
+        {ok, Byte, Handle} ->
+            recv_remains(Byte, C, Handle)
+    end.
+
+%% -- internal: refresh --
+
+refresh_pre(#handle{}=H, Options) ->
+    {ok, [<<?COM_REFRESH,Options/little>>,reset(H)]}.
+
+%% -- internal: select_db --
+
+select_db_pre(#handle{}=H, Database) ->
+    {ok, [<<?COM_INIT_DB,Database/binary>>,reset(H)]}.
+
+%% -- internal: query --
+
+query_pre(#handle{}=H, Query) ->
+    {ok, [<<?COM_QUERY,Query/binary>>,reset(H)]}.
+
+query_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle);
+        {ok, Byte, Handle} ->
+            recv_fields_length(Byte, C, Handle)
+    end.
+
+%% -- internal: stmt_prepare --
+
+stmt_prepare_pre(#handle{}=H, Query) ->
+    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(H)]}.
+
+stmt_prepare_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
+            recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR,
+                                  prefetch_rows = 1}, C, Handle); % TODO
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
+    end.
+
+stmt_prepare_recv_params(#prepare{param_count=0}=P, #handle{}=H) ->
+    {ok, [P#prepare{params = [], result = undefined},H]};
+stmt_prepare_recv_params(#prepare{param_count=N}=P, #handle{caps=C}=H) ->
+    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
+        {ok, [Result,Params,Handle]} when N == length(Params)->
+            {ok, [P#prepare{params = Params, result = Result},Handle]};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
+    end.
+
+stmt_prepare_recv_fields(#prepare{field_count=0}=P, #handle{}=H) ->
+    {ok, [P,H]};
+stmt_prepare_recv_fields(#prepare{field_count=N}=P, #handle{caps=C}=H) ->
+    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
+        {ok, [Result,Fields,Handle]} when N == length(Fields) ->
+            {ok, [P#prepare{fields = Fields, result = Result},Handle]};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
+    end.
+
+%% -- internal: stmt_close --
+
+stmt_close_pre(#handle{}=H, #prepare{stmt_id=S}) ->
+    {ok, [<<?COM_STMT_CLOSE,S:32/little>>,reset(H)]}.
+
+stmt_close_post(#handle{}=H) ->
+    {ok, [H]}.
+
+
+
+%%  TODO,TODO
+
+%% == public ==
+
+%% -spec stmt_execute(protocol(),prepare(),[term()])
+%%                   -> {ok,prepare(),protocol()}|
+%%                      {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
+%% stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
+%%   when undefined =/= H, is_list(Args), N == length(Args) ->
+%%     loop([X,Args,P], [fun stmt_execute_pre/3, fun send/3, fun recv_status/2, fun stmt_execute_post/3]).
+
+%% -spec stmt_fetch(protocol(),prepare())
+%%                 -> {ok,prepare(),protocol()}|
+%%                    {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
+%% stmt_fetch(#protocol{handle=H}=P, #prepare{result=R}=X)
+%%   when undefined =/= H ->
+%%     case R#result.status of
+%%         S when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+%%             loop([X,P], [fun stmt_fetch_pre/2, fun send/3, fun stmt_fetch_post/2]);
+%%         _ ->
+%%             {ok, X, P}
+%%     end.
+
+%% -spec stmt_reset(protocol(),prepare()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
+%% stmt_reset(#protocol{handle=H}=P, #prepare{}=X)
+%%   when undefined =/= H ->
+%%     loop([X,P], [fun stmt_reset_pre/2, fun send/3, fun recv_status/2, fun stmt_reset_post/3]).
+
+%% -spec next_result(protocol())
+%%                  -> {ok,result(),protocol()}|
+%%                     {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
+%% next_result(#protocol{handle=H}=P)
+%%   when undefined =/= H ->
+%%     loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
+
+%% -spec stmt_next_result(protocol(),prepare())
+%%                       -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
+%% stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
+%%   when undefined =/= H ->
+%%     loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
+
+
+%% == private ==
+
+%% -- internal: loop,next_result --
+
+%% next_result_pre(#protocol{}=P) ->
+%%     {ok, [reset(P)]}.
+
+%% -- internal: loop,stmt_execute --
+
+%% stmt_execute_pre(Prepare, Args, #protocol{}=P) ->
+%%     B = stmt_execute_to_binary(Prepare, Args),
+%%     {ok, [Prepare,B,reset(P)]}.
+
+%% stmt_execute_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end;
+%% stmt_execute_post(Byte, Prepare, #protocol{}=P) ->
+%%     case recv_packed_integer(Byte, P) of
+%%         {ok, N, Protocol} ->
+%%             stmt_execute_recv_fields(Prepare, N, Protocol);
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
+
+%% stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed_count
+%%     case recv_until_eof(func_recv_field(P), [], [], P) of
+%%         {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
+%%             F = myer_protocol_binary:prepare_fields(Fields),
+%%             stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = F}, Protocol);
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
+
+%% stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P)
+%%   when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+%%     {ok, [X#prepare{result = R, execute = E+1},P]};
+%% stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
+%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
+%%         {ok, [Result,Rows,Protocol]} ->
+%%             {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
+
+%% -- internal: loop,stmt_fetch --
+
+%% stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
+%%     B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
+%%     {ok, [X,B,reset(P)]}.
+
+%% stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
+%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
+%%         {ok, [Result,Rows,Protocol]} ->
+%%             {ok, [F,Rows,X#prepare{result = Result},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
+
+%% -- internal: loop,stmt_next_result --
+
+%% stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
+%%     {ok, [X,reset(P)]}.
+
+%% stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
+
+%% -- internal: loop,stmt_reset --
+
+%% stmt_reset_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
+%%     {ok, [X,<<?COM_STMT_RESET,S:32/little>>,reset(P)]}.
+
+%% stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
 %% == internal ==
 
@@ -237,287 +517,6 @@ send(Term, Binary, #handle{caps=C}=S) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-%% -- internal: connect --
-
-connect_pre(Address, Port, MaxLength, Timeout) ->
-    case myer_handle:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
-        {ok, #handle{}=H} ->
-            {ok, [MaxLength,H#handle{caps = default_caps(false)}]};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-connect_post(MaxLength, #handle{caps=C}=H) ->
-    case recv(1, C, H) of
-        {ok, <<10>>, Handle} -> % "always 10"
-            recv_handshake(#handshake{maxlength = MaxLength}, C, Handle);
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle)
-    end.
-
-%% -- internal: close --
-
-close_pre(#handle{}=H) ->
-    {ok, [<<?COM_QUIT>>,H]}.
-
-close_post(#handle{}=H) ->
-    _ = myer_handle:close(H),
-    {ok, [undefined]}.
-
-%% -- internal: auth --
-
-auth_pre(#handle{}=H, User, Password, <<>>, Charset, #handshake{caps=C}=R) ->
-    Handshake = R#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB), charset = Charset},
-    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),H]};
-auth_pre(#handle{}=H, User, Password, Database, Charset, #handshake{caps=C}=R) ->
-    Handshake = R#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA), charset = Charset},
-    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),H]}.
-
-auth_post(#handshake{caps=C,version=V}=R, #handle{}=H) ->
-    case recv(1, C, H#handle{caps = C, version = V}) of
-        {ok, <<0>>, Handle} ->
-            recv_result(#result{}, C, Handle);
-        {ok, <<254>>, Handle} ->
-            recv_plugin(#plugin{}, R, C, Handle);
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle)
-    end.
-
-
-auth_alt_pre(#handle{}=H, Password, #handshake{seed=S,plugin=P}) ->
-    Scrambled = myer_auth:scramble(Password, S, P),
-    {ok, [<<Scrambled/binary,0>>,H]}.
-
-auth_alt_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
-        {ok, <<0>>, Handle} ->
-            recv_result(#result{}, C, Handle);
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle)
-    end.
-
-%% -- internal: ping --
-
-ping_pre(#handle{}=H) ->
-    {ok, [<<?COM_PING>>,reset(H)]}.
-
-%% -- internal: stat --
-
-stat_pre(#handle{}=H) ->
-    {ok, [<<?COM_STATISTICS>>,reset(H)]}.
-
-stat_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle);
-        {ok, Byte, Handle} ->
-            recv_remains(Byte, C, Handle)
-    end.
-
-%% -- internal: refresh --
-
-refresh_pre(#handle{}=H, Options) ->
-    {ok, [<<?COM_REFRESH,Options/little>>,reset(H)]}.
-
-%% -- internal: select_db --
-
-select_db_pre(#handle{}=H, Database) ->
-    {ok, [<<?COM_INIT_DB,Database/binary>>,reset(H)]}.
-
-%% -- internal: query --
-
-query_pre(#handle{}=H, Query) ->
-    {ok, [<<?COM_QUERY,Query/binary>>,reset(H)]}.
-
-query_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
-        {ok, <<0>>, Handle} ->
-            recv_result(#result{}, C, Handle);
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle);
-        {ok, Byte, Handle} ->
-            recv_fields_length(Byte, C, Handle)
-    end.
-
-%% -- internal: stmt_prepare --
-
-stmt_prepare_pre(#handle{}=H, Query) ->
-    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(H)]}.
-
-stmt_prepare_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
-        {ok, <<0>>, Handle} ->
-            recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR,
-                                  prefetch_rows = 1}, C, Handle); % TODO
-        {ok, <<255>>, Handle} ->
-            recv_reason(#reason{}, C, Handle)
-    end.
-
-stmt_prepare_recv_params(#prepare{param_count=0}=P, #handle{}=H) ->
-    {ok, [P#prepare{params = [], result = undefined},H]};
-stmt_prepare_recv_params(#prepare{param_count=N}=P, #handle{caps=C}=H) ->
-    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
-        {ok, [Result,Params,Handle]} when N == length(Params)->
-            {ok, [P#prepare{params = Params, result = Result},Handle]};
-        {error, Reason, Handle} ->
-            {error, Reason, Handle}
-    end.
-
-stmt_prepare_recv_fields(#prepare{field_count=0}=P, #handle{}=H) ->
-    {ok, [P,H]};
-stmt_prepare_recv_fields(#prepare{field_count=N}=P, #handle{caps=C}=H) ->
-    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
-        {ok, [Result,Fields,Handle]} when N == length(Fields) ->
-            {ok, [P#prepare{fields = Fields, result = Result},Handle]};
-        {error, Reason, Handle} ->
-            {error, Reason, Handle}
-    end.
-
-
-
-%%  TODO,TODO
-
-%% == public ==
-
-%% -spec stmt_close(protocol(),prepare()) -> {ok,undefined,protocol()}|{error,_,protocol()}.
-%% stmt_close(#protocol{handle=H}=P, #prepare{}=X)
-%%   when undefined =/= H ->
-%%     loop([X,P], [fun stmt_close_pre/2, fun send/3, fun stmt_close_post/2]).
-
-%% -spec stmt_execute(protocol(),prepare(),[term()])
-%%                   -> {ok,prepare(),protocol()}|
-%%                      {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
-%% stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
-%%   when undefined =/= H, is_list(Args), N == length(Args) ->
-%%     loop([X,Args,P], [fun stmt_execute_pre/3, fun send/3, fun recv_status/2, fun stmt_execute_post/3]).
-
-%% -spec stmt_fetch(protocol(),prepare())
-%%                 -> {ok,prepare(),protocol()}|
-%%                    {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
-%% stmt_fetch(#protocol{handle=H}=P, #prepare{result=R}=X)
-%%   when undefined =/= H ->
-%%     case R#result.status of
-%%         S when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
-%%             loop([X,P], [fun stmt_fetch_pre/2, fun send/3, fun stmt_fetch_post/2]);
-%%         _ ->
-%%             {ok, X, P}
-%%     end.
-
-%% -spec stmt_reset(protocol(),prepare()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
-%% stmt_reset(#protocol{handle=H}=P, #prepare{}=X)
-%%   when undefined =/= H ->
-%%     loop([X,P], [fun stmt_reset_pre/2, fun send/3, fun recv_status/2, fun stmt_reset_post/3]).
-
-%% -spec next_result(protocol())
-%%                  -> {ok,result(),protocol()}|
-%%                     {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
-%% next_result(#protocol{handle=H}=P)
-%%   when undefined =/= H ->
-%%     loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
-
-%% -spec stmt_next_result(protocol(),prepare())
-%%                       -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
-%% stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
-%%   when undefined =/= H ->
-%%     loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
-
-
-%% == private ==
-
-%% -- internal: loop,next_result --
-
-%% next_result_pre(#protocol{}=P) ->
-%%     {ok, [reset(P)]}.
-
-%% -- internal: loop,stmt_close --
-
-%% stmt_close_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
-%%     {ok, [X,<<?COM_STMT_CLOSE,S:32/little>>,reset(P)]}.
-
-%% stmt_close_post(_Prepare, #protocol{}=P) ->
-%%     {ok, [P]}.
-
-%% -- internal: loop,stmt_execute --
-
-%% stmt_execute_pre(Prepare, Args, #protocol{}=P) ->
-%%     B = stmt_execute_to_binary(Prepare, Args),
-%%     {ok, [Prepare,B,reset(P)]}.
-
-%% stmt_execute_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
-%%     case recv_result(P) of
-%%         {ok, [Result,Protocol]} ->
-%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end;
-%% stmt_execute_post(Byte, Prepare, #protocol{}=P) ->
-%%     case recv_packed_integer(Byte, P) of
-%%         {ok, N, Protocol} ->
-%%             stmt_execute_recv_fields(Prepare, N, Protocol);
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
-
-%% stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed_count
-%%     case recv_until_eof(func_recv_field(P), [], [], P) of
-%%         {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
-%%             F = myer_protocol_binary:prepare_fields(Fields),
-%%             stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = F}, Protocol);
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
-
-%% stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P)
-%%   when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
-%%     {ok, [X#prepare{result = R, execute = E+1},P]};
-%% stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
-%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
-%%         {ok, [Result,Rows,Protocol]} ->
-%%             {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
-
-%% -- internal: loop,stmt_fetch --
-
-%% stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
-%%     B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
-%%     {ok, [X,B,reset(P)]}.
-
-%% stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
-%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
-%%         {ok, [Result,Rows,Protocol]} ->
-%%             {ok, [F,Rows,X#prepare{result = Result},Protocol]};
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
-
-%% -- internal: loop,stmt_next_result --
-
-%% stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
-%%     {ok, [X,reset(P)]}.
-
-%% stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
-%%     case recv_result(P) of
-%%         {ok, [Result,Protocol]} ->
-%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
-
-%% -- internal: loop,stmt_reset --
-
-%% stmt_reset_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
-%%     {ok, [X,<<?COM_STMT_RESET,S:32/little>>,reset(P)]}.
-
-%% stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
-%%     case recv_result(P) of
-%%         {ok, [Result,Protocol]} ->
-%%             {ok, [X#prepare{result = Result},Protocol]};
-%%         {error, Reason, Protocol} ->
-%%             {error, Reason, Protocol}
-%%     end.
 
 %% -----------------------------------------------------------------------------
 %% << include/mysql_com.h : CLIENT_ALL_FLAGS
