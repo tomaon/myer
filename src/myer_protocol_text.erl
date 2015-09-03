@@ -19,53 +19,106 @@
 
 -include("internal.hrl").
 
-%% -- public --
--export([recv_field_41/2, recv_field/2]).
--export([recv_row/3]).
+%% -- private --
+-export([recv_field/3]).
+-export([recv_row/4]).
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv/2, recv_packed_binary/2]).
+                        recv/3, recv_packed_binary/3, recv_unsigned/3]).
 
-%% == public ==
+-type(socket() :: tuple()). % TODO
+-type(caps() :: non_neg_integer()).
+-type(fields() :: [field()]).
+-type(rows() :: [term()]).
+
+%% == private ==
 
 %% @see sql/protocol.cc : Protocol_text::store*
 
--spec recv_field_41(protocol(),binary()) -> {ok, field(), protocol()}.
-recv_field_41(Protocol, Byte) ->
-    {ok, CT, P1} = recv_packed_binary(Byte, Protocol),
-    {ok, DB, P2} = recv_packed_binary(undefined, P1),
-    {ok, TA, P3} = recv_packed_binary(undefined, P2),
-    {ok, OT, P4} = recv_packed_binary(undefined, P3),
-    {ok, NA, P5} = recv_packed_binary(undefined, P4),
-    {ok, ON, P6} = recv_packed_binary(undefined, P5),
-    {ok, B,  P7} = recv(P6, 13),
-    <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
-    {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
-                name = NA, org_name = ON, charsetnr = E, length = L,
-                type = T, flags = F, decimals = N, cast = cast(T) }, P7}. % TODO: mask(flags)
+-spec recv_field(socket(),caps(),byte()) -> {ok, fields(), socket()}.
+recv_field(Socket, Caps, Byte) ->
+    recv_field(#field{}, Byte, Caps, Socket).
 
--spec recv_field(protocol(),binary()) -> {ok, field(), protocol()}.
-recv_field(Protocol, Byte) ->
-    {ok, TA, P1} = recv_packed_binary(Byte, Protocol),
-    {ok, NA, P2} = recv_packed_binary(undefined, P1),
-    {ok, B,  P3} = recv(P2, 10),
-    <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
-    {ok, #field{table = TA, name = NA, length = L,
-                type = T, flags = F, decimals = N, cast = cast(T)}, P3}. % TODO: mask(flags)
+-spec recv_row(socket(),caps(),byte(),fields()) -> {ok, rows(), socket()}.
+recv_row(Socket, Caps, Byte, Fields) ->
+    recv_row(Fields, Byte, Caps, Socket, []).
 
--spec recv_row(protocol(),binary(),[field()]) -> {ok, [term()], protocol()}.
-recv_row(Protocol, Byte, Fields) ->
-    recv_row(Protocol, Byte, Fields, []).
+%% == internal ==
 
-recv_row(Protocol, _Byte, [], List) ->
-    {ok, lists:reverse(List), Protocol};
-recv_row(#protocol{}=P, Byte, [#field{cast=C}=H|T], List) ->
-    case recv_packed_binary(Byte, P) of
-        {ok, null, Protocol} ->
-            recv_row(Protocol, undefined, T, [null|List]);
-        {ok, Binary, Protocol} ->
-            recv_row(Protocol, undefined, T, [C(Binary,H)|List])
+recv_field(#field{catalog=undefined}=F, Byte, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv_packed_binary(Byte, Caps, Socket),
+    recv_field(F#field{catalog=B}, undefined, Caps, S);
+recv_field(#field{db=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv_packed_binary(undefined, Caps, Socket),
+    recv_field(F#field{db=B}, undefined, Caps, S);
+recv_field(#field{table=undefined}=F, undefined, Caps, Socket) ->
+    {ok, B, S} = recv_packed_binary(undefined, Caps, Socket),
+    recv_field(F#field{table=B}, undefined, Caps, S);
+recv_field(#field{org_table=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv_packed_binary(undefined, Caps, Socket),
+    recv_field(F#field{org_table=B}, undefined, Caps, S);
+recv_field(#field{name=undefined}=F, undefined, Caps, Socket) ->
+    {ok, B, S} = recv_packed_binary(undefined, Caps, Socket),
+    recv_field(F#field{name=B}, undefined, Caps, S);
+recv_field(#field{org_name=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv_packed_binary(undefined, Caps, Socket),
+    recv_field(F#field{org_name=B}, undefined, Caps, S);
+recv_field(#field{reserved=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<12>>
+    recv_field(F#field{reserved=B}, undefined, Caps, S);
+recv_field(#field{reserved=undefined}=F, undefined, Caps, Socket) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<3>>
+    recv_field(F#field{reserved=B}, undefined, Caps, S);
+recv_field(#field{charsetnr=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_field(F#field{charsetnr=U}, undefined, Caps, S);
+recv_field(#field{length=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, U, S} = recv_unsigned(4, Caps, Socket),
+    recv_field(F#field{length=U}, undefined, Caps, S);
+recv_field(#field{length=undefined}=F, undefined, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(3, Caps, Socket),
+    recv_field(F#field{length=U}, undefined, Caps, S);
+recv_field(#field{reserved2=undefined}=F, undefined, Caps, Socket)
+  when not(?IS_SET(Caps,?CLIENT_PROTOCOL_41)) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<1>>
+    recv_field(F#field{reserved2=B}, undefined, Caps, S);
+recv_field(#field{type=undefined}=F, undefined, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(1, Caps, Socket),
+    recv_field(F#field{type=U}, undefined, Caps, S);
+recv_field(#field{reserved3=undefined}=F, undefined, Caps, Socket)
+  when not(?IS_SET(Caps,?CLIENT_PROTOCOL_41)) ->
+    {ok, B, S} = recv(1, Caps, Socket), % <<3>>
+    recv_field(F#field{reserved3=B}, undefined, Caps, S);
+recv_field(#field{flags=undefined}=F, undefined, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(2, Caps, Socket),
+    recv_field(F#field{flags=U}, undefined, Caps, S);
+recv_field(#field{decimals=undefined}=F, undefined, Caps, Socket) ->
+    {ok, U, S} = recv_unsigned(1, Caps, Socket),
+    recv_field(F#field{decimals=U}, undefined, Caps, S);
+recv_field(#field{reserved4=undefined}=F, undefined, Caps, Socket)
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+    {ok, B, S} = recv(2, Caps, Socket), % <<0,0>>
+    recv_field(F#field{reserved4=B}, undefined, Caps, S);
+recv_field(#field{type=T}=F, _Byte, _Caps, Socket) ->
+    {ok, F#field{cast = cast(T)}, Socket}.
+
+
+recv_row([], _Byte, _Caps, Socket, List) ->
+    {ok, lists:reverse(List), Socket};
+recv_row([#field{cast=C}=H|T], Byte, Caps, S, List) ->
+    case recv_packed_binary(Byte, Caps, S) of
+        {ok, null, Socket} ->
+            recv_row(T, undefined, Caps, Socket, [null|List]);
+        {ok, Binary, Socket} ->
+            recv_row(T, undefined, Caps, Socket, [C(Binary,H)|List])
     end.
 
 %% == internal ==

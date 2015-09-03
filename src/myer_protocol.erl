@@ -24,8 +24,7 @@
 %% -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
--export([binary_to_float/2]).
--export([recv/2, recv_packed_binary/2]).
+-export([binary_to_float/2, recv/3, recv_packed_binary/3, recv_unsigned/3]).
 
 
 -export([connect/1, close/1, auth/1]).
@@ -97,6 +96,24 @@ stmt_prepare(Args) ->
 
 %% == internal ==
 
+binary_to_float(Binary, _Decimals) ->
+    try binary_to_float(Binary)
+    catch
+        _:_ ->
+            try binary_to_integer(Binary) of
+                I ->
+                    I * 1.0
+            catch
+                _:_ ->
+                    undefined % for v5.1 (out_of_range)
+            end
+    end.
+
+binary_to_version(Binary) ->
+    F = fun(E) -> try binary_to_integer(E,10) catch _:_ -> E end end,
+    L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
+    lists:map(F, lists:sublist(L,3)).
+
 loop(Args, []) ->
     list_to_tuple([ok|Args]);
 loop(Args, [H|T]) ->
@@ -118,12 +135,6 @@ recv(Term, Caps, S) ->
             throw({error,Reason,S})
     end.
 
-recv_fields_func(Caps)
-  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    fun myer_protocol_text:recv_field_41/2;
-recv_fields_func(_Caps) ->
-    fun myer_protocol_text:recv_field/2.
-
 recv_fields_length(Byte, Caps, S) ->
     case recv_packed_unsigned(Byte, Caps, S) of
         {ok, U, Socket} ->
@@ -131,7 +142,7 @@ recv_fields_length(Byte, Caps, S) ->
     end.
 
 recv_fields(U, Caps, S) ->
-    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
         {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
             {ok, [Fields,Caps,Socket]}
     end.
@@ -152,6 +163,7 @@ recv_packed_unsigned(Caps, S) ->
             recv_packed_unsigned(Byte, Caps, Socket)
     end.
 
+recv_packed_unsigned(undefined, Caps, Socket) -> recv_packed_unsigned(Caps, Socket);
 recv_packed_unsigned(<<254>>, Caps, Socket) -> recv_unsigned(8, Caps, Socket);
 recv_packed_unsigned(<<253>>, Caps, Socket) -> recv_unsigned(3, Caps, Socket);
 recv_packed_unsigned(<<252>>, Caps, Socket) -> recv_unsigned(2, Caps, Socket);
@@ -173,7 +185,7 @@ recv_result(Caps, S) ->
     end.
 
 recv_rows(Fields, Caps, S) ->
-    case recv_until_eof(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
+    case recv_until_eof(fun myer_protocol_text:recv_row/4, [Fields], [], Caps, S) of
         {ok, [Result,Rows,Socket]} ->
             {ok, [Fields,Rows,Result,Socket]}
     end.
@@ -194,11 +206,10 @@ recv_until_eof(Func, Args, List, Caps, S) ->
             recv_until_eof(Func, Args, List, Byte, Caps, Socket)
     end.
 
-recv_until_eof(Func, Args, List, Byte, Caps, Handle) -> % TODO
-    P = #protocol{handle = Handle, caps = Caps},
-    case apply(Func, [P|[Byte|Args]]) of
-        {ok, Term, #protocol{handle=H}} ->
-            recv_until_eof(Func, Args, [Term|List], Caps, H)
+recv_until_eof(Func, Args, List, Byte, Caps, S) ->
+    case apply(Func, [S|[Caps|[Byte|Args]]]) of
+        {ok, Term, Socket} ->
+            recv_until_eof(Func, Args, [Term|List], Caps, Socket)
     end.
 
 remains(Socket) ->
@@ -342,7 +353,7 @@ stmt_prepare_post(Caps, S) ->
 stmt_prepare_recv_params(#prepare{param_count=0}=P, Caps, Socket) ->
     {ok, [P#prepare{params = [], result = undefined},Caps,Socket]};
 stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
-    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
         {ok, [Result,Params,Socket]} when N == length(Params)->
             {ok, [P#prepare{params = Params, result = Result},Caps,Socket]};
         {error, Reason, Socket} ->
@@ -352,7 +363,7 @@ stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
 stmt_prepare_recv_fields(#prepare{field_count=0}=P, _Caps, Socket) ->
     {ok, [P,Socket]};
 stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
-    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
         {ok, [Result,Fields,Socket]} when N == length(Fields) ->
             {ok, [P#prepare{fields = Fields, result = Result},Socket]};
         {error, Reason, Socket} ->
@@ -409,48 +420,6 @@ stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
 
 
 %% == private ==
-
--spec binary_to_float(binary(),non_neg_integer()) -> float().
-binary_to_float(Binary, _Decimals) ->
-    try binary_to_float(Binary)
-    catch
-        _:_ ->
-            try binary_to_integer(Binary) of
-                I ->
-                    I * 1.0
-            catch
-                _:_ ->
-                    undefined % for v5.1 (out_of_range)
-            end
-    end.
-
--spec recv(protocol(),term()) -> {ok,binary(),protocol()}|{error,_,protocol()}.
-recv(#protocol{handle=H,caps=C}=P, Term) ->
-    case myer_socket:recv(H, Term, ?IS_SET(C,?CLIENT_COMPRESS)) of
-        {ok, Binary, Handle} ->
-            {ok, Binary, P#protocol{handle = Handle}};
-        {error, Reason} ->
-            {error, Reason, P}
-    end.
-
--spec recv_packed_binary(undefined|binary(),protocol())
-                        -> {ok,null|binary(),protocol()}|{error,_,protocol()}.
-recv_packed_binary(Byte, #protocol{}=P) ->
-    case recv_packed_integer(Byte, P) of
-        {ok, null, Protocol} ->
-            {ok, null, Protocol};
-        {ok, 0, Protocol} ->
-            {ok, <<>>, Protocol};
-        {ok, Length, Protocol} ->
-            recv(Protocol, Length)
-    end.
-
-%% == internal ==
-
-binary_to_version(Binary) ->
-    F = fun(E) -> try binary_to_integer(E,10) catch _:_ -> E end end,
-    L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
-    lists:map(F, lists:sublist(L,3)).
 
 %% -- internal: loop,next_result --
 
@@ -546,14 +515,6 @@ binary_to_version(Binary) ->
 %%             {error, Reason, Protocol}
 %%     end.
 
-recv_unsigned(Length, #protocol{}=P) ->
-    case recv(P, Length) of
-        {ok, Binary, Protocol} ->
-            {ok, [binary:decode_unsigned(Binary,little),Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
 %% -----------------------------------------------------------------------------
 %% << include/mysql_com.h : CLIENT_ALL_FLAGS
 %% -----------------------------------------------------------------------------
@@ -603,19 +564,6 @@ pack_integer(Value) when Value < 251      -> <<Value>>;
 pack_integer(Value) when Value < 65536    -> <<252, Value:16/little>>;
 pack_integer(Value) when Value < 16777216 -> <<253, Value:24/little>>;
 pack_integer(Value)                       -> <<254, Value:64/little>>.
-
-recv_packed_integer(undefined, Protocol) ->
-    case recv(Protocol, 1) of
-        {ok, Byte, #protocol{}=P} ->
-            recv_packed_integer(Byte, P);
-        {error, Reason, P} ->
-            {error, Reason, P}
-    end;
-recv_packed_integer(<<254>>, Protocol) -> recv_unsigned(8, Protocol);
-recv_packed_integer(<<253>>, Protocol) -> recv_unsigned(3, Protocol);
-recv_packed_integer(<<252>>, Protocol) -> recv_unsigned(2, Protocol);
-recv_packed_integer(<<251>>, Protocol) -> {ok, null, Protocol};
-recv_packed_integer(<<Int>>, Protocol) -> {ok, Int, Protocol}.
 
 %% -----------------------------------------------------------------------------
 %% << sql-common/client.c : send_client_reply_packet/3

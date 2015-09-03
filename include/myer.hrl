@@ -92,11 +92,15 @@
           org_table :: binary(),
           name :: binary(),
           org_name :: binary(),
+          reserved :: binary(),
           charsetnr :: non_neg_integer(),
           length :: non_neg_integer(),
           type :: non_neg_integer(),
+          reserved2 :: binary(),
           flags :: integer(),
+          reserved3 :: binary(),
           decimals :: non_neg_integer(),
+          reserved4 :: binary(),
           cast :: atom()|{atom(),integer()}|function()
          }).
 
