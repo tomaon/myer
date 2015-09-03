@@ -27,10 +27,9 @@ run(6, H, P1, myer) ->
 run(3, H, P1, myer) ->
     {T, V} = timer:tc(myer, stmt_execute, [H,P1,[0]]),
     case V of
-        {ok,F,R,P2} ->
+        {ok,R,P2} ->
             io:format("myer: stmt_execute=~p~n", [T]),
             12 = element(3, P2), % field_count
-            F  = element(4, P2), % fields
             25 = length(R),
             N = case myer:more_results(P2) of true -> 5; false -> 7 end,
             run(N, H, P2, myer)
@@ -50,7 +49,7 @@ run(p, H, undefined, myer) ->
 run(1, undefined, undefined, myer) ->
     case myer:checkout(mysql_pool) of
         {ok, H} ->
-            run(p, H, undefined, myer),
+            run(2, H, undefined, myer),
             ok = myer:checkin(H)
     end;
 %% -- --

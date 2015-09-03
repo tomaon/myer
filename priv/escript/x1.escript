@@ -13,7 +13,6 @@ run(3, H, myer) ->
           %{refresh, [?REFRESH_GRANT]}
           %{real_query, [<<"SELECT 1">>]} 
           %{real_query, [<<"SELECT * FROM data_types_11_2_1 WHERE k > 0">>]} 
-          {stmt_prepare, [<<"SELECT * FROM data_types_11_2_1 WHERE k > ?">>]} 
         ],
     [ io:format("myer: ~p=~p~n", [M,timer:tc(myer,M,[H|A])]) || {M,A} <- L ];
 run(2, H, myer) ->
@@ -24,7 +23,7 @@ run(2, H, myer) ->
     [ io:format("myer: ~p=~p~n", F(E)) || E <- tables() ];
 run(p, H, myer) ->
     profiling = eprof:start_profiling([element(3,H)]),
-    run(3, H, myer),
+    run(2, H, myer),
     profiling_stopped = eprof:stop_profiling(),
     ok = eprof:analyze();
 run(1, undefined, myer) ->
