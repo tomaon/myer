@@ -126,7 +126,7 @@ loop(Args, [H|T]) ->
     end.
 
 recv(Term, Caps, #handle{}=S) ->
-    case myer_socket:recv(S, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
+    case myer_handle:recv(S, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Binary, Handle} ->
             {ok, Binary, Handle};
         {error, Reason} ->
@@ -217,13 +217,13 @@ recv_until_eof(Func, Args, List, Byte, Caps, #handle{}=S) ->
     end.
 
 remains(Handle) ->
-    myer_socket:remains(Handle).
+    myer_handle:remains(Handle).
 
 reset(Handle) ->
-    myer_socket:reset(Handle).
+    myer_handle:reset(Handle).
 
 send(Binary, #handle{caps=C}=S) ->
-    case myer_socket:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+    case myer_handle:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [Handle]};
         {error, Reason} ->
@@ -231,7 +231,7 @@ send(Binary, #handle{caps=C}=S) ->
     end.
 
 send(Term, Binary, #handle{caps=C}=S) ->
-    case myer_socket:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+    case myer_handle:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
         {ok, Handle} ->
             {ok, [Term,Handle]};
         {error, Reason} ->
@@ -241,7 +241,7 @@ send(Term, Binary, #handle{caps=C}=S) ->
 %% -- internal: connect --
 
 connect_pre(Address, Port, MaxLength, Timeout) ->
-    case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
+    case myer_handle:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
         {ok, #handle{}=H} ->
             {ok, [MaxLength,H#handle{caps = default_caps(false)}]};
         {error, Reason} ->
@@ -262,7 +262,7 @@ close_pre(#handle{}=H) ->
     {ok, [<<?COM_QUIT>>,H]}.
 
 close_post(#handle{}=H) ->
-    _ = myer_socket:close(H),
+    _ = myer_handle:close(H),
     {ok, [undefined]}.
 
 %% -- internal: auth --

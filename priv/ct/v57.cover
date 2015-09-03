@@ -8,7 +8,7 @@
 %            myer_auth,
 %            myer_client,
 %            myer_debug,
-%            myer_network,
+%            myer_handle,
 %            myer_protocol,
 %            myer_protocol_binary,
 %            myer_protocol_text
