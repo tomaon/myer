@@ -213,6 +213,25 @@
 
 -type(plugin() :: #plugin{}).
 
+-record(handle, {
+          socket        :: tuple(),             % baseline_socket:socket()
+          maxlength     :: non_neg_integer(),
+          timeout       :: timeout(),
+
+          caps          :: non_neg_integer(),
+          version       :: [non_neg_integer()],
+
+          seqnum = 0    :: non_neg_integer(),
+          buf    = <<>> :: binary(),
+          start  = 0    :: non_neg_integer(),
+          length = 0    :: non_neg_integer(),
+
+          zseqnum = 0 :: non_neg_integer(),
+          zraw = <<>> :: binary()
+         }).
+
+-type(handle() :: #handle{}).
+
 %% == type ==
 
 -type(properties() :: [{atom(),term()}]).

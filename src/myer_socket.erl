@@ -27,22 +27,6 @@
 
 -export([reset/1, zreset/1]).
 
-%% -- internal --
--record(handle, {
-          socket        :: tuple(),             % baseline_socket:socket()
-          maxlength     :: non_neg_integer(),
-          timeout       :: timeout(),
-          seqnum = 0    :: non_neg_integer(),
-          buf    = <<>> :: binary(),
-          start  = 0    :: non_neg_integer(),
-          length = 0    :: non_neg_integer(),
-
-          zseqnum = 0 :: non_neg_integer(),
-          zraw = <<>> :: binary()
-         }).
-
--type(handle() :: #handle{}).
-
 %% == public ==
 
 -spec connect(inet:ip_address()|inet:hostname(),inet:port_number(),
