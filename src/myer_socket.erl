@@ -24,6 +24,7 @@
 -export([recv/1]).
 -export([recv/3, send/3]).
 -export([remains/1]).
+-export([set_caps/2, set_version/2]).
 
 -export([reset/1, zreset/1]).
 
@@ -84,6 +85,16 @@ send(#handle{}=H, Binary, Compress) ->
 -spec remains(handle()) -> non_neg_integer().
 remains(#handle{length=L}) ->
     L.
+
+
+-spec set_caps(handle(),non_neg_integer()) -> handle().
+set_caps(#handle{caps=undefined}=H, Caps) ->
+    H#handle{caps = Caps}.
+
+-spec set_version(handle(),non_neg_integer()) -> handle().
+set_version(#handle{version=undefined}=H, Version) ->
+    H#handle{version = Version}.
+
 
 
 -spec reset(handle()) -> handle().
