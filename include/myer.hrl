@@ -104,4 +104,9 @@
           cast :: atom()|{atom(),integer()}|function()
          }).
 
+%% == type ==
 -type(field() :: #field{}).
+-type(fields() :: [field()]).
+-type(row() :: [term()]).
+-type(rows() :: [row()]).
+-type(version() :: [non_neg_integer()]).

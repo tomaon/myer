@@ -24,75 +24,73 @@
 %% -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
--export([binary_to_float/2, recv/3, recv_packed_binary/3, recv_unsigned/3]).
-
-
--export([connect/1, close/1, auth/1]).
--export([ping/1, stat/1]).
--export([refresh/1, select_db/1]).
+-export([connect/1, close/1, auth/1, version/1]).
+-export([ping/1, stat/1, refresh/1, select_db/1]).
 -export([query/1]).
 -export([stmt_prepare/1]).
 
--type(socket() :: tuple()). % TODO
--type(fields() :: [field()]).
--type(rows() :: [term()]).
+-export([binary_to_float/2,
+         recv/3, recv_packed_binary/3, recv_unsigned/3]).
 
 %% == private ==
 
--spec connect([term()]) -> {ok,handshake(),socket()}|{error,_}|{error,_,socket()}.
+-spec connect([term()]) -> {ok,handshake(),handle()}|{error,_}|{error,_,handle()}.
 connect(Args) ->
-    loop(Args, [fun connect_pre/4, fun connect_post/3]).
+    loop(Args, [fun connect_pre/4, fun connect_post/2]).
 
--spec close([term()]) -> ok|{error,_,socket()}.
+-spec close([term()]) -> ok|{error,_,handle()}.
 close(Args) ->
-    loop(Args, [fun close_pre/2, fun send/3, fun close_post/2]).
+    loop(Args, [fun close_pre/1, fun send/2, fun close_post/1]).
 
--spec auth([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+-spec auth([term()]) -> {ok,result(),handle()}|{error,_,handle()}.
 auth(Args) ->
-    case loop(Args, [fun auth_pre/5, fun send/4, fun auth_post/3]) of
-        {ok, #plugin{name=N}, #handshake{}=H, Socket} ->
-            auth_alt([Socket,lists:nth(3,Args),H#handshake{plugin = N}]);
-        {ok, #result{}=R, Socket}->
-            {ok, R, Socket};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+    case loop(Args, [fun auth_pre/6, fun send/3, fun auth_post/2]) of
+        {ok, #plugin{name=N}, #handshake{}=H, Handle} ->
+            auth_alt([Handle,lists:nth(3,Args),H#handshake{plugin = N}]);
+        {ok, #result{}=R, Handle}->
+            {ok, R, Handle};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/3, fun send/3, fun auth_alt_post/2]).
+    loop(Args, [fun auth_alt_pre/3, fun send/3, fun auth_alt_post/1]).
+
+-spec version(handshake()) -> version().
+version(#handshake{version=V}) ->
+    V.
 
 
--spec ping([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+-spec ping([term()]) -> {ok,result(),handle()}|{error,_,handle()}.
 ping(Args) ->
-    loop(Args, [fun ping_pre/2, fun send/3, fun recv_result/2]).
+    loop(Args, [fun ping_pre/1, fun send/2, fun recv_result/1]).
 
--spec stat([term()]) -> {ok,binary(),socket()}|{error,_,socket()}.
+-spec stat([term()]) -> {ok,binary(),handle()}|{error,_,handle()}.
 stat(Args) ->
-    loop(Args, [fun stat_pre/2, fun send/3, fun stat_post/2]).
+    loop(Args, [fun stat_pre/1, fun send/2, fun stat_post/1]).
 
-
--spec refresh([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+-spec refresh([term()]) -> {ok,result(),handle()}|{error,_,handle()}.
 refresh(Args) ->
-    loop(Args, [fun refresh_pre/3, fun send/3, fun recv_result/2]).
+    loop(Args, [fun refresh_pre/2, fun send/2, fun recv_result/1]).
 
--spec select_db([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
+-spec select_db([term()]) -> {ok,result(),handle()}|{error,_,handle()}.
 select_db(Args) ->
-    loop(Args, [fun select_db_pre/3, fun send/3, fun recv_result/2]).
+    loop(Args, [fun select_db_pre/2, fun send/2, fun recv_result/1]).
 
 
 -spec query([term()])
-           -> {ok,result(),socket()}|
-              {ok,fields(),rows(),result(),socket()}|
-              {error,_,socket()}.
+           -> {ok,result(),handle()}|
+              {ok,fields(),rows(),result(),handle()}|
+              {error,_,handle()}.
 query(Args) ->
-    loop(Args, [fun query_pre/3, fun send/3, fun query_post/2,
-                fun recv_fields/3, fun recv_rows/3]).
+    loop(Args, [fun query_pre/2, fun send/2, fun query_post/1,
+                fun recv_fields/2, fun recv_rows/2]).
 
 
--spec stmt_prepare([term()]) -> {ok,prepare(),socket()}|{error,_,socket()}.
+-spec stmt_prepare([term()]) -> {ok,prepare(),handle()}|{error,_,handle()}.
 stmt_prepare(Args) ->
-    loop(Args, [fun stmt_prepare_pre/3, fun send/3, fun stmt_prepare_post/2,
-                fun stmt_prepare_recv_params/3, fun stmt_prepare_recv_fields/3]).
+    loop(Args, [fun stmt_prepare_pre/2, fun send/2, fun stmt_prepare_post/1,
+                fun stmt_prepare_recv_params/2, fun stmt_prepare_recv_fields/2]).
 
 %% == internal ==
 
@@ -123,113 +121,119 @@ loop(Args, [H|T]) ->
         {error, Reason} ->                      % connect_pre/4, recv_reason/3
             {error, Reason}
     catch
-        {error, Reason, Socket} ->              % recv/3
-            {error, Reason, Socket}
+        {error, Reason, Handle} ->              % recv/3
+            {error, Reason, Handle}
     end.
 
-recv(Term, Caps, S) ->
+recv(Term, Caps, #handle{}=S) ->
     case myer_socket:recv(S, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
-        {ok, Binary, Socket} ->
-            {ok, Binary, Socket};
+        {ok, Binary, Handle} ->
+            {ok, Binary, Handle};
         {error, Reason} ->
             throw({error,Reason,S})
     end.
 
-recv_fields_length(Byte, Caps, S) ->
+%%recv_fields_func(Caps) % TODO
+%%  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+%%    fun myer_protocol_text:recv_field_41/3;
+recv_fields_func(_Caps) ->
+    fun myer_protocol_text:recv_field/3.
+
+recv_fields_length(Byte, Caps, #handle{}=S) ->
     case recv_packed_unsigned(Byte, Caps, S) of
-        {ok, U, Socket} ->
-            {ok, [U,Caps,Socket]}
+        {ok, U, Handle} ->
+            {ok, [U,Handle]}
     end.
 
-recv_fields(U, Caps, S) ->
-    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
-        {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
-            {ok, [Fields,Caps,Socket]}
+recv_fields(U, #handle{caps=C}=S) -> % < loop
+    case recv_until_eof(recv_fields_func(S), [], [], C, S) of
+        {ok, [_Result,Fields,Handle]} when U == length(Fields) ->
+            {ok, [Fields,Handle]}
     end.
 
-recv_packed_binary(Byte, Caps, S) ->
+recv_packed_binary(Byte, Caps, #handle{}=S) ->
     case recv_packed_unsigned(Byte, Caps, S) of
-        {ok, null, Socket} ->
-            {ok, null, Socket};
-        {ok, 0, Socket} ->
-            {ok, <<>>, Socket};
-        {ok, Length, Socket} ->
-            recv(Length, Caps, Socket)
+        {ok, null, Handle} ->
+            {ok, null, Handle};
+        {ok, 0, Handle} ->
+            {ok, <<>>, Handle};
+        {ok, Length, Handle} ->
+            recv(Length, Caps, Handle)
     end.
 
-recv_packed_unsigned(Caps, S) ->
+recv_packed_unsigned(Caps, #handle{}=S) ->
     case recv(1, Caps, S) of
-        {ok, Byte, Socket} ->
-            recv_packed_unsigned(Byte, Caps, Socket)
+        {ok, Byte, Handle} ->
+            recv_packed_unsigned(Byte, Caps, Handle)
     end.
 
-recv_packed_unsigned(undefined, Caps, Socket) -> recv_packed_unsigned(Caps, Socket);
-recv_packed_unsigned(<<254>>, Caps, Socket) -> recv_unsigned(8, Caps, Socket);
-recv_packed_unsigned(<<253>>, Caps, Socket) -> recv_unsigned(3, Caps, Socket);
-recv_packed_unsigned(<<252>>, Caps, Socket) -> recv_unsigned(2, Caps, Socket);
-recv_packed_unsigned(<<251>>, _Caps, Socket) -> {ok, null, Socket};
-recv_packed_unsigned(<<Int>>, _Caps, Socket) -> {ok, Int, Socket}.
+recv_packed_unsigned(undefined, Caps, Handle) -> recv_packed_unsigned(Caps, Handle);
+recv_packed_unsigned(<<254>>,   Caps, Handle) -> recv_unsigned(8, Caps, Handle);
+recv_packed_unsigned(<<253>>,   Caps, Handle) -> recv_unsigned(3, Caps, Handle);
+recv_packed_unsigned(<<252>>,   Caps, Handle) -> recv_unsigned(2, Caps, Handle);
+recv_packed_unsigned(<<251>>,  _Caps, Handle) -> {ok, null, Handle};
+recv_packed_unsigned(<<Int>>,  _Caps, Handle) -> {ok, Int, Handle}.
 
-recv_remains(Byte, Caps, S) ->
+recv_remains(Byte, Caps, #handle{}=S) ->
     case recv(remains(S), Caps, S) of
-        {ok, Binary, Socket} ->
-            {ok, [<<Byte/binary,Binary/binary>>,Socket]}
+        {ok, Binary, Handle} ->
+            {ok, [<<Byte/binary,Binary/binary>>,Handle]}
     end.
 
-recv_result(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<0>>, Socket} ->
-            recv_result(#result{}, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket)
+recv_result(#handle{caps=C}=S) -> % < loop
+    case recv(1, C, S) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
     end.
 
-recv_rows(Fields, Caps, S) ->
-    case recv_until_eof(fun myer_protocol_text:recv_row/4, [Fields], [], Caps, S) of
-        {ok, [Result,Rows,Socket]} ->
-            {ok, [Fields,Rows,Result,Socket]}
+recv_rows(Fields, #handle{caps=C}=S) -> % < loop
+    case recv_until_eof(fun myer_protocol_text:recv_row/4, [Fields], [], C, S) of
+        {ok, [Result,Rows,Handle]} ->
+            {ok, [Fields,Rows,Result,Handle]}
     end.
 
-recv_unsigned(Length, Caps, S) ->
+recv_unsigned(Length, Caps, #handle{}=S) ->
     case recv(Length, Caps, S) of
-        {ok, Binary, Socket} ->
-            {ok, binary:decode_unsigned(Binary,little), Socket}
+        {ok, Binary, Handle} ->
+            {ok, binary:decode_unsigned(Binary,little), Handle}
     end.
 
-recv_until_eof(Func, Args, List, Caps, S) ->
+recv_until_eof(Func, Args, List, Caps, #handle{}=S) ->
     case recv(1, Caps, S) of
-        {ok, <<254>>, Socket} ->
-            recv_eof(#result{}, lists:reverse(List), Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket);
-        {ok, Byte, Socket} ->
-            recv_until_eof(Func, Args, List, Byte, Caps, Socket)
+        {ok, <<254>>, Handle} ->
+            recv_eof(#result{}, lists:reverse(List), Caps, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, Caps, Handle);
+        {ok, Byte, Handle} ->
+            recv_until_eof(Func, Args, List, Byte, Caps, Handle)
     end.
 
-recv_until_eof(Func, Args, List, Byte, Caps, S) ->
+recv_until_eof(Func, Args, List, Byte, Caps, #handle{}=S) ->
     case apply(Func, [S|[Caps|[Byte|Args]]]) of
-        {ok, Term, Socket} ->
-            recv_until_eof(Func, Args, [Term|List], Caps, Socket)
+        {ok, Term, Handle} ->
+            recv_until_eof(Func, Args, [Term|List], Caps, Handle)
     end.
 
-remains(Socket) ->
-    myer_socket:remains(Socket).
+remains(Handle) ->
+    myer_socket:remains(Handle).
 
-reset(Socket) ->
-    myer_socket:reset(Socket).
+reset(Handle) ->
+    myer_socket:reset(Handle).
 
-send(Binary, Caps, S) ->
-    case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
-        {ok, Socket} ->
-            {ok, [Caps,Socket]};
+send(Binary, #handle{caps=C}=S) ->
+    case myer_socket:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+        {ok, Handle} ->
+            {ok, [Handle]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-send(Term, Binary, Caps, S) ->
-    case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
-        {ok, Socket} ->
-            {ok, [Term,Caps,Socket]};
+send(Term, Binary, #handle{caps=C}=S) ->
+    case myer_socket:send(S, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+        {ok, Handle} ->
+            {ok, [Term,Handle]};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -238,136 +242,136 @@ send(Term, Binary, Caps, S) ->
 
 connect_pre(Address, Port, MaxLength, Timeout) ->
     case myer_socket:connect(Address, Port, MaxLength, timer:seconds(Timeout)) of
-        {ok, Socket} ->
-            {ok, [MaxLength,default_caps(false),Socket]};
+        {ok, #handle{}=H} ->
+            {ok, [MaxLength,H#handle{caps = default_caps(false)}]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-connect_post(MaxLength, Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<10>>, Socket} -> % "always 10"
-            recv_handshake(#handshake{maxlength = MaxLength}, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket)
+connect_post(MaxLength, #handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<10>>, Handle} -> % "always 10"
+            recv_handshake(#handshake{maxlength = MaxLength}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
     end.
 
 %% -- internal: close --
 
-close_pre(Socket, Caps) ->
-    {ok, [<<?COM_QUIT>>,Caps,Socket]}.
+close_pre(#handle{}=H) ->
+    {ok, [<<?COM_QUIT>>,H]}.
 
-close_post(_Caps, Socket) ->
-    _ = myer_socket:close(Socket),
+close_post(#handle{}=H) ->
+    _ = myer_socket:close(H),
     {ok, [undefined]}.
 
 %% -- internal: auth --
 
-auth_pre(Socket, User, Password, <<>>, #handshake{caps=C}=H) ->
-    Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB)},
-    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),C,Socket]};
-auth_pre(Socket, User, Password, Database, #handshake{caps=C}=H) ->
-    Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
-    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
+auth_pre(#handle{}=H, User, Password, <<>>, Charset, #handshake{caps=C}=R) ->
+    Handshake = R#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB), charset = Charset},
+    {ok, [Handshake,auth_to_binary(User,Password,<<>>,Handshake),H]};
+auth_pre(#handle{}=H, User, Password, Database, Charset, #handshake{caps=C}=R) ->
+    Handshake = R#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA), charset = Charset},
+    {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),H]}.
 
-auth_post(Handshake, Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<0>>, Socket} ->
-            recv_result(#result{}, Caps, Socket);
-        {ok, <<254>>, Socket} ->
-            recv_plugin(#plugin{}, Handshake, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket)
+auth_post(#handshake{caps=C,version=V}=R, #handle{}=H) ->
+    case recv(1, C, H#handle{caps = C, version = V}) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<254>>, Handle} ->
+            recv_plugin(#plugin{}, R, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
     end.
 
 
-auth_alt_pre(Socket, Password, #handshake{caps=C,seed=S,plugin=A}) ->
-    Scrambled = myer_auth:scramble(Password, S, A),
-    {ok, [<<Scrambled/binary,0>>,C, Socket]}.
+auth_alt_pre(#handle{}=H, Password, #handshake{seed=S,plugin=P}) ->
+    Scrambled = myer_auth:scramble(Password, S, P),
+    {ok, [<<Scrambled/binary,0>>,H]}.
 
-auth_alt_post(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<0>>, Socket} ->
-            recv_result(#result{}, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket)
+auth_alt_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
     end.
 
 %% -- internal: ping --
 
-ping_pre(Socket, Caps) ->
-    {ok, [<<?COM_PING>>,Caps,reset(Socket)]}.
+ping_pre(#handle{}=H) ->
+    {ok, [<<?COM_PING>>,reset(H)]}.
 
 %% -- internal: stat --
 
-stat_pre(Socket, Caps) ->
-    {ok, [<<?COM_STATISTICS>>,Caps,reset(Socket)]}.
+stat_pre(#handle{}=H) ->
+    {ok, [<<?COM_STATISTICS>>,reset(H)]}.
 
-stat_post(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket);
-        {ok, Byte, Socket} ->
-            recv_remains(Byte, Caps, Socket)
+stat_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle);
+        {ok, Byte, Handle} ->
+            recv_remains(Byte, C, Handle)
     end.
 
 %% -- internal: refresh --
 
-refresh_pre(Socket, Caps, Options) ->
-    {ok, [<<?COM_REFRESH,Options/little>>,Caps,reset(Socket)]}.
+refresh_pre(#handle{}=H, Options) ->
+    {ok, [<<?COM_REFRESH,Options/little>>,reset(H)]}.
 
 %% -- internal: select_db --
 
-select_db_pre(Socket, Caps, Database) ->
-    {ok, [<<?COM_INIT_DB,Database/binary>>,Caps,reset(Socket)]}.
+select_db_pre(#handle{}=H, Database) ->
+    {ok, [<<?COM_INIT_DB,Database/binary>>,reset(H)]}.
 
 %% -- internal: query --
 
-query_pre(Socket, Caps, Query) ->
-    {ok, [<<?COM_QUERY,Query/binary>>,Caps,reset(Socket)]}.
+query_pre(#handle{}=H, Query) ->
+    {ok, [<<?COM_QUERY,Query/binary>>,reset(H)]}.
 
-query_post(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<0>>, Socket} ->
-            recv_result(#result{}, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket);
-        {ok, Byte, Socket} ->
-            recv_fields_length(Byte, Caps, Socket)
+query_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
+            recv_result(#result{}, C, Handle);
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle);
+        {ok, Byte, Handle} ->
+            recv_fields_length(Byte, C, Handle)
     end.
 
 %% -- internal: stmt_prepare --
 
-stmt_prepare_pre(Socket, Caps, Query) ->
-    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,Caps,reset(Socket)]}.
+stmt_prepare_pre(#handle{}=H, Query) ->
+    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(H)]}.
 
-stmt_prepare_post(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<0>>, Socket} ->
+stmt_prepare_post(#handle{caps=C}=H) ->
+    case recv(1, C, H) of
+        {ok, <<0>>, Handle} ->
             recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR,
-                                  prefetch_rows = 1}, Caps, Socket);
-        {ok, <<255>>, Socket} ->
-            recv_reason(#reason{}, Caps, Socket)
+                                  prefetch_rows = 1}, C, Handle); % TODO
+        {ok, <<255>>, Handle} ->
+            recv_reason(#reason{}, C, Handle)
     end.
 
-stmt_prepare_recv_params(#prepare{param_count=0}=P, Caps, Socket) ->
-    {ok, [P#prepare{params = [], result = undefined},Caps,Socket]};
-stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
-    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
-        {ok, [Result,Params,Socket]} when N == length(Params)->
-            {ok, [P#prepare{params = Params, result = Result},Caps,Socket]};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+stmt_prepare_recv_params(#prepare{param_count=0}=P, #handle{}=H) ->
+    {ok, [P#prepare{params = [], result = undefined},H]};
+stmt_prepare_recv_params(#prepare{param_count=N}=P, #handle{caps=C}=H) ->
+    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
+        {ok, [Result,Params,Handle]} when N == length(Params)->
+            {ok, [P#prepare{params = Params, result = Result},Handle]};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
     end.
 
-stmt_prepare_recv_fields(#prepare{field_count=0}=P, _Caps, Socket) ->
-    {ok, [P,Socket]};
-stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
-    case recv_until_eof(fun myer_protocol_text:recv_field/3, [], [], Caps, S) of
-        {ok, [Result,Fields,Socket]} when N == length(Fields) ->
-            {ok, [P#prepare{fields = Fields, result = Result},Socket]};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+stmt_prepare_recv_fields(#prepare{field_count=0}=P, #handle{}=H) ->
+    {ok, [P,H]};
+stmt_prepare_recv_fields(#prepare{field_count=N}=P, #handle{caps=C}=H) ->
+    case recv_until_eof(recv_fields_func(C), [], [], C, H) of
+        {ok, [Result,Fields,Handle]} when N == length(Fields) ->
+            {ok, [P#prepare{fields = Fields, result = Result},Handle]};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
     end.
 
 
@@ -518,7 +522,6 @@ stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
 %% -----------------------------------------------------------------------------
 %% << include/mysql_com.h : CLIENT_ALL_FLAGS
 %% -----------------------------------------------------------------------------
-
 default_caps(true) ->
     default_caps(?CLIENT_COMPRESS);
 default_caps(false) ->
@@ -610,151 +613,151 @@ auth_to_binary(User, Password, Database,
 %% << sql/protocol.cc (< 5.7) : net_send_eof/3
 %%    sql/protocol_classic.cc : net_send_eof/3
 %% -----------------------------------------------------------------------------
-recv_eof(#result{warning_count=undefined}=R, Term, Caps, Socket)
+recv_eof(#result{warning_count=undefined}=R, Term, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_eof(R#result{warning_count = U}, Term, Caps, S);
-recv_eof(#result{warning_count=undefined}=R, Term, Caps, Socket) ->
-    recv_eof(R#result{warning_count = 0}, Term, Caps, Socket);
-recv_eof(#result{status=undefined}=R, Term, Caps, Socket)
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_eof(R#result{warning_count = U}, Term, Caps, H);
+recv_eof(#result{warning_count=undefined}=R, Term, Caps, Handle) ->
+    recv_eof(R#result{warning_count = 0}, Term, Caps, Handle);
+recv_eof(#result{status=undefined}=R, Term, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_eof(R#result{status = U}, Term, Caps, S);
-recv_eof(#result{status=undefined}=R, Term, Caps, Socket) ->
-    recv_eof(R#result{status = 0}, Term, Caps, Socket);
-recv_eof(#result{}=R, Term, _Caps, Socket) ->
-    {ok, [R,Term,Socket]}.
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_eof(R#result{status = U}, Term, Caps, H);
+recv_eof(#result{status=undefined}=R, Term, Caps, Handle) ->
+    recv_eof(R#result{status = 0}, Term, Caps, Handle);
+recv_eof(#result{}=R, Term, _Caps, Handle) ->
+    {ok, [R,Term,Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_acl.cc (< 5.7)         : send_server_handshake_packet/3
 %%    sql/auth/sql_authentication.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
-recv_handshake(#handshake{version=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(<<0>>, Caps, Socket),
-    recv_handshake(H#handshake{version = binary_to_version(B)}, Caps, S);
-recv_handshake(#handshake{tid=undefined}=H, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(4, Caps, Socket),
-    recv_handshake(H#handshake{tid = U}, Caps, S);
-recv_handshake(#handshake{seed1=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(<<0>>, Caps, Socket),
-    recv_handshake(H#handshake{seed1 = B}, Caps, S);
-recv_handshake(#handshake{caps1=undefined}=H, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_handshake(H#handshake{caps1 = U}, Caps, S);
-recv_handshake(#handshake{charset=undefined}=H, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(1, Caps, Socket),
-    recv_handshake(H#handshake{charset = U}, Caps, S);
-recv_handshake(#handshake{status=undefined}=H, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_handshake(H#handshake{status = U}, Caps, S);
-recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=H, Caps, Socket)
+recv_handshake(#handshake{version=undefined}=R, Caps, Handle) ->
+    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    recv_handshake(R#handshake{version = binary_to_version(B)}, Caps, H);
+recv_handshake(#handshake{tid=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(4, Caps, Handle),
+    recv_handshake(R#handshake{tid = U}, Caps, H);
+recv_handshake(#handshake{seed1=undefined}=R, Caps, Handle) ->
+    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    recv_handshake(R#handshake{seed1 = B}, Caps, H);
+recv_handshake(#handshake{caps1=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_handshake(R#handshake{caps1 = U}, Caps, H);
+recv_handshake(#handshake{charset=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(1, Caps, Handle),
+    recv_handshake(R#handshake{charset = U}, Caps, H);
+recv_handshake(#handshake{status=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_handshake(R#handshake{status = U}, Caps, H);
+recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_handshake(H#handshake{caps2 = U}, Caps, S);
-recv_handshake(#handshake{caps2=undefined}=H, Caps, Socket) ->
-    recv_handshake(H#handshake{caps2 = 0}, Caps, Socket);
-recv_handshake(#handshake{version=V,caps1=C,length=undefined}=H, Caps, Socket)
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_handshake(R#handshake{caps2 = U}, Caps, H);
+recv_handshake(#handshake{caps2=undefined}=R, Caps, Handle) ->
+    recv_handshake(R#handshake{caps2 = 0}, Caps, Handle);
+recv_handshake(#handshake{version=V,caps1=C,length=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned(1, Caps, Socket),
-    recv_handshake(H#handshake{length = U}, Caps, S);
-recv_handshake(#handshake{length=undefined}=H, Caps, Socket) ->
-    recv_handshake(H#handshake{length = 8}, Caps, Socket);   % 8?, TODO
-recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=H, Caps, Socket)
+    {ok, U, H} = recv_unsigned(1, Caps, Handle),
+    recv_handshake(R#handshake{length = U}, Caps, H);
+recv_handshake(#handshake{length=undefined}=R, Caps, Handle) ->
+    recv_handshake(R#handshake{length = 8}, Caps, Handle);   % 8?, TODO
+recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(10, Caps, Socket),
-    recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"
-recv_handshake(#handshake{reserved=undefined}=H, Caps, Socket) ->
-    {ok, B, S} = recv(13, Caps, Socket),
-    recv_handshake(H#handshake{reserved = B}, Caps, S); % "always 0"?
-recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=H, Caps, Socket)
+    {ok, B, H} = recv(10, Caps, Handle),
+    recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"
+recv_handshake(#handshake{reserved=undefined}=R, Caps, Handle) ->
+    {ok, B, H} = recv(13, Caps, Handle),
+    recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"?
+recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(<<0>>, Caps, Socket),
-    recv_handshake(H#handshake{seed2 = B}, Caps, S);
-recv_handshake(#handshake{seed2=undefined}=H, Caps, Socket) ->
-    recv_handshake(H#handshake{seed2 = <<>>}, Caps, Socket);
-recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=H, Caps, Socket)
+    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    recv_handshake(R#handshake{seed2 = B}, Caps, H);
+recv_handshake(#handshake{seed2=undefined}=R, Caps, Handle) ->
+    recv_handshake(R#handshake{seed2 = <<>>}, Caps, Handle);
+recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(<<0>>, Caps, Socket),
-    recv_handshake(H#handshake{plugin = B}, Caps, S);
-recv_handshake(#handshake{plugin=undefined}=H, Caps, Socket) ->
-    recv_handshake(H#handshake{plugin = <<"mysql_native_password">>}, Caps, Socket);
-recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=H, Caps, Socket) ->
-    {ok, [H#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary,S2/binary>>}, Socket]}.
+    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    recv_handshake(R#handshake{plugin = B}, Caps, H);
+recv_handshake(#handshake{plugin=undefined}=R, Caps, Handle) ->
+    recv_handshake(R#handshake{plugin = <<"mysql_native_password">>}, Caps, Handle);
+recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=R, Caps, Handle) ->
+    {ok, [R#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary,S2/binary>>}, Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_acl.cc (< 5.7)         : send_plugin_request_packet/3
 %%    sql/auth/sql_authentication.cc : send_plugin_request_packet/3
 %% -----------------------------------------------------------------------------
-recv_plugin(#plugin{name=undefined}=P, Handshake, Caps, Socket) ->
-    {ok, B, S} = recv(<<0>>, Caps, Socket),
-    recv_plugin(P#plugin{name = B}, Handshake, Caps, S);
-recv_plugin(#plugin{}=P, Handshake, _Caps, Socket) ->
-    {ok, [P,Handshake,Socket]}.
+recv_plugin(#plugin{name=undefined}=P, Handshake, Caps, Handle) ->
+    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    recv_plugin(P#plugin{name = B}, Handshake, Caps, H);
+recv_plugin(#plugin{}=P, Handshake, _Caps, Handle) ->
+    {ok, [P,Handshake,Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
 %% -----------------------------------------------------------------------------
-recv_prepare(#prepare{stmt_id=undefined}=P, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(4, Caps, Socket),
-    recv_prepare(P#prepare{stmt_id=U}, Caps, S);
-recv_prepare(#prepare{field_count=undefined}=P, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_prepare(P#prepare{field_count=U}, Caps, S);
-recv_prepare(#prepare{param_count=undefined}=P, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_prepare(P#prepare{param_count=U}, Caps, S);
-recv_prepare(#prepare{reserved=undefined}=P, Caps, Socket) ->
-    {ok, B, S} = recv(1, Caps, Socket), % <<0>>
-    recv_prepare(P#prepare{reserved=B}, Caps, S);
-recv_prepare(#prepare{warning_count=undefined}=P, Caps, Socket) -> % < 5.0, undefined?
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_prepare(P#prepare{warning_count=U}, Caps, S);
-recv_prepare(#prepare{}=P, Caps, Socket) ->
-    {ok, [P,Caps,Socket]}.
+recv_prepare(#prepare{stmt_id=undefined}=P, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(4, Caps, Handle),
+    recv_prepare(P#prepare{stmt_id=U}, Caps, H);
+recv_prepare(#prepare{field_count=undefined}=P, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_prepare(P#prepare{field_count=U}, Caps, H);
+recv_prepare(#prepare{param_count=undefined}=P, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_prepare(P#prepare{param_count=U}, Caps, H);
+recv_prepare(#prepare{reserved=undefined}=P, Caps, Handle) ->
+    {ok, B, H} = recv(1, Caps, Handle), % <<0>>
+    recv_prepare(P#prepare{reserved=B}, Caps, H);
+recv_prepare(#prepare{warning_count=undefined}=P, Caps, Handle) -> % < 5.0, undefined?
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_prepare(P#prepare{warning_count=U}, Caps, H);
+recv_prepare(#prepare{}=P, _Caps, Handle) ->
+    {ok, [P,Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc (< 5.7) : net_send_error_packet/4
 %%    sql/protocol_classic.cc : net_send_error_packet/7
 %% -----------------------------------------------------------------------------
-recv_reason(#reason{errno=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_reason(R#reason{errno = U}, Caps, S);
-recv_reason(#reason{reserved=undefined}=R, Caps, Socket)
+recv_reason(#reason{errno=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_reason(R#reason{errno = U}, Caps, H);
+recv_reason(#reason{reserved=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(1, Caps, Socket), % <<$#>>
-    recv_reason(R#reason{reserved = B}, Caps, S);
-recv_reason(#reason{state=undefined}=R, Caps, Socket)
+    {ok, B, H} = recv(1, Caps, Handle), % <<$#>>
+    recv_reason(R#reason{reserved = B}, Caps, H);
+recv_reason(#reason{state=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(5, Caps, Socket),
-    recv_reason(R#reason{state = B}, Caps, S);
-recv_reason(#reason{message=undefined}=R, Caps, Socket)->
-    {ok, B, S} = recv(remains(Socket), Caps, Socket),
-    recv_reason(R#reason{message = B}, Caps, S);
-recv_reason(#reason{}=R, _Caps, Socket) ->
-    {error, R, Socket}. % != ok
+    {ok, B, H} = recv(5, Caps, Handle),
+    recv_reason(R#reason{state = B}, Caps, H);
+recv_reason(#reason{message=undefined}=R, Caps, Handle)->
+    {ok, B, H} = recv(remains(Handle), Caps, Handle),
+    recv_reason(R#reason{message = B}, Caps, H);
+recv_reason(#reason{}=R, _Caps, Handle) ->
+    {error, R, Handle}. % != ok
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc (< 5.7) : net_send_ok/6
 %%    sql/protocol_classic.cc : net_send_ok/7
 %% -----------------------------------------------------------------------------
-recv_result(#result{affected_rows=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_packed_unsigned(Caps, Socket),
-    recv_result(R#result{affected_rows = U}, Caps, S);
-recv_result(#result{insert_id=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_packed_unsigned(Caps, Socket),
-    recv_result(R#result{insert_id = U}, Caps, S);
-recv_result(#result{status=undefined}=R, Caps, Socket) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_result(R#result{status = U}, Caps, S);
-recv_result(#result{warning_count=undefined}=R, Caps, Socket)
+recv_result(#result{affected_rows=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_packed_unsigned(Caps, Handle),
+    recv_result(R#result{affected_rows = U}, Caps, H);
+recv_result(#result{insert_id=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_packed_unsigned(Caps, Handle),
+    recv_result(R#result{insert_id = U}, Caps, H);
+recv_result(#result{status=undefined}=R, Caps, Handle) ->
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_result(R#result{status = U}, Caps, H);
+recv_result(#result{warning_count=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, U, S} = recv_unsigned(2, Caps, Socket),
-    recv_result(R#result{warning_count = U}, Caps, S);
-recv_result(#result{message=undefined}=R, Caps, Socket) ->
-    {ok, B, S} = recv(remains(Socket), Caps, Socket),
-    recv_result(R#result{message = B}, Caps, S);
-recv_result(#result{}=R, _Caps, Socket) ->
-    {ok, [R,Socket]}.
+    {ok, U, H} = recv_unsigned(2, Caps, Handle),
+    recv_result(R#result{warning_count = U}, Caps, H);
+recv_result(#result{message=undefined}=R, Caps, Handle) ->
+    {ok, B, H} = recv(remains(Handle), Caps, Handle),
+    recv_result(R#result{message = B}, Caps, H);
+recv_result(#result{}=R, _Caps, Handle) ->
+    {ok, [R,Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : *, TODO,TODO,TODO

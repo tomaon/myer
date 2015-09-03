@@ -30,13 +30,10 @@
 
 %% -- internal --
 -record(state, {
-          module    :: module(),                % myer_protocol -> myer_socket
-          args      :: properties(),
-          handle    :: tuple(),                 % myer_porotocol:handle
-          caps      :: non_neg_integer(),
-          maxlength :: non_neg_integer(),
-          version   :: [non_neg_integer()],
-          reason    :: reason()
+          module  :: module(),                  % myer_protocol
+          args    :: properties(),
+          handle  :: handle(),
+          reason  :: reason()
          }).
 
 %% == public ==
@@ -74,13 +71,13 @@ handle_cast(_Request, State) ->
 
 handle_info(timeout, State) ->
     initialized(State);
-handle_info({Pid,version}, #state{version=V}=S) ->
-    Pid ! {self(), V},
+handle_info({Pid,version}, #state{module=M,handle=H}=S) ->
+    Pid ! {self(), M:version(H)},
     {noreply, S};
 handle_info({tcp_closed,_Socket}, #state{}=S) ->
     {stop, tcp_closed, S#state{handle = undefined}};
-%%ndle_info({tcp_error,_Socket}, #state{}=S) ->
-%%  {stop, tcp_error, S#state{handle = undefined}};
+handle_info({tcp_error,_Socket}, #state{}=S) ->
+    {stop, tcp_error, S#state{handle = undefined}};
 handle_info({'EXIT',Socket,normal}, #state{}=S)
   when is_port(Socket) ->
     {stop, port_closed, S#state{handle = undefined}};
@@ -89,9 +86,9 @@ handle_info({'EXIT',_Pid,Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{handle=H,caps=C}=S)
+cleanup(#state{handle=H}=S)
   when undefined =/= H ->
-    _ = myer_protocol:close([H,C]),
+    _ = myer_protocol:close([H]),
     cleanup(S#state{handle = undefined});
 cleanup(#state{}) ->
     baseline:flush().
@@ -105,7 +102,7 @@ loaded(Args, #state{}=S) ->
     {ok, S#state{module = myer_protocol, args = Args}, 0}.
 
 
-initialized(#state{module=M,args=A,handle=undefined}=S) ->
+initialized(#state{module=M,args=A}=S) ->
     case apply(M, connect, [
                             [
                              get(address, A),
@@ -115,36 +112,37 @@ initialized(#state{module=M,args=A,handle=undefined}=S) ->
                             ]
                            ]) of
         {ok, Handshake, Handle} ->
-            connected(S#state{handle = Handle}, Handshake);
+            connected(Handshake, S#state{handle = Handle});
         {error, Reason} ->
             interrupted(S#state{reason = Reason});
         {error, Reason, Handle} ->
             interrupted(S#state{handle = Handle, reason = Reason})
     end.
 
-connected(#state{module=M,args=A,handle=X}=S, #handshake{caps=C,maxlength=L,version=V}=H) ->
+connected(Handshake, #state{module=M,args=A,handle=H}=S) ->
     case apply(M, auth, [
                          [
-                          X,
+                          H,
                           get(user, A),
                           get(password, A),
                           get(database, A),
-                          H#handshake{charset = get(default_character_set,A)}
+                          get(default_character_set, A),
+                          Handshake
                          ]
                         ]) of
         {ok, _Result, Handle} ->
-            authorized(S#state{handle = Handle, caps = C, maxlength = L, version = V});
+            authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
-            interrupted(S#state{handle = Handle, caps = C, reason = Reason})
+            interrupted(S#state{handle = Handle, reason = Reason})
     end.
 
 authorized(#state{}=S) ->
     {noreply, S#state{args = undefined}}.
 
 
-ready(Func, Args, #state{module=M,handle=H,caps=C}=S) ->
+ready(Func, Args, #state{module=M,handle=H}=S) ->
     case apply(M, Func, [
-                         [H|[C|Args]]
+                         [H|Args]
                         ]) of
         {ok, Handle} ->
             {reply, ok, S#state{handle = Handle}};
@@ -157,7 +155,8 @@ ready(Func, Args, #state{module=M,handle=H,caps=C}=S) ->
     end.
 
 
-interrupted(#state{}=S) ->
+interrupted(#state{reason=R}=S) ->
+    error_logger:error_msg("interrupted: ~p", [R]),
     {noreply, S}.
 
 %% == internal ==
