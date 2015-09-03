@@ -20,7 +20,7 @@
 -include("internal.hrl").
 
 %% -- public --
-%% -export([stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
+%% -export([stmt_fetch/2, stmt_reset/2]).
 %% -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
@@ -28,6 +28,7 @@
 -export([ping/1, stat/1, refresh/1, select_db/1]).
 -export([query/1]).
 -export([stmt_prepare/1, stmt_close/1]).
+%%       stmt_execute/1]).
 
 -export([binary_to_float/2,
          recv/3, recv_packed_binary/3, recv_unsigned/3]).
@@ -78,10 +79,10 @@ select_db(Args) ->
     loop(Args, [fun select_db_pre/2, fun send/2, fun recv_result/1]).
 
 
--spec query([term()])
-           -> {ok,result(),handle()}|
-              {ok,fields(),rows(),result(),handle()}|
-              {error,_,handle()}.
+-spec query([term()]) ->
+                   {ok,result(),handle()}|
+                   {ok,fields(),rows(),handle()}|
+                   {error,_,handle()}.
 query(Args) ->
     loop(Args, [fun query_pre/2, fun send/2, fun query_post/1,
                 fun recv_fields/2, fun recv_rows/2]).
@@ -95,6 +96,13 @@ stmt_prepare(Args) ->
 -spec stmt_close([term()]) -> {ok,handle()}|{error,_,handle()}.
 stmt_close(Args) ->
     loop(Args, [fun stmt_close_pre/2, fun send/2, fun stmt_close_post/1]).
+
+%% -spec stmt_execute([term()]) ->
+%%                           {ok,prepare(),handle()}|
+%%                           {ok,fields(),rows(),prepare(),handle()}|
+%%                           {error,_,handle()}.
+%% stmt_execute(Args) ->
+%%     loop(Args, [fun stmt_execute_pre/3, fun send/3, fun stmt_execute_post/3]).
 
 %% -- internal: connect --
 
@@ -245,13 +253,6 @@ stmt_close_post(#handle{}=H) ->
 %%  TODO,TODO
 
 %% == public ==
-
-%% -spec stmt_execute(protocol(),prepare(),[term()])
-%%                   -> {ok,prepare(),protocol()}|
-%%                      {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
-%% stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
-%%   when undefined =/= H, is_list(Args), N == length(Args) ->
-%%     loop([X,Args,P], [fun stmt_execute_pre/3, fun send/3, fun recv_status/2, fun stmt_execute_post/3]).
 
 %% -spec stmt_fetch(protocol(),prepare())
 %%                 -> {ok,prepare(),protocol()}|
@@ -470,8 +471,8 @@ recv_result(#handle{caps=C}=S) -> % < loop
 
 recv_rows(Fields, #handle{caps=C}=S) -> % < loop
     case recv_until_eof(fun myer_protocol_text:recv_row/4, [Fields], [], C, S) of
-        {ok, [Result,Rows,Handle]} ->
-            {ok, [Fields,Rows,Result,Handle]}
+        {ok, [_Result,Rows,Handle]} ->
+            {ok, [Fields,Rows,Handle]}
     end.
 
 recv_unsigned(Length, Caps, #handle{}=S) ->

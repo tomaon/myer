@@ -148,6 +148,8 @@ ready(Func, Args, #state{module=M,handle=H}=S) ->
             {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->
             {reply, {ok,Term}, S#state{handle = Handle}};
+        {ok, Term1, Term2, Handle} ->
+            {reply, {ok,Term1,Term2}, S#state{handle = Handle}};
         {ok, Term1, Term2, Term3, Handle} ->
             {reply, {ok,Term1,Term2,Term3}, S#state{handle = Handle}};
         {error, Reason, Handle} ->
