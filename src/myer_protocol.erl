@@ -20,8 +20,8 @@
 -include("internal.hrl").
 
 %% -- public --
--export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
--export([next_result/1, stmt_next_result/2]).
+%% -export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_reset/2]).
+%% -export([next_result/1, stmt_next_result/2]).
 
 %% -- private --
 -export([binary_to_float/2]).
@@ -42,17 +42,17 @@
 
 -spec connect([term()]) -> {ok,handshake(),socket()}|{error,_}|{error,_,socket()}.
 connect(Args) ->
-    loop(Args, [fun connect_pre/4, fun recv_status2/3, fun connect_post/4]).
+    loop(Args, [fun connect_pre/4, fun connect_post/3]).
 
 -spec close([term()]) -> ok|{error,_,socket()}.
 close(Args) ->
-    loop(Args, [fun close_pre/2, fun send2/3, fun close_post/2]).
+    loop(Args, [fun close_pre/2, fun send/3, fun close_post/2]).
 
 -spec auth([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 auth(Args) ->
-    case loop(Args, [fun auth_pre/5, fun send2/4, fun recv_status2/3, fun auth_post/4]) of
+    case loop(Args, [fun auth_pre/5, fun send/4, fun auth_post/3]) of
         {ok, #plugin{name=N}, #handshake{}=H, Socket} ->
-            auth_alt([lists:nth(3,Args),H#handshake{plugin = N},Socket]);
+            auth_alt([Socket,lists:nth(3,Args),H#handshake{plugin = N}]);
         {ok, #result{}=R, Socket}->
             {ok, R, Socket};
         {error, Reason, Socket} ->
@@ -60,25 +60,25 @@ auth(Args) ->
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/4, fun send2/4, fun recv_status2/3, fun auth_alt_post/4]).
+    loop(Args, [fun auth_alt_pre/3, fun send/3, fun auth_alt_post/2]).
 
 
 -spec ping([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 ping(Args) ->
-    loop(Args, [fun ping_pre/2, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
+    loop(Args, [fun ping_pre/2, fun send/3, fun recv_result/2]).
 
 -spec stat([term()]) -> {ok,binary(),socket()}|{error,_,socket()}.
 stat(Args) ->
-    loop(Args, [fun stat_pre/2, fun send2/3, fun recv_status2/2, fun stat_post/3]).
+    loop(Args, [fun stat_pre/2, fun send/3, fun stat_post/2]).
 
 
 -spec refresh([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 refresh(Args) ->
-    loop(Args, [fun refresh_pre/3, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
+    loop(Args, [fun refresh_pre/3, fun send/3, fun recv_result/2]).
 
 -spec select_db([term()]) -> {ok,result(),socket()}|{error,_,socket()}.
 select_db(Args) ->
-    loop(Args, [fun select_db_pre/3, fun send2/3, fun recv_status2/2, fun recv_result2/3]).
+    loop(Args, [fun select_db_pre/3, fun send/3, fun recv_result/2]).
 
 
 -spec query([term()])
@@ -86,14 +86,13 @@ select_db(Args) ->
               {ok,fields(),rows(),result(),socket()}|
               {error,_,socket()}.
 query(Args) ->
-    loop(Args, [fun query_pre/3, fun send2/3, fun recv_status2/2,
-                fun query_post/3, fun recv_fields/3, fun recv_rows/3]).
+    loop(Args, [fun query_pre/3, fun send/3, fun query_post/2,
+                fun recv_fields/3, fun recv_rows/3]).
 
 
 -spec stmt_prepare([term()]) -> {ok,prepare(),socket()}|{error,_,socket()}.
 stmt_prepare(Args) ->
-    loop(Args, [fun stmt_prepare_pre/3, fun send2/3,
-                fun recv_status2/2, fun stmt_prepare_post/3,
+    loop(Args, [fun stmt_prepare_pre/3, fun send/3, fun stmt_prepare_post/2,
                 fun stmt_prepare_recv_params/3, fun stmt_prepare_recv_fields/3]).
 
 %% == internal ==
@@ -101,20 +100,23 @@ stmt_prepare(Args) ->
 loop(Args, []) ->
     list_to_tuple([ok|Args]);
 loop(Args, [H|T]) ->
-    case apply(H, Args) of
+    try apply(H, Args) of
         {ok, List} ->
             loop(List, T);
-        {error, Reason} -> % connect_pre
-            {error, Reason};
-        {error, Reason, Socket} ->
+        {error, Reason} ->                      % connect_pre/4, recv_reason/3
+            {error, Reason}
+    catch
+        {error, Reason, Socket} ->              % recv/3
             {error, Reason, Socket}
     end.
 
-recv(Term, Caps, Socket) ->
-    myer_socket:recv(Socket, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)).
-
-recv_error(Caps, Socket) ->
-    recv_reason(#reason{}, Caps, Socket).
+recv(Term, Caps, S) ->
+    case myer_socket:recv(S, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
+        {ok, Binary, Socket} ->
+            {ok, Binary, Socket};
+        {error, Reason} ->
+            throw({error,Reason,S})
+    end.
 
 recv_fields_func(Caps)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
@@ -122,20 +124,32 @@ recv_fields_func(Caps)
 recv_fields_func(_Caps) ->
     fun myer_protocol_text:recv_field/2.
 
+recv_fields_length(Byte, Caps, S) ->
+    case recv_packed_unsigned(Byte, Caps, S) of
+        {ok, U, Socket} ->
+            {ok, [U,Caps,Socket]}
+    end.
+
 recv_fields(U, Caps, S) ->
-    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
         {ok, [_Result,Fields,Socket]} when U == length(Fields) ->
-            {ok, [Fields,Caps,Socket]};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+            {ok, [Fields,Caps,Socket]}
+    end.
+
+recv_packed_binary(Byte, Caps, S) ->
+    case recv_packed_unsigned(Byte, Caps, S) of
+        {ok, null, Socket} ->
+            {ok, null, Socket};
+        {ok, 0, Socket} ->
+            {ok, <<>>, Socket};
+        {ok, Length, Socket} ->
+            recv(Length, Caps, Socket)
     end.
 
 recv_packed_unsigned(Caps, S) ->
     case recv(1, Caps, S) of
         {ok, Byte, Socket} ->
-            recv_packed_unsigned(Byte, Caps, Socket);
-        {error, Reason} ->
-            {error, Reason, S}
+            recv_packed_unsigned(Byte, Caps, Socket)
     end.
 
 recv_packed_unsigned(<<254>>, Caps, Socket) -> recv_unsigned(8, Caps, Socket);
@@ -144,72 +158,56 @@ recv_packed_unsigned(<<252>>, Caps, Socket) -> recv_unsigned(2, Caps, Socket);
 recv_packed_unsigned(<<251>>, _Caps, Socket) -> {ok, null, Socket};
 recv_packed_unsigned(<<Int>>, _Caps, Socket) -> {ok, Int, Socket}.
 
-recv_result2(Caps, Socket) ->
-    recv_result(#result{}, Caps, Socket).
+recv_remains(Byte, Caps, S) ->
+    case recv(remains(S), Caps, S) of
+        {ok, Binary, Socket} ->
+            {ok, [<<Byte/binary,Binary/binary>>,Socket]}
+    end.
 
-recv_result2(<<0>>, Caps, Socket) ->
-    recv_result(#result{}, Caps, Socket).
+recv_result(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<0>>, Socket} ->
+            recv_result(#result{}, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket)
+    end.
 
 recv_rows(Fields, Caps, S) ->
-    case recv_until_eof2(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
+    case recv_until_eof(fun myer_protocol_text:recv_row/3, [Fields], [], Caps, S) of
         {ok, [Result,Rows,Socket]} ->
-            {ok, [Fields,Rows,Result,Socket]};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+            {ok, [Fields,Rows,Result,Socket]}
     end.
 
-recv_status2(Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<255>>, Socket} ->
-            recv_error(Caps, Socket);
-        {ok, Byte, Socket} ->
-            {ok, [Byte,Caps,Socket]};
-        {error, Reason} ->
-            {error, Reason, S}
+recv_unsigned(Length, Caps, S) ->
+    case recv(Length, Caps, S) of
+        {ok, Binary, Socket} ->
+            {ok, binary:decode_unsigned(Binary,little), Socket}
     end.
 
-recv_status2(Term, Caps, S) ->
+recv_until_eof(Func, Args, List, Caps, S) ->
     case recv(1, Caps, S) of
-        {ok, <<255>>, Socket} ->
-            recv_error(Caps, Socket);
-        {ok, Byte, Socket} ->
-            {ok, [Byte,Term,Caps,Socket]};
-        {error, Reason} ->
-            {error, Reason, S}
-    end.
-
-recv_unsigned(Length, Caps, Socket) -> % buffered
-    {ok, B, S} = recv(Length, Caps, Socket),
-    {ok, binary:decode_unsigned(B,little), S}.
-
-recv_until_eof2(Func, Args, List, Caps, S) ->
-    case recv(1, Caps, S) of
-        {ok, <<255>>, Socket} ->
-            recv_error(Caps, Socket);
         {ok, <<254>>, Socket} ->
             recv_eof(#result{}, lists:reverse(List), Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket);
         {ok, Byte, Socket} ->
-            recv_until_eof2(Func, Args, List, Byte, Caps, Socket);
-        {error, Reason} ->
-            {error, Reason, S}
+            recv_until_eof(Func, Args, List, Byte, Caps, Socket)
     end.
 
-recv_until_eof2(Func, Args, List, Byte, Caps, Handle) -> % TODO
+recv_until_eof(Func, Args, List, Byte, Caps, Handle) -> % TODO
     P = #protocol{handle = Handle, caps = Caps},
     case apply(Func, [P|[Byte|Args]]) of
         {ok, Term, #protocol{handle=H}} ->
-            recv_until_eof2(Func, Args, [Term|List], Caps, H);
-        {error, Reason} ->
-            {error, Reason, Handle}
+            recv_until_eof(Func, Args, [Term|List], Caps, H)
     end.
 
 remains(Socket) ->
     myer_socket:remains(Socket).
 
-reset2(Socket) ->
+reset(Socket) ->
     myer_socket:reset(Socket).
 
-send2(Binary, Caps, S) ->
+send(Binary, Caps, S) ->
     case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Socket} ->
             {ok, [Caps,Socket]};
@@ -217,7 +215,7 @@ send2(Binary, Caps, S) ->
             {error, Reason}
     end.
 
-send2(Term, Binary, Caps, S) ->
+send(Term, Binary, Caps, S) ->
     case myer_socket:send(S, Binary, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
         {ok, Socket} ->
             {ok, [Term,Caps,Socket]};
@@ -235,8 +233,13 @@ connect_pre(Address, Port, MaxLength, Timeout) ->
             {error, Reason}
     end.
 
-connect_post(<<10>>, MaxLength, Caps, Socket) -> % "always 10"
-    recv_handshake(#handshake{maxlength = MaxLength}, Caps, Socket). % buffered
+connect_post(MaxLength, Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<10>>, Socket} -> % "always 10"
+            recv_handshake(#handshake{maxlength = MaxLength}, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket)
+    end.
 
 %% -- internal: close --
 
@@ -256,73 +259,90 @@ auth_pre(Socket, User, Password, Database, #handshake{caps=C}=H) ->
     Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA)},
     {ok, [Handshake,auth_to_binary(User,Password,Database,Handshake),C,Socket]}.
 
-auth_post(<<254>>, Handshake, Caps, Socket) ->
-    recv_plugin(#plugin{}, Handshake, Caps, Socket);
-auth_post(<<0>>, _Handshake, Caps, Socket) ->
-    recv_result2(Caps, Socket).
+auth_post(Handshake, Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<0>>, Socket} ->
+            recv_result(#result{}, Caps, Socket);
+        {ok, <<254>>, Socket} ->
+            recv_plugin(#plugin{}, Handshake, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket)
+    end.
 
-auth_alt_pre(Socket, Caps, Password, #handshake{seed=S,plugin=A}=H) ->
+
+auth_alt_pre(Socket, Password, #handshake{caps=C,seed=S,plugin=A}) ->
     Scrambled = myer_auth:scramble(Password, S, A),
-    {ok, [<<Scrambled/binary,0>>,H,Caps, Socket]}.
+    {ok, [<<Scrambled/binary,0>>,C, Socket]}.
 
-auth_alt_post(<<0>>, _Handshake, Caps, Socket) ->
-    recv_result2(Caps, Socket).
+auth_alt_post(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<0>>, Socket} ->
+            recv_result(#result{}, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket)
+    end.
 
 %% -- internal: ping --
 
 ping_pre(Socket, Caps) ->
-    {ok, [<<?COM_PING>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_PING>>,Caps,reset(Socket)]}.
 
 %% -- internal: stat --
 
 stat_pre(Socket, Caps) ->
-    {ok, [<<?COM_STATISTICS>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_STATISTICS>>,Caps,reset(Socket)]}.
 
-stat_post(Byte, Caps, S) ->
-    case recv(remains(S), Caps, S) of
-        {ok, Binary, Socket} ->
-            {ok, [list_to_binary([Byte,Binary]),Socket]};
-        {error, Reason} ->
-            {error, Reason, S}
+stat_post(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket);
+        {ok, Byte, Socket} ->
+            recv_remains(Byte, Caps, Socket)
     end.
 
 %% -- internal: refresh --
 
 refresh_pre(Socket, Caps, Options) ->
-    {ok, [<<?COM_REFRESH,Options/little>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_REFRESH,Options/little>>,Caps,reset(Socket)]}.
 
 %% -- internal: select_db --
 
 select_db_pre(Socket, Caps, Database) ->
-    {ok, [<<?COM_INIT_DB,Database/binary>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_INIT_DB,Database/binary>>,Caps,reset(Socket)]}.
 
 %% -- internal: query --
 
 query_pre(Socket, Caps, Query) ->
-    {ok, [<<?COM_QUERY,Query/binary>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_QUERY,Query/binary>>,Caps,reset(Socket)]}.
 
-query_post(<<0>>, Caps, Socket) ->
-    recv_result2(Caps, Socket);
-query_post(Byte, Caps, S) ->
-    case recv_packed_unsigned(Byte, Caps, S) of
-        {ok, U, Socket} ->
-            {ok, [U,Caps,Socket]};
-        {error, Reason, Socket} ->
-            {error, Reason, Socket}
+query_post(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<0>>, Socket} ->
+            recv_result(#result{}, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket);
+        {ok, Byte, Socket} ->
+            recv_fields_length(Byte, Caps, Socket)
     end.
 
 %% -- internal: stmt_prepare --
 
 stmt_prepare_pre(Socket, Caps, Query) ->
-    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,Caps,reset2(Socket)]}.
+    {ok, [<<?COM_STMT_PREPARE,Query/binary>>,Caps,reset(Socket)]}.
 
-stmt_prepare_post(<<0>>, Caps, Socket) ->
-    recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR, prefetch_rows = 1}, Caps, Socket).
+stmt_prepare_post(Caps, S) ->
+    case recv(1, Caps, S) of
+        {ok, <<0>>, Socket} ->
+            recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR,
+                                  prefetch_rows = 1}, Caps, Socket);
+        {ok, <<255>>, Socket} ->
+            recv_reason(#reason{}, Caps, Socket)
+    end.
 
 stmt_prepare_recv_params(#prepare{param_count=0}=P, Caps, Socket) ->
     {ok, [P#prepare{params = [], result = undefined},Caps,Socket]};
 stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
-    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
         {ok, [Result,Params,Socket]} when N == length(Params)->
             {ok, [P#prepare{params = Params, result = Result},Caps,Socket]};
         {error, Reason, Socket} ->
@@ -332,7 +352,7 @@ stmt_prepare_recv_params(#prepare{param_count=N}=P, Caps, S) ->
 stmt_prepare_recv_fields(#prepare{field_count=0}=P, _Caps, Socket) ->
     {ok, [P,Socket]};
 stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
-    case recv_until_eof2(recv_fields_func(Caps), [], [], Caps, S) of
+    case recv_until_eof(recv_fields_func(Caps), [], [], Caps, S) of
         {ok, [Result,Fields,Socket]} when N == length(Fields) ->
             {ok, [P#prepare{fields = Fields, result = Result},Socket]};
         {error, Reason, Socket} ->
@@ -345,47 +365,47 @@ stmt_prepare_recv_fields(#prepare{field_count=N}=P, Caps, S) ->
 
 %% == public ==
 
--spec stmt_close(protocol(),prepare()) -> {ok,undefined,protocol()}|{error,_,protocol()}.
-stmt_close(#protocol{handle=H}=P, #prepare{}=X)
-  when undefined =/= H ->
-    loop([X,P], [fun stmt_close_pre/2, fun send/3, fun stmt_close_post/2]).
+%% -spec stmt_close(protocol(),prepare()) -> {ok,undefined,protocol()}|{error,_,protocol()}.
+%% stmt_close(#protocol{handle=H}=P, #prepare{}=X)
+%%   when undefined =/= H ->
+%%     loop([X,P], [fun stmt_close_pre/2, fun send/3, fun stmt_close_post/2]).
 
--spec stmt_execute(protocol(),prepare(),[term()])
-                  -> {ok,prepare(),protocol()}|
-                     {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
-stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
-  when undefined =/= H, is_list(Args), N == length(Args) ->
-    loop([X,Args,P], [fun stmt_execute_pre/3, fun send/3, fun recv_status/2, fun stmt_execute_post/3]).
+%% -spec stmt_execute(protocol(),prepare(),[term()])
+%%                   -> {ok,prepare(),protocol()}|
+%%                      {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
+%% stmt_execute(#protocol{handle=H}=P, #prepare{param_count=N}=X, Args)
+%%   when undefined =/= H, is_list(Args), N == length(Args) ->
+%%     loop([X,Args,P], [fun stmt_execute_pre/3, fun send/3, fun recv_status/2, fun stmt_execute_post/3]).
 
--spec stmt_fetch(protocol(),prepare())
-                -> {ok,prepare(),protocol()}|
-                   {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
-stmt_fetch(#protocol{handle=H}=P, #prepare{result=R}=X)
-  when undefined =/= H ->
-    case R#result.status of
-        S when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
-            loop([X,P], [fun stmt_fetch_pre/2, fun send/3, fun stmt_fetch_post/2]);
-        _ ->
-            {ok, X, P}
-    end.
+%% -spec stmt_fetch(protocol(),prepare())
+%%                 -> {ok,prepare(),protocol()}|
+%%                    {ok,{[field()],[term()],prepare()},protocol()}|{error,_,protocol()}.
+%% stmt_fetch(#protocol{handle=H}=P, #prepare{result=R}=X)
+%%   when undefined =/= H ->
+%%     case R#result.status of
+%%         S when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+%%             loop([X,P], [fun stmt_fetch_pre/2, fun send/3, fun stmt_fetch_post/2]);
+%%         _ ->
+%%             {ok, X, P}
+%%     end.
 
--spec stmt_reset(protocol(),prepare()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
-stmt_reset(#protocol{handle=H}=P, #prepare{}=X)
-  when undefined =/= H ->
-    loop([X,P], [fun stmt_reset_pre/2, fun send/3, fun recv_status/2, fun stmt_reset_post/3]).
+%% -spec stmt_reset(protocol(),prepare()) -> {ok,prepare(),protocol()}|{error,_,protocol()}.
+%% stmt_reset(#protocol{handle=H}=P, #prepare{}=X)
+%%   when undefined =/= H ->
+%%     loop([X,P], [fun stmt_reset_pre/2, fun send/3, fun recv_status/2, fun stmt_reset_post/3]).
 
--spec next_result(protocol())
-                 -> {ok,result(),protocol()}|
-                    {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
-next_result(#protocol{handle=H}=P)
-  when undefined =/= H ->
-    loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
+%% -spec next_result(protocol())
+%%                  -> {ok,result(),protocol()}|
+%%                     {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
+%% next_result(#protocol{handle=H}=P)
+%%   when undefined =/= H ->
+%%     loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
 
--spec stmt_next_result(protocol(),prepare())
-                      -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
-stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
-  when undefined =/= H ->
-    loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
+%% -spec stmt_next_result(protocol(),prepare())
+%%                       -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
+%% stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
+%%   when undefined =/= H ->
+%%     loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
 
 
 %% == private ==
@@ -432,154 +452,99 @@ binary_to_version(Binary) ->
     L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
     lists:map(F, lists:sublist(L,3)).
 
-func_recv_field(#protocol{caps=C})
-  when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    fun myer_protocol_text:recv_field_41/2;
-func_recv_field(_Protocol) ->
-    fun myer_protocol_text:recv_field/2.
-
-reset(#protocol{handle=H}=P) ->
-    P#protocol{handle = myer_socket:reset(H)}.
-
 %% -- internal: loop,next_result --
 
-next_result_pre(#protocol{}=P) ->
-    {ok, [reset(P)]}.
+%% next_result_pre(#protocol{}=P) ->
+%%     {ok, [reset(P)]}.
 
 %% -- internal: loop,stmt_close --
 
-stmt_close_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
-    {ok, [X,<<?COM_STMT_CLOSE,S:32/little>>,reset(P)]}.
+%% stmt_close_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
+%%     {ok, [X,<<?COM_STMT_CLOSE,S:32/little>>,reset(P)]}.
 
-stmt_close_post(_Prepare, #protocol{}=P) ->
-    {ok, [P]}.
+%% stmt_close_post(_Prepare, #protocol{}=P) ->
+%%     {ok, [P]}.
 
 %% -- internal: loop,stmt_execute --
 
-stmt_execute_pre(Prepare, Args, #protocol{}=P) ->
-    B = stmt_execute_to_binary(Prepare, Args),
-    {ok, [Prepare,B,reset(P)]}.
+%% stmt_execute_pre(Prepare, Args, #protocol{}=P) ->
+%%     B = stmt_execute_to_binary(Prepare, Args),
+%%     {ok, [Prepare,B,reset(P)]}.
 
-stmt_execute_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
-    case recv_result(P) of
-        {ok, [Result,Protocol]} ->
-            {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end;
-stmt_execute_post(Byte, Prepare, #protocol{}=P) ->
-    case recv_packed_integer(Byte, P) of
-        {ok, N, Protocol} ->
-            stmt_execute_recv_fields(Prepare, N, Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+%% stmt_execute_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end;
+%% stmt_execute_post(Byte, Prepare, #protocol{}=P) ->
+%%     case recv_packed_integer(Byte, P) of
+%%         {ok, N, Protocol} ->
+%%             stmt_execute_recv_fields(Prepare, N, Protocol);
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
-stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed_count
-    case recv_until_eof(func_recv_field(P), [], [], P) of
-        {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
-            F = myer_protocol_binary:prepare_fields(Fields),
-            stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = F}, Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+%% stmt_execute_recv_fields(#prepare{}=X, N, #protocol{}=P) -> % do CALL, 0=X.filed_count
+%%     case recv_until_eof(func_recv_field(P), [], [], P) of
+%%         {ok, [Result,Fields,Protocol]} when N == length(Fields) ->
+%%             F = myer_protocol_binary:prepare_fields(Fields),
+%%             stmt_execute_recv_rows(Result, X#prepare{field_count = N, fields = F}, Protocol);
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
-stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P)
-  when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
-    {ok, [X#prepare{result = R, execute = E+1},P]};
-stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
-    case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
-        {ok, [Result,Rows,Protocol]} ->
-            {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+%% stmt_execute_recv_rows(#result{status=S}=R, #prepare{execute=E}=X, #protocol{}=P)
+%%   when ?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS) ->
+%%     {ok, [X#prepare{result = R, execute = E+1},P]};
+%% stmt_execute_recv_rows(_Result, #prepare{fields=F,execute=E}=X, #protocol{}=P) ->
+%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
+%%         {ok, [Result,Rows,Protocol]} ->
+%%             {ok, [F,Rows,X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
 %% -- internal: loop,stmt_fetch --
 
-stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
-    B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
-    {ok, [X,B,reset(P)]}.
+%% stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=X, #protocol{}=P) ->
+%%     B = <<?COM_STMT_FETCH, S:32/little, R:32/little>>,
+%%     {ok, [X,B,reset(P)]}.
 
-stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
-    case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
-        {ok, [Result,Rows,Protocol]} ->
-            {ok, [F,Rows,X#prepare{result = Result},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+%% stmt_fetch_post(#prepare{fields=F}=X, #protocol{}=P) ->
+%%     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], P) of
+%%         {ok, [Result,Rows,Protocol]} ->
+%%             {ok, [F,Rows,X#prepare{result = Result},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
 %% -- internal: loop,stmt_next_result --
 
-stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
-    {ok, [X,reset(P)]}.
+%% stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
+%%     {ok, [X,reset(P)]}.
 
-stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
-    case recv_result(P) of
-        {ok, [Result,Protocol]} ->
-            {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
+%% stmt_next_result_post(<<0>>, #prepare{execute=E}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result, execute = E+1},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
 %% -- internal: loop,stmt_reset --
 
-stmt_reset_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
-    {ok, [X,<<?COM_STMT_RESET,S:32/little>>,reset(P)]}.
+%% stmt_reset_pre(#prepare{stmt_id=S}=X, #protocol{}=P) ->
+%%     {ok, [X,<<?COM_STMT_RESET,S:32/little>>,reset(P)]}.
 
-stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
-    case recv_result(P) of
-        {ok, [Result,Protocol]} ->
-            {ok, [X#prepare{result = Result},Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-%% -- internal: network --
-
-recv_eof(Term, #protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {ok, [Binary,Term,Protocol]};
-        {error, Reason, P} ->
-            {error, Reason, P}
-    end.
-
-recv_error(#protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {error, Binary, Protocol};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-recv_result(#protocol{}=P) ->
-    case recv(P, 0) of
-        {ok, Binary, Protocol} ->
-            {ok, [Binary,Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-recv_status(#protocol{}=P) ->
-    case recv(P, 1) of
-        {ok, <<255>>, Protocol} ->
-            recv_error(Protocol);
-        {ok, Byte, Protocol} ->
-            {ok, [Byte,Protocol]};
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-recv_status(Term, #protocol{}=P) ->
-    case recv(P, 1) of
-        {ok, <<255>>, Protocol} ->
-            recv_error(Protocol);
-        {ok, Byte, Protocol} ->
-            {ok, [Byte,Term,Protocol]};
-        {error, Reason, P} ->
-            {error, Reason, P}
-    end.
+%% stmt_reset_post(<<0>>, #prepare{}=X, #protocol{}=P) ->
+%%     case recv_result(P) of
+%%         {ok, [Result,Protocol]} ->
+%%             {ok, [X#prepare{result = Result},Protocol]};
+%%         {error, Reason, Protocol} ->
+%%             {error, Reason, Protocol}
+%%     end.
 
 recv_unsigned(Length, #protocol{}=P) ->
     case recv(P, Length) of
@@ -587,34 +552,6 @@ recv_unsigned(Length, #protocol{}=P) ->
             {ok, [binary:decode_unsigned(Binary,little),Protocol]};
         {error, Reason, Protocol} ->
             {error, Reason, Protocol}
-    end.
-
-recv_until_eof(Func, Args, List, #protocol{}=P) ->
-    case recv(P, 1) of
-        {ok, <<255>>, Protocol} ->
-            recv_error(Protocol);
-        {ok, <<254>>, Protocol} ->
-            recv_eof(lists:reverse(List), Protocol);
-        {ok, Byte, Protocol} ->
-            recv_until_eof(Func, Args, List, Byte, Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-recv_until_eof(Func, Args, List, Byte, #protocol{}=P) ->
-    case apply(Func, [P|[Byte|Args]]) of % TODO
-        {ok, Term, Protocol} ->
-            recv_until_eof(Func, Args, [Term|List], Protocol);
-        {error, Reason, Protocol} ->
-            {error, Reason, Protocol}
-    end.
-
-send(Term, Binary, #protocol{handle=H,caps=C}=P) ->
-    case myer_socket:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
-        {ok, Handle} ->
-            {ok, [Term,P#protocol{handle = Handle}]};
-        {error, Reason} ->
-            {error, Reason, P}
     end.
 
 %% -----------------------------------------------------------------------------
