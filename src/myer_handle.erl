@@ -26,6 +26,8 @@
 -export([reset/1]).
 -export([caps/1, caps/2, version/1, version/2]).
 
+-compile({inline, [caps/1, caps/2, version/1, version/2]}).
+
 %% == public ==
 
 -spec connect(inet:ip_address()|inet:hostname(),inet:port_number(),
@@ -81,7 +83,7 @@ caps(#handle{caps=C}) ->
     C.
 
 -spec caps(handle(),non_neg_integer()) -> handle().
-caps(#handle{caps=undefined}=H, Caps) ->
+caps(#handle{}=H, Caps) ->
     H#handle{caps = Caps}.
 
 -spec version(handle()) -> version().
@@ -89,7 +91,7 @@ version(#handle{version=V}) ->
     V.
 
 -spec version(handle(),non_neg_integer()) -> handle().
-version(#handle{version=undefined}=H, Version) ->
+version(#handle{}=H, Version) ->
     H#handle{version = Version}.
 
 %% == internal ==

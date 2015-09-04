@@ -71,9 +71,6 @@ handle_cast(_Request, State) ->
 
 handle_info(timeout, State) ->
     initialized(State);
-handle_info({Pid,version}, #state{module=M,handle=H}=S) ->
-    Pid ! {self(), M:version(H)},
-    {noreply, S};
 handle_info({tcp_closed,_Socket}, #state{}=S) ->
     {stop, tcp_closed, S#state{handle = undefined}};
 handle_info({tcp_error,_Socket}, #state{}=S) ->
