@@ -21,7 +21,6 @@
 
 %% -- public --
 -export([connect/4, close/1]).
--export([recv/1]).
 -export([recv/3, send/3]).
 -export([recv_binary/2, recv_text/2]).
 -export([remains/1]).
@@ -40,8 +39,8 @@ connect(Address, Port, MaxLength, Timeout) ->
          {mode, binary},
          {packet, raw},
          {packet_size, MaxLength} % TODO
-        %{send_timeout, ...}
-        %{send_timeout_close, true}
+         %%{send_timeout, ...}
+         %%{send_timeout_close, true}
         ],
     case baseline_socket:connect(Address, Port, L, Timeout) of
         {ok, Socket} ->
@@ -54,29 +53,6 @@ connect(Address, Port, MaxLength, Timeout) ->
 close(#handle{socket=S}) ->
     baseline_socket:close(S).
 
-
--spec recv(handle()) -> {ok,binary(),handle()}|{error,_}.
-recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
-    case baseline_socket:recv(S, 4, T) of
-        {ok, <<L:24/little,N>>, S1} ->
-            case baseline_socket:recv(S1, L, T) of
-                {ok, Packet, S2} ->
-                    {ok, Packet, H#handle{socket = S2, seqnum = N+1,
-                                          buf = <<>>, start = 0, length = 0}};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
--spec recv(handle(),non_neg_integer()|binary:cp(),boolean())
-          -> {ok,binary(),handle()}|{error,_}.
-recv(Handle, Term, false)
-  when is_integer(Term) ->
-    recv_binary(Handle, Term);
-recv(Handle, Term, false) ->
-    recv_text(Handle, Term).
 
 -spec recv_binary(handle(),non_neg_integer()) -> {ok,binary(),handle()}|{error,_}.
 recv_binary(#handle{length=L}=H, Length) ->
@@ -122,6 +98,20 @@ update(Handle, Binary, Length) ->
         {ok, Packet, #handle{}=H} ->
             {ok, H#handle{buf = <<Binary/binary,Packet/binary>>,
                           start = 0, length = Length+byte_size(Packet)}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
+    case baseline_socket:recv(S, 4, T) of
+        {ok, <<L:24/little,N>>, S1} ->
+            case baseline_socket:recv(S1, L, T) of
+                {ok, Packet, S2} ->
+                    {ok, Packet, H#handle{socket = S2, seqnum = N+1,
+                                          buf = <<>>, start = 0, length = 0}};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
