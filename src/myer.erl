@@ -109,9 +109,9 @@ commit(#myer{}=H) ->
     real_query(H, <<"COMMIT">>).
 
 -spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
-get_server_version(#myer{worker=W})
+get_server_version(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:call(W, {version,[]}).
+    myer_client:version(W, {version,[]}, T).
 
 -spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 next_result(#myer{worker=W})
@@ -143,9 +143,9 @@ select_db(#myer{worker=W,timeout=T}, Database)
     myer_client:select_db(W, Database, T).
 
 -spec stat(myer()) -> {ok,binary()}|{error,_}.
-stat(#myer{worker=W})
+stat(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:call(W, {stat,[]}).
+    myer_client:stat(W, T).
 
 -spec stmt_close(myer(),prepare()) -> ok|{error,_}.
 stmt_close(#myer{worker=W}, #prepare{}=X)

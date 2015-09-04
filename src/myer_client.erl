@@ -23,7 +23,7 @@
 -export([start_link/1]).
 -export([call/2]).
 
-%% -export([stat/1, version/1]).
+-export([stat/2, version/2]).
 -export([ping/2, refresh/3, select_db/3]).
 %% -export([query/1]).
 %% -export([stmt_prepare/1, stmt_close/1, stmt_reset/1,
@@ -53,6 +53,17 @@ start_link(Args)
 call(Pid, Command)
   when is_pid(Pid) ->
     gen_server:call(Pid, Command).
+
+
+-spec stat(pid(),timeout()) -> {ok,binary()}|{error,_}.
+stat(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stat,[]}, Timeout).
+
+-spec version(pid(),timeout()) -> {ok,version()}|{error,_}.
+version(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {version,[]}, Timeout).
 
 
 -spec ping(pid(),timeout()) -> {ok,result()}|{error,_}.
