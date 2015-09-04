@@ -164,13 +164,6 @@
 
 -type(reason() :: #reason{}).
 
--record(protocol, {
-          handle :: tuple(),
-          caps :: integer()
-         }).
-
--type(protocol() :: #protocol{}).
-
 -record(prepare, {
           stmt_id :: non_neg_integer(),
           field_count :: non_neg_integer(),
