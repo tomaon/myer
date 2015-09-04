@@ -23,6 +23,12 @@
 -export([start_link/1]).
 -export([call/2]).
 
+%% -export([stat/1, version/1]).
+-export([ping/2, refresh/3, select_db/3]).
+%% -export([query/1]).
+%% -export([stmt_prepare/1, stmt_close/1, stmt_reset/1,
+%%          stmt_execute/1, stmt_fetch/1]).
+
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
@@ -47,6 +53,22 @@ start_link(Args)
 call(Pid, Command)
   when is_pid(Pid) ->
     gen_server:call(Pid, Command).
+
+
+-spec ping(pid(),timeout()) -> {ok,result()}|{error,_}.
+ping(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {ping,[]}, Timeout).
+
+-spec refresh(pid(),integer(),timeout()) -> {ok,result()}|{error,_}.
+refresh(Pid, Option, Timeout)
+  when is_pid(Pid), is_integer(Option), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {refresh,[Option]}, Timeout).
+
+-spec select_db(pid(),binary(),timeout()) -> {ok,result()}|{error,_}.
+select_db(Pid, Database, Timeout)
+  when is_pid(Pid), is_binary(Database), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {select_db,[Database]}).
 
 %% == behaviour: gen_server ==
 

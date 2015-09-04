@@ -119,9 +119,9 @@ next_result(#myer{worker=W})
     myer_client:call(W, {next_result,[]}).
 
 -spec ping(myer()) -> {ok,result()}|{error,_}.
-ping(#myer{worker=W})
+ping(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:call(W, {ping,[]}).
+    myer_client:ping(W, T).
 
 -spec real_query(myer(),binary()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 real_query(#myer{worker=W}, Query)
@@ -129,18 +129,18 @@ real_query(#myer{worker=W}, Query)
     myer_client:call(W, {query,[Query]}).
 
 -spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
-refresh(#myer{worker=W}, Option)
+refresh(#myer{worker=W,timeout=T}, Option)
   when is_pid(W), is_integer(Option) ->
-    myer_client:call(W, {refresh,[Option]}).
+    myer_client:refresh(W, Option, T).
 
 -spec rollback(myer()) -> {ok,result()}|{error,_}.
 rollback(#myer{}=H) ->
     real_query(H, <<"ROLLBACK">>).
 
 -spec select_db(myer(),binary()) -> {ok,result()}|{error,_}.
-select_db(#myer{worker=W}, Database)
+select_db(#myer{worker=W,timeout=T}, Database)
   when is_pid(W), is_binary(Database) ->
-    myer_client:call(W, {select_db,[Database]}).
+    myer_client:select_db(W, Database, T).
 
 -spec stat(myer()) -> {ok,binary()}|{error,_}.
 stat(#myer{worker=W})

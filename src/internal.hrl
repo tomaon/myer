@@ -145,25 +145,6 @@
 
 %% == record ==
 
--record(result, {
-          affected_rows :: non_neg_integer(),
-          insert_id :: non_neg_integer(),
-          status :: integer(),
-          warning_count :: non_neg_integer(),
-          message :: binary()
-         }).
-
--type(result() :: #result{}).
-
--record(reason, {
-          errno :: non_neg_integer(),
-          reserved :: binary(),
-          state :: binary(),
-          message :: binary()
-         }).
-
--type(reason() :: #reason{}).
-
 -record(prepare, {
           stmt_id :: non_neg_integer(),
           field_count :: non_neg_integer(),
@@ -178,8 +159,25 @@
           execute :: non_neg_integer()
          }).
 
--type(prepare() :: #prepare{}).
+-record(reason, {
+          errno :: non_neg_integer(),
+          reserved :: binary(),
+          state :: binary(),
+          message :: binary()
+         }).
+
+-record(result, {
+          affected_rows :: non_neg_integer(),
+          insert_id :: non_neg_integer(),
+          status :: integer(),
+          warning_count :: non_neg_integer(),
+          message :: binary()
+         }).
 
 %% == type ==
 
 -type(properties() :: [{atom(),term()}]).
+
+-type(prepare() :: #prepare{}).
+-type(reason() :: #reason{}).
+-type(result() :: #result{}).
