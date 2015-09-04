@@ -21,8 +21,7 @@
 
 %% -- public --
 -export([connect/4, close/1]).
--export([recv/3, send/3]).
--export([recv_binary/2, recv_text/2]).
+-export([recv_binary/2, recv_text/2, send/3]).
 -export([remains/1]).
 -export([set_caps/2, set_version/2]).
 
@@ -110,10 +109,10 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
                     {ok, Packet, H#handle{socket = S2, seqnum = N+1,
                                           buf = <<>>, start = 0, length = 0}};
                 {error, Reason} ->
-                    {error, Reason}
+                    throw({error,Reason,H})
             end;
         {error, Reason} ->
-            {error, Reason}
+            throw({error,Reason,H})
     end.
 
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
@@ -121,9 +120,7 @@ recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
     case update(H, binary_part(B,S,L), L) of
         {ok, Handle} ->
-            recv_binary(Handle, Length);
-        {error, Reason} ->
-            {error, Reason}
+            recv_binary(Handle, Length)
     end.
 
 recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
@@ -131,9 +128,7 @@ recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
 recv_text(#handle{}=H, Pattern, Binary, Length, nomatch) ->
     case update(H, Binary, Length) of
         {ok, Handle} ->
-            recv_text(Handle, Pattern);
-        {error, Reason} ->
-            {error, Reason}
+            recv_text(Handle, Pattern)
     end.
 
 send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length, false)

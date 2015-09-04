@@ -351,20 +351,10 @@ loop(Args, [H|T]) ->
     end.
 
 recv_binary(Term, _Caps, #handle{}=H) ->
-    case myer_handle:recv_binary(H, Term) of
-        {ok, Binary, Handle} ->
-            {ok, Binary, Handle};
-        {error, Reason} ->
-            throw({error,Reason,H})
-    end.
+    myer_handle:recv_binary(H, Term).
 
 recv_text(Term, _Caps, #handle{}=H) ->
-    case myer_handle:recv_text(H, Term) of
-        {ok, Binary, Handle} ->
-            {ok, Binary, Handle};
-        {error, Reason} ->
-            throw({error,Reason,H})
-    end.
+    myer_handle:recv_text(H, Term).
 
 recv_fields_func(Caps) % TODO
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
