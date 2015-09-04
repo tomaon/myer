@@ -23,6 +23,7 @@
 -export([connect/4, close/1]).
 -export([recv/1]).
 -export([recv/3, send/3]).
+-export([recv_binary/2, recv_text/2]).
 -export([remains/1]).
 -export([set_caps/2, set_version/2]).
 
@@ -36,9 +37,11 @@ connect(Address, Port, MaxLength, Timeout) ->
     L = [
          {active, false},
          {keepalive, true},
-         binary,
+         {mode, binary},
          {packet, raw},
          {packet_size, MaxLength} % TODO
+        %{send_timeout, ...}
+        %{send_timeout_close, true}
         ],
     case baseline_socket:connect(Address, Port, L, Timeout) of
         {ok, Socket} ->
@@ -69,13 +72,20 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
 
 -spec recv(handle(),non_neg_integer()|binary:cp(),boolean())
           -> {ok,binary(),handle()}|{error,_}.
-recv(#handle{buf=B,start=S,length=L}=H, 0, _Compress) ->
-    {ok, binary_part(B,S,L), H#handle{buf = <<>>, start = 0, length = 0}};
 recv(Handle, Term, false)
   when is_integer(Term) ->
     recv_binary(Handle, Term);
 recv(Handle, Term, false) ->
     recv_text(Handle, Term).
+
+-spec recv_binary(handle(),non_neg_integer()) -> {ok,binary(),handle()}|{error,_}.
+recv_binary(#handle{length=L}=H, Length) ->
+    recv_binary(H, Length, L >= Length).
+
+-spec recv_text(handle(),binary()) -> {ok,binary(),handle()}|{error,_}.
+recv_text(#handle{buf=B,start=S,length=L}=H, Pattern) ->
+    Binary = binary_part(B, S, L),
+    recv_text(H, Pattern, Binary, L, binary:match(Binary,Pattern)).
 
 -spec send(handle(),binary(),boolean()) -> {ok,handle()}|{error,_}.
 send(#handle{}=H, Binary, Compress) ->
@@ -116,9 +126,6 @@ update(Handle, Binary, Length) ->
             {error, Reason}
     end.
 
-recv_binary(#handle{length=L}=H, Length) ->
-    recv_binary(H, Length, L >= Length).
-
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
     {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
@@ -128,10 +135,6 @@ recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-recv_text(#handle{buf=B,start=S,length=L}=H, Pattern) ->
-    Binary = binary_part(B, S, L),
-    recv_text(H, Pattern, Binary, L, binary:match(Binary,Pattern)).
 
 recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
     {ok, binary_part(Binary,0,MS), H#handle{start = S+(MS+ML), length = Length-(MS+ML)}};
