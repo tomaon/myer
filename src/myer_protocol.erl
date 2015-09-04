@@ -33,6 +33,30 @@
 
 -export([binary_to_float/2, recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
 
+-record(handshake, {
+          version :: [non_neg_integer()],
+          tid :: non_neg_integer(),
+          seed1 :: binary(),
+          caps1 :: non_neg_integer(),
+          charset :: non_neg_integer(),
+          status :: non_neg_integer(),
+          caps2 :: non_neg_integer(),
+          length :: non_neg_integer(),
+          reserved :: binary(),
+          seed2 :: binary(),
+          plugin :: binary(),
+
+          maxlength :: non_neg_integer(),
+          seed :: binary(),
+          caps :: integer()
+         }).
+
+-record(plugin, {
+          name :: binary()
+         }).
+
+-type(handshake() :: #handshake{}).
+
 %% == private ==
 
 -spec connect([term()]) -> {ok,handshake(),handle()}|{error,_}|{error,_,handle()}.

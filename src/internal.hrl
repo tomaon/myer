@@ -187,32 +187,6 @@
 
 -type(prepare() :: #prepare{}).
 
--record(handshake, {
-          version :: [non_neg_integer()],
-          tid :: non_neg_integer(),
-          seed1 :: binary(),
-          caps1 :: non_neg_integer(),
-          charset :: non_neg_integer(),
-          status :: non_neg_integer(),
-          caps2 :: non_neg_integer(),
-          length :: non_neg_integer(),
-          reserved :: binary(),
-          seed2 :: binary(),
-          plugin :: binary(),
-
-          maxlength :: non_neg_integer(),
-          seed :: binary(),
-          caps :: integer()
-         }).
-
--type(handshake() :: #handshake{}).
-
--record(plugin, {
-          name :: binary()
-         }).
-
--type(plugin() :: #plugin{}).
-
 -record(handle, {
           module        :: module(),            % baseline_socket
           socket        :: tuple(),             % baseline_socket:socket()
