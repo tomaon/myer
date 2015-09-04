@@ -30,11 +30,13 @@
 -import(myer_protocol, [binary_to_float/2,
                         recv_packed_binary/1, recv_packed_binary/2]).
 
+-type(handle() :: myer_handle:handle()).
+
 %% == public ==
 
 %% @see sql/protocol.cc : Protocol_text::store*
 
--spec recv_field_41(handle(),byte()) -> {ok,fields(),handle()}.
+-spec recv_field_41(handle(),binary()) -> {ok,field(),handle()}.
 recv_field_41(Handle, Byte) ->
     {ok, CT, H1} = recv_packed_binary(Byte, Handle),
     {ok, DB, H2} = recv_packed_binary(H1),
@@ -48,7 +50,7 @@ recv_field_41(Handle, Byte) ->
                 name = NA, org_name = ON, charsetnr = E, length = L,
                 type = T, flags = F, decimals = N, cast = cast(T) }, H7}. % TODO: mask(flags)
 
--spec recv_field(handle(),byte()) -> {ok,fields(),handle()}.
+-spec recv_field(handle(),binary()) -> {ok,field(),handle()}.
 recv_field(Handle, Byte) ->
     {ok, TA, H1} = recv_packed_binary(Byte, Handle),
     {ok, NA, H2} = recv_packed_binary(H1),
@@ -57,7 +59,7 @@ recv_field(Handle, Byte) ->
     {ok, #field{table = TA, name = NA, length = L,
                 type = T, flags = F, decimals = N, cast = cast(T)}, H3}. % TODO: mask(flags)
 
--spec recv_row(handle(),binary(),fields()) -> {ok,rows(),handle()}.
+-spec recv_row(handle(),binary(),fields()) -> {ok,row(),handle()}.
 recv_row(Handle, Byte, Fields) ->
     recv_row1(Handle, Byte, Fields, []).
 

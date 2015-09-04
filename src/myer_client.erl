@@ -30,9 +30,8 @@
 
 %% -- internal --
 -record(state, {
-          module  :: module(),                  % myer_protocol
           args    :: properties(),
-          handle  :: handle(),
+          handle  :: tuple(),                   % myer_handle:handle()
           reason  :: reason()
          }).
 
@@ -96,18 +95,19 @@ setup(Args) ->
 
 
 loaded(Args, #state{}=S) ->
-    {ok, S#state{module = myer_protocol, args = Args}, 0}.
+    {ok, S#state{args = Args}, 0}.
 
 
-initialized(#state{module=M,args=A}=S) ->
-    case apply(M, connect, [
-                            [
-                             get(address, A),
-                             get(port, A),
-                             get(max_allowed_packet, A),
-                             get(timeout, A)
-                            ]
-                           ]) of
+initialized(#state{args=A}=S) ->
+    case apply(myer_protocol, connect, [
+                                        [
+                                         get(address, A),
+                                         get(port, A),
+                                         get(max_allowed_packet, A),
+                                         get(compress, A),
+                                         get(timeout, A)
+                                        ]
+                                       ]) of
         {ok, Handshake, Handle} ->
             connected(Handshake, S#state{handle = Handle});
         {error, Reason} ->
@@ -116,17 +116,17 @@ initialized(#state{module=M,args=A}=S) ->
             interrupted(S#state{handle = Handle, reason = Reason})
     end.
 
-connected(Handshake, #state{module=M,args=A,handle=H}=S) ->
-    case apply(M, auth, [
-                         [
-                          H,
-                          get(user, A),
-                          get(password, A),
-                          get(database, A),
-                          get(default_character_set, A),
-                          Handshake
-                         ]
-                        ]) of
+connected(Handshake, #state{args=A,handle=H}=S) ->
+    case apply(myer_protocol, auth, [
+                                     [
+                                      H,
+                                      get(user, A),
+                                      get(password, A),
+                                      get(database, A),
+                                      get(default_character_set, A),
+                                      Handshake
+                                     ]
+                                    ]) of
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
@@ -137,10 +137,10 @@ authorized(#state{}=S) ->
     {noreply, S#state{args = undefined}}.
 
 
-ready(Func, Args, #state{module=M,handle=H}=S) ->
-    case apply(M, Func, [
-                         [H|Args]
-                        ]) of
+ready(Func, Args, #state{handle=H}=S) ->
+    case apply(myer_protocol, Func, [
+                                     [H|Args]
+                                    ]) of
         {ok, Handle} ->
             {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->

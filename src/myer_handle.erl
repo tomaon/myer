@@ -22,11 +22,26 @@
 %% -- public --
 -export([connect/4, close/1]).
 -export([recv_binary/2, recv_text/2, send/2]).
--export([remains/1]).
--export([reset/1]).
+-export([remains/1, reset/1]).
 -export([caps/1, caps/2, version/1, version/2]).
 
--compile({inline, [caps/1, caps/2, version/1, version/2]}).
+%% -- internal --
+
+-record(handle, {
+          socket        :: tuple(),             % baseline_socket:socket()
+          maxlength     :: non_neg_integer(),
+          timeout       :: timeout(),
+          caps          :: non_neg_integer(),
+          version       :: [non_neg_integer()],
+          seqnum = 0    :: non_neg_integer(),
+          buf    = <<>> :: binary(),
+          start  = 0    :: non_neg_integer(),
+          length = 0    :: non_neg_integer()
+         }).
+
+-type(handle() :: #handle{}).
+
+-export_type([handle/0]).
 
 %% == public ==
 
@@ -63,15 +78,14 @@ recv_text(Pattern, #handle{buf=B,start=S,length=L}=H) ->
     Binary = binary_part(B, S, L),
     recv_text(H, Pattern, Binary, L, binary:match(Binary,Pattern)).
 
--spec send(handle(),binary()) -> {ok,handle()}.
-send(#handle{}=H, Binary) ->
+-spec send(binary(),handle()) -> {ok,handle()}.
+send(Binary, #handle{}=H) ->
     send(H, Binary, 0, byte_size(Binary)).
 
 
 -spec remains(handle()) -> non_neg_integer().
 remains(#handle{length=L}) ->
     L.
-
 
 -spec reset(handle()) -> handle().
 reset(#handle{}=H) ->
@@ -90,7 +104,7 @@ caps(#handle{}=H, Caps) ->
 version(#handle{version=V}) ->
     V.
 
--spec version(handle(),non_neg_integer()) -> handle().
+-spec version(handle(),version()) -> handle().
 version(#handle{}=H, Version) ->
     H#handle{version = Version}.
 

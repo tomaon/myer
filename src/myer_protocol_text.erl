@@ -30,17 +30,19 @@
 -import(myer_protocol, [binary_to_float/2,
                         recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
 
+-type(handle() :: myer_handle:handle()).
+
 %% == private ==
 
 %% @see sql/protocol.cc : Protocol_text::store*
 
--spec recv_field(handle(),byte()) -> {ok, fields(), handle()}.
-recv_field(#handle{}=H, Byte) ->
-    recv_field(#field{}, Byte, myer_handle:caps(H), H).
+-spec recv_field(handle(),binary()) -> {ok,field(),handle()}.
+recv_field(Handle, Byte) ->
+    recv_field(#field{}, Byte, myer_handle:caps(Handle), Handle).
 
--spec recv_row(handle(),byte(),fields()) -> {ok, rows(), handle()}.
-recv_row(#handle{}=H, Byte, Fields) ->
-    recv_row(Fields, Byte, H, []).
+-spec recv_row(handle(),binary(),fields()) -> {ok,row(),handle()}.
+recv_row(Handle, Byte, Fields) ->
+    recv_row(Fields, Byte, Handle, []).
 
 %% == internal ==
 

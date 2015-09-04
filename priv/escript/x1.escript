@@ -63,10 +63,13 @@ main(_) ->
 
 tables() ->
     [
+%    <<"data_types_11_2_4">>, % bit
+%    <<"data_types_11_2_4">>, % bit
+%    <<"data_types_11_2_4">>, % bit
      <<"data_types_11_2_1">>, % int
      <<"data_types_11_2_2">>, % decimal
      <<"data_types_11_2_3">>, % float
-%    <<"data_types_11_2_4">>, % bit
+%%   <<"data_types_11_2_4">>, % bit
      <<"data_types_11_3_1">>, % date
      <<"data_types_11_3_2">>, % time
      <<"data_types_11_3_3">>, % year
