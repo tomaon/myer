@@ -484,16 +484,16 @@ remains(Handle) ->
 reset(Handle) ->
     myer_handle:reset(Handle).
 
-send(Binary, #handle{caps=C}=H) ->
-    case myer_handle:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+send(Binary, #handle{}=H) ->
+    case myer_handle:send(H, Binary) of
         {ok, Handle} ->
             {ok, [Handle]};
         {error, Reason} ->
             {error, Reason}
     end.
 
-send(Binary, Term, #handle{caps=C}=H) ->
-    case myer_handle:send(H, Binary, ?IS_SET(C,?CLIENT_COMPRESS)) of
+send(Binary, Term, #handle{}=H) ->
+    case myer_handle:send(H, Binary) of
         {ok, Handle} ->
             {ok, [Term,Handle]};
         {error, Reason} ->
