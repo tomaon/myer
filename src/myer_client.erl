@@ -26,8 +26,8 @@
 -export([stat/2, version/2]).
 -export([ping/2, refresh/3, select_db/3]).
 -export([real_query/3, autocommit/3, commit/2, rollback/2]).
-%%xport([stmt_prepare/1, stmt_close/1, stmt_reset/1,
-%%       stmt_execute/1, stmt_fetch/1]).
+-export([stmt_prepare/3, stmt_close/3, stmt_reset/3,
+         stmt_execute/4, stmt_fetch/3]).
 
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
@@ -103,6 +103,38 @@ commit(Pid, Timeout) ->
 -spec rollback(pid(),timeout()) -> {ok,result()}|{error,_}.
 rollback(Pid, Timeout) ->
     real_query(Pid, <<"ROLLBACK">>, Timeout).
+
+
+-spec stmt_prepare(pid(),binary(),timeout()) -> {ok,prepare()}|{error,_}.
+stmt_prepare(Pid, Query, Timeout)
+  when is_pid(Pid), is_binary(Query), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stmt_prepare,[Query]}, Timeout).
+
+-spec stmt_close(pid(),prepare(),timeout()) -> ok|{error,_}.
+stmt_close(Pid, #prepare{}=P, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stmt_close,[P]}, Timeout).
+
+-spec stmt_reset(pid(),prepare(),timeout()) -> {ok,prepare()}|{error,_}.
+stmt_reset(Pid, #prepare{}=P, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stmt_reset,[P]}, Timeout).
+
+-spec stmt_execute(pid(),prepare(),params(),timeout()) ->
+                          {ok,prepare()}|
+                          {ok,fields(),rows(),prepare()}|
+                          {error,_}.
+stmt_execute(Pid, #prepare{param_count=N}=P, Params, Timeout)
+  when is_pid(Pid), is_list(Params), N == length(Params), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stmt_execute,[P,Params]}, Timeout).
+
+-spec stmt_fetch(pid(),prepare(),timeout()) ->
+                        {ok,prepare()}|
+                        {ok,fields(),rows(),prepare()}|
+                        {error,_}.
+stmt_fetch(Pid, #prepare{}=P, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stmt_fetch,[P]}, Timeout).
 
 %% == behaviour: gen_server ==
 

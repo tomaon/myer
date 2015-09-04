@@ -107,6 +107,8 @@
 %% == type ==
 -type(field() :: #field{}).
 -type(fields() :: [field()]).
+-type(param() :: term()).
+-type(params() :: [param()]).
 -type(row() :: [term()]).
 -type(rows() :: [row()]).
 -type(version() :: [non_neg_integer()]).

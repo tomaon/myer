@@ -30,10 +30,11 @@
 -export([get_server_version/1, stat/1]).
 -export([ping/1, refresh/2, select_db/2]).
 -export([real_query/2, autocommit/2, commit/1, rollback/1 ]).
+-export([stmt_prepare/2, stmt_close/2, stmt_reset/2,
+         stmt_execute/3, stmt_fetch/2]).
 
 -export([next_result/1]).
--export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_prepare/2, stmt_reset/2,
-         stmt_next_result/2]).
+-export([stmt_next_result/2]).
 
 %% -- public: record --
 -export([affected_rows/1, errno/1, errmsg/1, insert_id/1, more_results/1, sqlstate/1,
@@ -102,29 +103,24 @@ set_timeout(#myer{}=H, Timeout)
 %% == public: worker ==
 
 -spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
-get_server_version(#myer{worker=W,timeout=T})
-  when is_pid(W) ->
+get_server_version(#myer{worker=W,timeout=T}) ->
     myer_client:version(W, T).
 
 -spec stat(myer()) -> {ok,binary()}|{error,_}.
-stat(#myer{worker=W,timeout=T})
-  when is_pid(W) ->
+stat(#myer{worker=W,timeout=T}) ->
     myer_client:stat(W, T).
 
 
 -spec ping(myer()) -> {ok,result()}|{error,_}.
-ping(#myer{worker=W,timeout=T})
-  when is_pid(W) ->
+ping(#myer{worker=W,timeout=T}) ->
     myer_client:ping(W, T).
 
 -spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
-refresh(#myer{worker=W,timeout=T}, Option)
-  when is_pid(W), is_integer(Option) ->
+refresh(#myer{worker=W,timeout=T}, Option) ->
     myer_client:refresh(W, Option, T).
 
 -spec select_db(myer(),binary()) -> {ok,result()}|{error,_}.
-select_db(#myer{worker=W,timeout=T}, Database)
-  when is_pid(W), is_binary(Database) ->
+select_db(#myer{worker=W,timeout=T}, Database) ->
     myer_client:select_db(W, Database, T).
 
 
@@ -132,58 +128,53 @@ select_db(#myer{worker=W,timeout=T}, Database)
                         {ok,result()}|
                         {ok,fields(),rows(),result()}|
                         {error,_}.
-real_query(#myer{worker=W,timeout=T}, Query)
-  when is_pid(W), is_binary(Query) ->
+real_query(#myer{worker=W,timeout=T}, Query) ->
     myer_client:real_query(W, Query, T).
 
 -spec autocommit(myer(),boolean()) -> {ok,result()}|{error,_}.
-autocommit(#myer{worker=W,timeout=T}, Boolean)
-  when is_pid(W), is_boolean(Boolean) ->
+autocommit(#myer{worker=W,timeout=T}, Boolean) ->
     myer_client:autocommit(W, Boolean, T).
 
 -spec commit(myer()) -> {ok,result()}|{error,_}.
-commit(#myer{worker=W,timeout=T})
-  when is_pid(W) ->
+commit(#myer{worker=W,timeout=T}) ->
     myer_client:commit(W, T).
 
 -spec rollback(myer()) -> {ok,result()}|{error,_}.
-rollback(#myer{worker=W,timeout=T})
-  when is_pid(W) ->
+rollback(#myer{worker=W,timeout=T}) ->
     myer_client:rollback(W, T).
+
+
+-spec stmt_prepare(myer(),binary()) -> {ok,prepare()}|{error,_}.
+stmt_prepare(#myer{worker=W,timeout=T}, Query) ->
+    myer_client:stmt_prepare(W, Query, T).
+
+-spec stmt_close(myer(),prepare()) -> ok|{error,_}.
+stmt_close(#myer{worker=W,timeout=T}, Prepare) ->
+    myer_client:stmt_close(W, Prepare, T).
+
+-spec stmt_reset(myer(),prepare()) -> {ok,prepare()}|{error,_}.
+stmt_reset(#myer{worker=W,timeout=T}, Prepare) ->
+    myer_client:stmt_reset(W, Prepare, T).
+
+-spec stmt_execute(myer(),prepare(),[term()])
+                  -> {ok,prepare()}|
+                     {ok,fields(),rows(),prepare()}|
+                     {error,_}.
+stmt_execute(#myer{worker=W,timeout=T}, Prepare, Params) ->
+    myer_client:stmt_execute(W, Prepare, Params, T).
+
+-spec stmt_fetch(myer(),prepare())
+                -> {ok,prepare()}|
+                   {ok,[field()],[term()],prepare()}|{error,_}.
+stmt_fetch(#myer{worker=W,timeout=T}, Prepare) ->
+    myer_client:stmt_fetch(W, Prepare, T).
+
 
 
 -spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
 next_result(#myer{worker=W})
   when is_pid(W) ->
     myer_client:call(W, {next_result,[]}).
-
--spec stmt_close(myer(),prepare()) -> ok|{error,_}.
-stmt_close(#myer{worker=W}, #prepare{}=X)
-  when is_pid(W) ->
-    myer_client:call(W, {stmt_close,[X]}).
-
--spec stmt_execute(myer(),prepare(),[term()])
-                  -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
-stmt_execute(#myer{worker=W}, #prepare{param_count=N}=X, Args)
-  when is_pid(W), is_list(Args), N == length(Args) ->
-    myer_client:call(W, {stmt_execute,[X,Args]}).
-
--spec stmt_fetch(myer(),prepare())
-                -> {ok,prepare()}|
-                   {ok,[field()],[term()],prepare()}|{error,_}.
-stmt_fetch(#myer{worker=W}, #prepare{}=X)
-  when is_pid(W) ->
-    myer_client:call(W, {stmt_fetch,[X]}).
-
--spec stmt_prepare(myer(),binary()) -> {ok,prepare()}|{error,_}.
-stmt_prepare(#myer{worker=W}, Query)
-  when is_pid(W), is_binary(Query) ->
-    myer_client:call(W, {stmt_prepare,[Query]}).
-
--spec stmt_reset(myer(),prepare()) -> {ok,prepare()}|{error,_}.
-stmt_reset(#myer{worker=W}, #prepare{}=X)
-  when is_pid(W) ->
-    myer_client:call(W, {stmt_reset,[X]}).
 
 -spec stmt_next_result(myer(),prepare())
                       -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
