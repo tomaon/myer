@@ -214,6 +214,7 @@
 -type(plugin() :: #plugin{}).
 
 -record(handle, {
+          module        :: module(),            % baseline_socket
           socket        :: tuple(),             % baseline_socket:socket()
           maxlength     :: non_neg_integer(),
           timeout       :: timeout(),
