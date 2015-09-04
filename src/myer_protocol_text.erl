@@ -25,7 +25,7 @@
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv/3, recv_packed_binary/3, recv_unsigned/3]).
+                        recv_binary/3, recv_packed_binary/3, recv_unsigned/3]).
 
 -type(caps() :: non_neg_integer()).
 
@@ -67,10 +67,10 @@ recv_field(#field{org_name=undefined}=F, undefined, Caps, Handle)
     recv_field(F#field{org_name=B}, undefined, Caps, S);
 recv_field(#field{reserved=undefined}=F, undefined, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(1, Caps, Handle), % <<12>>
+    {ok, B, S} = recv_binary(1, Caps, Handle), % <<12>>
     recv_field(F#field{reserved=B}, undefined, Caps, S);
 recv_field(#field{reserved=undefined}=F, undefined, Caps, Handle) ->
-    {ok, B, S} = recv(1, Caps, Handle), % <<3>>
+    {ok, B, S} = recv_binary(1, Caps, Handle), % <<3>>
     recv_field(F#field{reserved=B}, undefined, Caps, S);
 recv_field(#field{charsetnr=undefined}=F, undefined, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
@@ -85,14 +85,14 @@ recv_field(#field{length=undefined}=F, undefined, Caps, Handle) ->
     recv_field(F#field{length=U}, undefined, Caps, S);
 recv_field(#field{reserved2=undefined}=F, undefined, Caps, Handle)
   when not(?IS_SET(Caps,?CLIENT_PROTOCOL_41)) ->
-    {ok, B, S} = recv(1, Caps, Handle), % <<1>>
+    {ok, B, S} = recv_binary(1, Caps, Handle), % <<1>>
     recv_field(F#field{reserved2=B}, undefined, Caps, S);
 recv_field(#field{type=undefined}=F, undefined, Caps, Handle) ->
     {ok, U, S} = recv_unsigned(1, Caps, Handle),
     recv_field(F#field{type=U}, undefined, Caps, S);
 recv_field(#field{reserved3=undefined}=F, undefined, Caps, Handle)
   when not(?IS_SET(Caps,?CLIENT_PROTOCOL_41)) ->
-    {ok, B, S} = recv(1, Caps, Handle), % <<3>>
+    {ok, B, S} = recv_binary(1, Caps, Handle), % <<3>>
     recv_field(F#field{reserved3=B}, undefined, Caps, S);
 recv_field(#field{flags=undefined}=F, undefined, Caps, Handle) ->
     {ok, U, S} = recv_unsigned(2, Caps, Handle),
@@ -102,7 +102,7 @@ recv_field(#field{decimals=undefined}=F, undefined, Caps, Handle) ->
     recv_field(F#field{decimals=U}, undefined, Caps, S);
 recv_field(#field{reserved4=undefined}=F, undefined, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, S} = recv(2, Caps, Handle), % <<0,0>>
+    {ok, B, S} = recv_binary(2, Caps, Handle), % <<0,0>>
     recv_field(F#field{reserved4=B}, undefined, Caps, S);
 recv_field(#field{type=T}=F, _Byte, _Caps, Handle) ->
     {ok, F#field{cast = cast(T)}, Handle}.

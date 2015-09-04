@@ -25,7 +25,7 @@
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv/3, recv_packed_binary/3]).
+                        recv_binary/3, recv_packed_binary/3]).
 
 -type(caps() :: non_neg_integer()).
 
@@ -41,7 +41,7 @@ recv_field_41(Handle, Caps, Byte) ->
     {ok, OT, H4} = recv_packed_binary(undefined, Caps, H3),
     {ok, NA, H5} = recv_packed_binary(undefined, Caps, H4),
     {ok, ON, H6} = recv_packed_binary(undefined, Caps, H5),
-    {ok, B,  H7} = recv(13, Caps, H6),
+    {ok, B,  H7} = recv_binary(13, Caps, H6),
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
                 name = NA, org_name = ON, charsetnr = E, length = L,
@@ -51,7 +51,7 @@ recv_field_41(Handle, Caps, Byte) ->
 recv_field(Handle, Caps, Byte) ->
     {ok, TA, H1} = recv_packed_binary(Byte, Caps, Handle),
     {ok, NA, H2} = recv_packed_binary(undefined, Caps, H1),
-    {ok, B,  H3} = recv(10, Caps, H2),
+    {ok, B,  H3} = recv_binary(10, Caps, H2),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
                 type = T, flags = F, decimals = N, cast = cast(T)}, H3}. % TODO: mask(flags)

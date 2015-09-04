@@ -25,7 +25,7 @@
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv/3, recv_packed_binary/3]).
+                        recv_binary/3, recv_packed_binary/3]).
 
 -type(caps() :: non_neg_integer()).
 
@@ -78,7 +78,7 @@ prepare_fields(Fields) ->
 -spec recv_row(handle(),caps(),byte(),fields()) -> {ok, rows(), handle()}.
 recv_row(#handle{}=H, Caps, <<0>>, Fields) -> % TODO
     Size = (length(Fields) + (8+1)) div 8,
-    case recv(Size, Caps, H) of
+    case recv_binary(Size, Caps, H) of
         {ok, Binary, Handle} ->
             recv_row(null_fields(Binary,0,Size,[]), Fields, [], Caps, Handle)
     end.
@@ -102,7 +102,7 @@ null_fields(Binary, Start, Length, List) ->
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
 restore(#field{cast={integer,Size},flags=F}, Caps, #handle{}=H) ->
-    case recv(Size, Caps, H) of
+    case recv_binary(Size, Caps, H) of
         {ok, Binary, Handle} ->
             Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/integer-unsigned-little-unit:8>> = Binary, Value;
@@ -111,7 +111,7 @@ restore(#field{cast={integer,Size},flags=F}, Caps, #handle{}=H) ->
             {ok, Data, Handle}
     end;
 restore(#field{cast={float,Size},flags=F}, Caps, #handle{}=H) ->
-    case recv(Size, Caps, H) of
+    case recv_binary(Size, Caps, H) of
         {ok, Binary, Handle} ->
             Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/float-unsigned-little-unit:8>> = Binary, Value;

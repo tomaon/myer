@@ -28,7 +28,7 @@
 %%xport([next_result/1, stmt_next_result/2]).
 
 -export([binary_to_float/2,
-         recv/3, recv_packed_binary/3, recv_unsigned/3]).
+         recv_binary/3, recv_text/3, recv_packed_binary/3, recv_unsigned/3]).
 
 %% == private ==
 
@@ -124,7 +124,7 @@ connect_pre(Address, Port, MaxLength, Timeout) ->
     end.
 
 connect_post(MaxLength, #handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<10>>, Handle} -> % "always 10"
             recv_handshake(#handshake{maxlength = MaxLength}, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -150,7 +150,7 @@ auth_pre(#handle{}=H, User, Password, Database, Charset, #handshake{caps=C}=R) -
     {ok, [auth_to_binary(User,Password,Database,Handshake),Handshake,H]}.
 
 auth_post(#handshake{caps=C,version=V}=R, #handle{}=H) ->
-    case recv(1, C, H#handle{caps = C, version = V}) of
+    case recv_binary(1, C, H#handle{caps = C, version = V}) of
         {ok, <<0>>, Handle} ->
             recv_result(#result{}, C, Handle);
         {ok, <<254>>, Handle} ->
@@ -165,7 +165,7 @@ auth_alt_pre(#handle{}=H, Password, #handshake{seed=S,plugin=P}) ->
     {ok, [<<Scrambled/binary,0>>,H]}.
 
 auth_alt_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_result(#result{}, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -183,7 +183,7 @@ stat_pre(#handle{}=H) ->
     {ok, [<<?COM_STATISTICS>>,reset(H)]}.
 
 stat_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<255>>, Handle} ->
             recv_reason(#reason{}, C, Handle);
         {ok, Byte, Handle} ->
@@ -206,7 +206,7 @@ query_pre(#handle{}=H, Query) ->
     {ok, [<<?COM_QUERY,Query/binary>>,reset(H)]}.
 
 query_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_result(#result{}, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -221,7 +221,7 @@ stmt_prepare_pre(#handle{}=H, Query) ->
     {ok, [<<?COM_STMT_PREPARE,Query/binary>>,reset(H)]}.
 
 stmt_prepare_post(#handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_prepare(#prepare{flags = ?CURSOR_TYPE_NO_CURSOR,
                                   prefetch_rows = 1, execute = 0}, C, Handle); % TODO
@@ -259,7 +259,7 @@ stmt_reset_pre(#handle{}=H, #prepare{stmt_id=S}=P) ->
     {ok, [<<?COM_STMT_RESET,S:32/little>>,P,reset(H)]}.
 
 stmt_reset_post(#prepare{}=P, #handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_stmt_reset(P, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -272,7 +272,7 @@ stmt_execute_pre(#handle{}=H, #prepare{}=P, Params) ->
     {ok, [stmt_execute_to_binary(P,Params),P,reset(H)]}.
 
 stmt_execute_post(#prepare{}=P, #handle{caps=C}=H) ->
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_stmt_result(P, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -350,8 +350,16 @@ loop(Args, [H|T]) ->
             {error, Reason, Handle}
     end.
 
-recv(Term, Caps, #handle{}=H) ->
-    case myer_handle:recv(H, Term, ?IS_SET(Caps,?CLIENT_COMPRESS)) of
+recv_binary(Term, _Caps, #handle{}=H) ->
+    case myer_handle:recv_binary(H, Term) of
+        {ok, Binary, Handle} ->
+            {ok, Binary, Handle};
+        {error, Reason} ->
+            throw({error,Reason,H})
+    end.
+
+recv_text(Term, _Caps, #handle{}=H) ->
+    case myer_handle:recv_text(H, Term) of
         {ok, Binary, Handle} ->
             {ok, Binary, Handle};
         {error, Reason} ->
@@ -359,7 +367,7 @@ recv(Term, Caps, #handle{}=H) ->
     end.
 
 recv_fields_func(Caps) % TODO
- when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
+  when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     fun myer_protocol_text_old:recv_field_41/3;
 recv_fields_func(_Caps) ->
     fun myer_protocol_text_old:recv_field/3.
@@ -389,11 +397,11 @@ recv_packed_binary(Byte, Caps, #handle{}=H) ->
         {ok, 0, Handle} ->
             {ok, <<>>, Handle};
         {ok, Length, Handle} ->
-            recv(Length, Caps, Handle)
+            recv_binary(Length, Caps, Handle)
     end.
 
 recv_packed_unsigned(Caps, #handle{}=H) ->
-    case recv(1, Caps, H) of
+    case recv_binary(1, Caps, H) of
         {ok, Byte, Handle} ->
             recv_packed_unsigned(Byte, Caps, Handle)
     end.
@@ -406,13 +414,13 @@ recv_packed_unsigned(<<251>>,  _Caps, Handle) -> {ok, null, Handle};
 recv_packed_unsigned(<<Int>>,  _Caps, Handle) -> {ok, Int, Handle}.
 
 recv_remains(Byte, Caps, #handle{}=H) ->
-    case recv(remains(H), Caps, H) of
+    case recv_binary(remains(H), Caps, H) of
         {ok, Binary, Handle} ->
             {ok, [<<Byte/binary,Binary/binary>>,Handle]}
     end.
 
 recv_result(#handle{caps=C}=H) -> % < loop
-    case recv(1, C, H) of
+    case recv_binary(1, C, H) of
         {ok, <<0>>, Handle} ->
             recv_result(#result{}, C, Handle);
         {ok, <<255>>, Handle} ->
@@ -459,13 +467,13 @@ recv_stmt_rows(_Status, #prepare{fields=F}=P, #handle{caps=C}=H) ->
     end.
 
 recv_unsigned(Length, Caps, #handle{}=H) ->
-    case recv(Length, Caps, H) of
+    case recv_binary(Length, Caps, H) of
         {ok, Binary, Handle} ->
             {ok, binary:decode_unsigned(Binary,little), Handle}
     end.
 
 recv_until_eof(Func, Args, List, Caps, #handle{}=H) ->
-    case recv(1, Caps, H) of
+    case recv_binary(1, Caps, H) of
         {ok, <<254>>, Handle} ->
             recv_eof(#result{}, lists:reverse(List), Caps, Handle);
         {ok, <<255>>, Handle} ->
@@ -616,13 +624,13 @@ recv_eof(#result{}=R, Term, _Caps, Handle) ->
 %%    sql/auth/sql_authentication.cc : send_server_handshake_packet/3
 %% -----------------------------------------------------------------------------
 recv_handshake(#handshake{version=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    {ok, B, H} = recv_text(<<0>>, Caps, Handle),
     recv_handshake(R#handshake{version = binary_to_version(B)}, Caps, H);
 recv_handshake(#handshake{tid=undefined}=R, Caps, Handle) ->
     {ok, U, H} = recv_unsigned(4, Caps, Handle),
     recv_handshake(R#handshake{tid = U}, Caps, H);
 recv_handshake(#handshake{seed1=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    {ok, B, H} = recv_text(<<0>>, Caps, Handle),
     recv_handshake(R#handshake{seed1 = B}, Caps, H);
 recv_handshake(#handshake{caps1=undefined}=R, Caps, Handle) ->
     {ok, U, H} = recv_unsigned(2, Caps, Handle),
@@ -647,20 +655,20 @@ recv_handshake(#handshake{length=undefined}=R, Caps, Handle) ->
     recv_handshake(R#handshake{length = 8}, Caps, Handle);   % 8?, TODO
 recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv(10, Caps, Handle),
+    {ok, B, H} = recv_binary(10, Caps, Handle),
     recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"
 recv_handshake(#handshake{reserved=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv(13, Caps, Handle),
+    {ok, B, H} = recv_binary(13, Caps, Handle),
     recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"?
 recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    {ok, B, H} = recv_text(<<0>>, Caps, Handle),
     recv_handshake(R#handshake{seed2 = B}, Caps, H);
 recv_handshake(#handshake{seed2=undefined}=R, Caps, Handle) ->
     recv_handshake(R#handshake{seed2 = <<>>}, Caps, Handle);
 recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=R, Caps, Handle)
   when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    {ok, B, H} = recv_text(<<0>>, Caps, Handle),
     recv_handshake(R#handshake{plugin = B}, Caps, H);
 recv_handshake(#handshake{plugin=undefined}=R, Caps, Handle) ->
     recv_handshake(R#handshake{plugin = <<"mysql_native_password">>}, Caps, Handle);
@@ -672,7 +680,7 @@ recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=R, Caps, Handle) 
 %%    sql/auth/sql_authentication.cc : send_plugin_request_packet/3
 %% -----------------------------------------------------------------------------
 recv_plugin(#plugin{name=undefined}=P, Handshake, Caps, Handle) ->
-    {ok, B, H} = recv(<<0>>, Caps, Handle),
+    {ok, B, H} = recv_text(<<0>>, Caps, Handle),
     recv_plugin(P#plugin{name = B}, Handshake, Caps, H);
 recv_plugin(#plugin{}=P, Handshake, _Caps, Handle) ->
     {ok, [P,Handshake,Handle]}.
@@ -690,7 +698,7 @@ recv_prepare(#prepare{param_count=undefined}=P, Caps, Handle) ->
     {ok, U, H} = recv_unsigned(2, Caps, Handle),
     recv_prepare(P#prepare{param_count=U}, Caps, H);
 recv_prepare(#prepare{reserved=undefined}=P, Caps, Handle) ->
-    {ok, B, H} = recv(1, Caps, Handle), % <<0>>
+    {ok, B, H} = recv_binary(1, Caps, Handle), % <<0>>
     recv_prepare(P#prepare{reserved=B}, Caps, H);
 recv_prepare(#prepare{warning_count=undefined}=P, Caps, Handle) -> % < 5.0, undefined?
     {ok, U, H} = recv_unsigned(2, Caps, Handle),
@@ -707,14 +715,14 @@ recv_reason(#reason{errno=undefined}=R, Caps, Handle) ->
     recv_reason(R#reason{errno = U}, Caps, H);
 recv_reason(#reason{reserved=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv(1, Caps, Handle), % <<$#>>
+    {ok, B, H} = recv_binary(1, Caps, Handle), % <<$#>>
     recv_reason(R#reason{reserved = B}, Caps, H);
 recv_reason(#reason{state=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv(5, Caps, Handle),
+    {ok, B, H} = recv_binary(5, Caps, Handle),
     recv_reason(R#reason{state = B}, Caps, H);
 recv_reason(#reason{message=undefined}=R, Caps, Handle)->
-    {ok, B, H} = recv(remains(Handle), Caps, Handle),
+    {ok, B, H} = recv_binary(remains(Handle), Caps, Handle),
     recv_reason(R#reason{message = B}, Caps, H);
 recv_reason(#reason{}=R, _Caps, Handle) ->
     {error, R, Handle}. % != ok
@@ -737,7 +745,7 @@ recv_result(#result{warning_count=undefined}=R, Caps, Handle)
     {ok, U, H} = recv_unsigned(2, Caps, Handle),
     recv_result(R#result{warning_count = U}, Caps, H);
 recv_result(#result{message=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv(remains(Handle), Caps, Handle),
+    {ok, B, H} = recv_binary(remains(Handle), Caps, Handle),
     recv_result(R#result{message = B}, Caps, H);
 recv_result(#result{}=R, _Caps, Handle) ->
     {ok, [R,Handle]}.
