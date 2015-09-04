@@ -23,7 +23,7 @@
 -export([connect/1, close/1, auth/1]).
 -export([stat/1, version/1]).
 -export([ping/1, refresh/1, select_db/1]).
--export([query/1]).
+-export([real_query/1]).
 -export([stmt_prepare/1, stmt_close/1, stmt_reset/1,
          stmt_execute/1, stmt_fetch/1]).
 %%xport([next_result/1, stmt_next_result/2]).
@@ -108,11 +108,11 @@ select_db(Args) ->
     loop(Args, [fun select_db_pre/2, fun send/2, fun recv/1]).
 
 
--spec query(args()) ->
-                   {ok,result(),handle()}|
-                   {ok,fields(),rows(),result(),handle()}|
-                   {error,_,handle()}.
-query(Args) ->
+-spec real_query(args()) ->
+                        {ok,result(),handle()}|
+                        {ok,fields(),rows(),result(),handle()}|
+                        {error,_,handle()}.
+real_query(Args) ->
     loop(Args, [fun query_pre/2, fun send/2, fun query_post/1,
                 fun recv_fields/2, fun recv_rows/3]).
 

@@ -25,9 +25,9 @@
 
 -export([stat/2, version/2]).
 -export([ping/2, refresh/3, select_db/3]).
-%% -export([query/1]).
-%% -export([stmt_prepare/1, stmt_close/1, stmt_reset/1,
-%%          stmt_execute/1, stmt_fetch/1]).
+-export([real_query/3, autocommit/3, commit/2, rollback/2]).
+%%xport([stmt_prepare/1, stmt_close/1, stmt_reset/1,
+%%       stmt_execute/1, stmt_fetch/1]).
 
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
@@ -80,6 +80,29 @@ refresh(Pid, Option, Timeout)
 select_db(Pid, Database, Timeout)
   when is_pid(Pid), is_binary(Database), ?IS_TIMEOUT(Timeout) ->
     gen_server:call(Pid, {select_db,[Database]}).
+
+
+-spec real_query(pid(),binary(),timeout()) ->
+                        {ok,result()}|
+                        {ok,fields(),rows(),result()}|
+                        {error,_}.
+real_query(Pid, Query, Timeout)
+  when is_pid(Pid), is_binary(Query), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {real_query,[Query]}, Timeout).
+
+-spec autocommit(pid(),boolean(),timeout()) -> {ok,result()}|{error,_}.
+autocommit(Pid, true, Timeout) ->
+    real_query(Pid, <<"SET autocommit=1">>, Timeout);
+autocommit(Pid, false, Timeout) ->
+    real_query(Pid, <<"SET autocommit=0">>, Timeout).
+
+-spec commit(pid(),timeout()) -> {ok,result()}|{error,_}.
+commit(Pid, Timeout) ->
+    real_query(Pid, <<"COMMIT">>, Timeout).
+
+-spec rollback(pid(),timeout()) -> {ok,result()}|{error,_}.
+rollback(Pid, Timeout) ->
+    real_query(Pid, <<"ROLLBACK">>, Timeout).
 
 %% == behaviour: gen_server ==
 

@@ -27,8 +27,11 @@
 -export([set_timeout/2]).
 
 %% -- public: worker --
--export([autocommit/2, commit/1, get_server_version/1, next_result/1, ping/1,
-         real_query/2, refresh/2, rollback/1, select_db/2, stat/1]).
+-export([get_server_version/1, stat/1]).
+-export([ping/1, refresh/2, select_db/2]).
+-export([real_query/2, autocommit/2, commit/1, rollback/1 ]).
+
+-export([next_result/1]).
 -export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_prepare/2, stmt_reset/2,
          stmt_next_result/2]).
 
@@ -98,54 +101,61 @@ set_timeout(#myer{}=H, Timeout)
 
 %% == public: worker ==
 
--spec autocommit(myer(),boolean()) -> {ok,result()}|{error,_}.
-autocommit(#myer{}=H, true) ->
-    real_query(H, <<"SET autocommit=1">>);
-autocommit(#myer{}=H, false) ->
-    real_query(H, <<"SET autocommit=0">>).
-
--spec commit(myer()) -> {ok,result()}|{error,_}.
-commit(#myer{}=H) ->
-    real_query(H, <<"COMMIT">>).
-
 -spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
 get_server_version(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:version(W, {version,[]}, T).
+    myer_client:version(W, T).
 
--spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
-next_result(#myer{worker=W})
+-spec stat(myer()) -> {ok,binary()}|{error,_}.
+stat(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:call(W, {next_result,[]}).
+    myer_client:stat(W, T).
+
 
 -spec ping(myer()) -> {ok,result()}|{error,_}.
 ping(#myer{worker=W,timeout=T})
   when is_pid(W) ->
     myer_client:ping(W, T).
 
--spec real_query(myer(),binary()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
-real_query(#myer{worker=W}, Query)
-  when is_pid(W), is_binary(Query) ->
-    myer_client:call(W, {query,[Query]}).
-
 -spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
 refresh(#myer{worker=W,timeout=T}, Option)
   when is_pid(W), is_integer(Option) ->
     myer_client:refresh(W, Option, T).
-
--spec rollback(myer()) -> {ok,result()}|{error,_}.
-rollback(#myer{}=H) ->
-    real_query(H, <<"ROLLBACK">>).
 
 -spec select_db(myer(),binary()) -> {ok,result()}|{error,_}.
 select_db(#myer{worker=W,timeout=T}, Database)
   when is_pid(W), is_binary(Database) ->
     myer_client:select_db(W, Database, T).
 
--spec stat(myer()) -> {ok,binary()}|{error,_}.
-stat(#myer{worker=W,timeout=T})
+
+-spec real_query(myer(),binary()) ->
+                        {ok,result()}|
+                        {ok,fields(),rows(),result()}|
+                        {error,_}.
+real_query(#myer{worker=W,timeout=T}, Query)
+  when is_pid(W), is_binary(Query) ->
+    myer_client:real_query(W, Query, T).
+
+-spec autocommit(myer(),boolean()) -> {ok,result()}|{error,_}.
+autocommit(#myer{worker=W,timeout=T}, Boolean)
+  when is_pid(W), is_boolean(Boolean) ->
+    myer_client:autocommit(W, Boolean, T).
+
+-spec commit(myer()) -> {ok,result()}|{error,_}.
+commit(#myer{worker=W,timeout=T})
   when is_pid(W) ->
-    myer_client:stat(W, T).
+    myer_client:commit(W, T).
+
+-spec rollback(myer()) -> {ok,result()}|{error,_}.
+rollback(#myer{worker=W,timeout=T})
+  when is_pid(W) ->
+    myer_client:rollback(W, T).
+
+
+-spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
+next_result(#myer{worker=W})
+  when is_pid(W) ->
+    myer_client:call(W, {next_result,[]}).
 
 -spec stmt_close(myer(),prepare()) -> ok|{error,_}.
 stmt_close(#myer{worker=W}, #prepare{}=X)
