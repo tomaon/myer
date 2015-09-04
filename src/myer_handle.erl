@@ -24,7 +24,7 @@
 -export([recv_binary/2, recv_text/2, send/2]).
 -export([remains/1]).
 -export([reset/1]).
--export([set_caps/2, set_version/2]).
+-export([caps/1, caps/2, version/1, version/2]).
 
 %% == public ==
 
@@ -76,12 +76,20 @@ reset(#handle{}=H) ->
     H#handle{seqnum = 0}.
 
 
--spec set_caps(handle(),non_neg_integer()) -> handle().
-set_caps(#handle{caps=undefined}=H, Caps) ->
+-spec caps(handle()) -> non_neg_integer().
+caps(#handle{caps=C}) ->
+    C.
+
+-spec caps(handle(),non_neg_integer()) -> handle().
+caps(#handle{caps=undefined}=H, Caps) ->
     H#handle{caps = Caps}.
 
--spec set_version(handle(),non_neg_integer()) -> handle().
-set_version(#handle{version=undefined}=H, Version) ->
+-spec version(handle()) -> version().
+version(#handle{version=V}) ->
+    V.
+
+-spec version(handle(),non_neg_integer()) -> handle().
+version(#handle{version=undefined}=H, Version) ->
     H#handle{version = Version}.
 
 %% == internal ==
