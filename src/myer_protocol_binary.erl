@@ -21,13 +21,11 @@
 
 %% -- public --
 -export([prepare_fields/1]).
--export([recv_row/4]).
+-export([recv_row/3]).
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv_binary/3, recv_packed_binary/3]).
-
--type(caps() :: non_neg_integer()).
+                        recv_binary/2, recv_packed_binary/2]).
 
 %% @see sql/protocol.cc : Protocol_binary::store*
 %%
@@ -75,22 +73,22 @@ prepare_fields(Fields) ->
     lists:map(fun(#field{type=T}=F) -> F#field{cast = cast(T)} end, Fields).
 
 
--spec recv_row(handle(),caps(),byte(),fields()) -> {ok, rows(), handle()}.
-recv_row(#handle{}=H, Caps, <<0>>, Fields) -> % TODO
+-spec recv_row(handle(),byte(),fields()) -> {ok, rows(), handle()}.
+recv_row(#handle{}=H, <<0>>, Fields) -> % TODO
     Size = (length(Fields) + (8+1)) div 8,
-    case recv_binary(Size, Caps, H) of
+    case recv_binary(Size, H) of
         {ok, Binary, Handle} ->
-            recv_row(null_fields(Binary,0,Size,[]), Fields, [], Caps, Handle)
+            recv_row(null_fields(Binary,0,Size,[]), Fields, [], Handle)
     end.
 
-recv_row(_NullFields, [], List, _Cap, Handle) ->
+recv_row(_NullFields, [], List, Handle) ->
     {ok, lists:reverse(List), Handle};
-recv_row([1|L], [_|T], List, Cap, Handle) ->
-    recv_row(L, T, [null|List], Cap, Handle);
-recv_row([0|L], [F|T], List, Cap, Handle) ->
-    case restore(F, Cap, Handle) of
+recv_row([1|L], [_|T], List, Handle) ->
+    recv_row(L, T, [null|List], Handle);
+recv_row([0|L], [F|T], List, Handle) ->
+    case restore(F, Handle) of
         {ok, V, H} ->
-            recv_row(L, T, [V|List], Cap, H)
+            recv_row(L, T, [V|List], H)
     end.
 
 %% == internal ==
@@ -101,8 +99,8 @@ null_fields(Binary, Start, Length, List) ->
     <<B8:1,B7:1,B6:1,B5:1,B4:1,B3:1,B2:1,B1:1>> = binary_part(Binary, Start, 1),
     null_fields(Binary, Start+1, Length-1, lists:append(List,[B1,B2,B3,B4,B5,B6,B7,B8])).
 
-restore(#field{cast={integer,Size},flags=F}, Caps, #handle{}=H) ->
-    case recv_binary(Size, Caps, H) of
+restore(#field{cast={integer,Size},flags=F}, #handle{}=H) ->
+    case recv_binary(Size, H) of
         {ok, Binary, Handle} ->
             Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/integer-unsigned-little-unit:8>> = Binary, Value;
@@ -110,8 +108,8 @@ restore(#field{cast={integer,Size},flags=F}, Caps, #handle{}=H) ->
                    end,
             {ok, Data, Handle}
     end;
-restore(#field{cast={float,Size},flags=F}, Caps, #handle{}=H) ->
-    case recv_binary(Size, Caps, H) of
+restore(#field{cast={float,Size},flags=F}, #handle{}=H) ->
+    case recv_binary(Size, H) of
         {ok, Binary, Handle} ->
             Data = case ?IS_SET(F, ?UNSIGNED_FLAG) of
                        true  -> <<Value:Size/float-unsigned-little-unit:8>> = Binary, Value;
@@ -119,8 +117,8 @@ restore(#field{cast={float,Size},flags=F}, Caps, #handle{}=H) ->
                    end,
             {ok, Data, Handle}
     end;
-restore(#field{cast=C}=F, Caps, #handle{}=H) ->
-    case recv_packed_binary(undefined, Caps, H) of
+restore(#field{cast=C}=F, #handle{}=H) ->
+    case recv_packed_binary(undefined, H) of
         {ok, Binary, Handle} ->
             {ok, C(Binary,F), Handle}
     end.

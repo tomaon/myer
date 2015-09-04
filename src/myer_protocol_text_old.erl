@@ -20,54 +20,52 @@
 -include("internal.hrl").
 
 %% -- public --
--export([recv_field_41/3, recv_field/3]).
--export([recv_row/4]).
+-export([recv_field_41/2, recv_field/2]).
+-export([recv_row/3]).
 
 %% -- internal --
 -import(myer_protocol, [binary_to_float/2,
-                        recv_binary/3, recv_packed_binary/3]).
-
--type(caps() :: non_neg_integer()).
+                        recv_binary/2, recv_packed_binary/2]).
 
 %% == public ==
 
 %% @see sql/protocol.cc : Protocol_text::store*
 
--spec recv_field_41(handle(),caps(),byte()) -> {ok, fields(), handle()}.
-recv_field_41(Handle, Caps, Byte) ->
-    {ok, CT, H1} = recv_packed_binary(Byte, Caps, Handle),
-    {ok, DB, H2} = recv_packed_binary(undefined, Caps, H1),
-    {ok, TA, H3} = recv_packed_binary(undefined, Caps, H2),
-    {ok, OT, H4} = recv_packed_binary(undefined, Caps, H3),
-    {ok, NA, H5} = recv_packed_binary(undefined, Caps, H4),
-    {ok, ON, H6} = recv_packed_binary(undefined, Caps, H5),
-    {ok, B,  H7} = recv_binary(13, Caps, H6),
+-spec recv_field_41(handle(),byte()) -> {ok,fields(),handle()}.
+recv_field_41(Handle, Byte) ->
+    {ok, CT, H1} = recv_packed_binary(Byte, Handle),
+    {ok, DB, H2} = recv_packed_binary(undefined, H1),
+    {ok, TA, H3} = recv_packed_binary(undefined, H2),
+    {ok, OT, H4} = recv_packed_binary(undefined, H3),
+    {ok, NA, H5} = recv_packed_binary(undefined, H4),
+    {ok, ON, H6} = recv_packed_binary(undefined, H5),
+    {ok, B,  H7} = recv_binary(13, H6),
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
                 name = NA, org_name = ON, charsetnr = E, length = L,
                 type = T, flags = F, decimals = N, cast = cast(T) }, H7}. % TODO: mask(flags)
 
--spec recv_field(handle(),caps(),byte()) -> {ok, fields(), handle()}.
-recv_field(Handle, Caps, Byte) ->
-    {ok, TA, H1} = recv_packed_binary(Byte, Caps, Handle),
-    {ok, NA, H2} = recv_packed_binary(undefined, Caps, H1),
-    {ok, B,  H3} = recv_binary(10, Caps, H2),
+-spec recv_field(handle(),byte()) -> {ok,fields(),handle()}.
+recv_field(Handle, Byte) ->
+    {ok, TA, H1} = recv_packed_binary(Byte, Handle),
+    {ok, NA, H2} = recv_packed_binary(undefined, H1),
+    {ok, B,  H3} = recv_binary(10, H2),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
                 type = T, flags = F, decimals = N, cast = cast(T)}, H3}. % TODO: mask(flags)
 
--spec recv_row(handle(),caps(),binary(),fields()) -> {ok, rows(), handle()}.
-recv_row(Handle, Caps, Byte, Fields) ->
-    recv_row(Handle, Caps, Byte, Fields, []).
+-spec recv_row(handle(),binary(),fields()) -> {ok,rows(),handle()}.
+recv_row(Handle, Byte, Fields) ->
+    recv_row(Handle, Byte, Fields, []).
 
-recv_row(Handle, _Caps, _Byte, [], List) ->
+recv_row(Handle, _Byte, [], List) ->
     {ok, lists:reverse(List), Handle};
-recv_row(Handle, Caps, Byte, [#field{cast=C}=F|T], List) ->
-    case recv_packed_binary(Byte, Caps, Handle) of
+recv_row(Handle, Byte, [#field{cast=C}=F|T], List) ->
+    case recv_packed_binary(Byte, Handle) of
         {ok, null, H} ->
-            recv_row(H, Caps, undefined, T, [null|List]);
+            recv_row(H, undefined, T, [null|List]);
         {ok, Binary, H} ->
-            recv_row(H, Caps, undefined, T, [C(Binary,F)|List])
+            recv_row(H, undefined, T, [C(Binary,F)|List])
     end.
 
 %% == internal ==
