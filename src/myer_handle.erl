@@ -54,12 +54,12 @@ close(#handle{socket=S}) ->
     baseline_socket:close(S).
 
 
--spec recv_binary(handle(),non_neg_integer()) -> {ok,binary(),handle()}.
-recv_binary(#handle{length=L}=H, Length) ->
+-spec recv_binary(non_neg_integer(),handle()) -> {ok,binary(),handle()}.
+recv_binary(Length, #handle{length=L}=H) ->
     recv_binary(H, Length, L >= Length).
 
--spec recv_text(handle(),binary()|binary:cp()) -> {ok,binary(),handle()}.
-recv_text(#handle{buf=B,start=S,length=L}=H, Pattern) ->
+-spec recv_text(binary()|binary:cp(),handle()) -> {ok,binary(),handle()}.
+recv_text(Pattern, #handle{buf=B,start=S,length=L}=H) ->
     Binary = binary_part(B, S, L),
     recv_text(H, Pattern, Binary, L, binary:match(Binary,Pattern)).
 
@@ -122,7 +122,7 @@ recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
     case update(H, binary_part(B,S,L), L) of
         {ok, Handle} ->
-            recv_binary(Handle, Length)
+            recv_binary(Length, Handle) % CAUTION
     end.
 
 recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
@@ -130,7 +130,7 @@ recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
 recv_text(#handle{}=H, Pattern, Binary, Length, nomatch) ->
     case update(H, Binary, Length) of
         {ok, Handle} ->
-            recv_text(Handle, Pattern)
+            recv_text(Pattern, Handle) % CAUTION
     end.
 
 send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length)

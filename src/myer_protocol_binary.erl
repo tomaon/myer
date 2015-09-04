@@ -24,8 +24,10 @@
 -export([recv_row/3]).
 
 %% -- internal --
--import(myer_protocol, [binary_to_float/2,
-                        recv_binary/2, recv_packed_binary/2]).
+
+-import(myer_handle, [recv_binary/2]).
+
+-import(myer_protocol, [binary_to_float/2, recv_packed_binary/1]).
 
 %% @see sql/protocol.cc : Protocol_binary::store*
 %%
@@ -118,7 +120,7 @@ restore(#field{cast={float,Size},flags=F}, #handle{}=H) ->
             {ok, Data, Handle}
     end;
 restore(#field{cast=C}=F, #handle{}=H) ->
-    case recv_packed_binary(undefined, H) of
+    case recv_packed_binary(H) of
         {ok, Binary, Handle} ->
             {ok, C(Binary,F), Handle}
     end.

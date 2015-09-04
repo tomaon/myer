@@ -24,8 +24,11 @@
 -export([recv_row/3]).
 
 %% -- internal --
+
+-import(myer_handle, [recv_binary/2]).
+
 -import(myer_protocol, [binary_to_float/2,
-                        recv_binary/2, recv_packed_binary/2]).
+                        recv_packed_binary/1, recv_packed_binary/2]).
 
 %% == public ==
 
@@ -34,11 +37,11 @@
 -spec recv_field_41(handle(),byte()) -> {ok,fields(),handle()}.
 recv_field_41(Handle, Byte) ->
     {ok, CT, H1} = recv_packed_binary(Byte, Handle),
-    {ok, DB, H2} = recv_packed_binary(undefined, H1),
-    {ok, TA, H3} = recv_packed_binary(undefined, H2),
-    {ok, OT, H4} = recv_packed_binary(undefined, H3),
-    {ok, NA, H5} = recv_packed_binary(undefined, H4),
-    {ok, ON, H6} = recv_packed_binary(undefined, H5),
+    {ok, DB, H2} = recv_packed_binary(H1),
+    {ok, TA, H3} = recv_packed_binary(H2),
+    {ok, OT, H4} = recv_packed_binary(H3),
+    {ok, NA, H5} = recv_packed_binary(H4),
+    {ok, ON, H6} = recv_packed_binary(H5),
     {ok, B,  H7} = recv_binary(13, H6),
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
@@ -48,7 +51,7 @@ recv_field_41(Handle, Byte) ->
 -spec recv_field(handle(),byte()) -> {ok,fields(),handle()}.
 recv_field(Handle, Byte) ->
     {ok, TA, H1} = recv_packed_binary(Byte, Handle),
-    {ok, NA, H2} = recv_packed_binary(undefined, H1),
+    {ok, NA, H2} = recv_packed_binary(H1),
     {ok, B,  H3} = recv_binary(10, H2),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
@@ -56,16 +59,24 @@ recv_field(Handle, Byte) ->
 
 -spec recv_row(handle(),binary(),fields()) -> {ok,rows(),handle()}.
 recv_row(Handle, Byte, Fields) ->
-    recv_row(Handle, Byte, Fields, []).
+    recv_row1(Handle, Byte, Fields, []).
 
-recv_row(Handle, _Byte, [], List) ->
+recv_row2(Handle, [], List) ->
     {ok, lists:reverse(List), Handle};
-recv_row(Handle, Byte, [#field{cast=C}=F|T], List) ->
+recv_row2(Handle, [#field{cast=C}=F|T], List) ->
+    case recv_packed_binary(Handle) of
+        {ok, null, H} ->
+            recv_row2(H, T, [null|List]);
+        {ok, Binary, H} ->
+            recv_row2(H, T, [C(Binary,F)|List])
+    end.
+
+recv_row1(Handle, Byte, [#field{cast=C}=F|T], List) ->
     case recv_packed_binary(Byte, Handle) of
         {ok, null, H} ->
-            recv_row(H, undefined, T, [null|List]);
+            recv_row2(H, T, [null|List]);
         {ok, Binary, H} ->
-            recv_row(H, undefined, T, [C(Binary,F)|List])
+            recv_row2(H, T, [C(Binary,F)|List])
     end.
 
 %% == internal ==

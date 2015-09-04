@@ -27,8 +27,11 @@
          stmt_execute/1, stmt_fetch/1]).
 %%xport([next_result/1, stmt_next_result/2]).
 
--export([binary_to_float/2,
-         recv_binary/2, recv_text/2, recv_packed_binary/2, recv_unsigned/2]).
+%% -- internal --
+
+-import(myer_handle, [recv_binary/2, recv_text/2]).
+
+-export([binary_to_float/2, recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
 
 %% == private ==
 
@@ -357,12 +360,6 @@ recv(#handle{}=H) -> % < loop
             recv_reason(Handle)
     end.
 
-recv_binary(Length, Handle) ->
-    myer_handle:recv_binary(Handle, Length).
-
-recv_text(Pattern, Handle) ->
-    myer_handle:recv_text(Handle, Pattern).
-
 recv_fields_func(Caps) % TODO
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     fun myer_protocol_text_old:recv_field_41/2;
@@ -387,6 +384,16 @@ recv_fields(U, #handle{caps=C}=H) -> % < loop
             {ok, [Fields,Handle]}
     end.
 
+recv_packed_binary(#handle{}=H) ->
+    case recv_packed_unsigned(H) of
+        {ok, null, Handle} ->
+            {ok, null, Handle};
+        {ok, 0, Handle} ->
+            {ok, <<>>, Handle};
+        {ok, Length, Handle} ->
+            recv_binary(Length, Handle)
+    end.
+
 recv_packed_binary(Byte, #handle{}=H) ->
     case recv_packed_unsigned(Byte, H) of
         {ok, null, Handle} ->
@@ -403,7 +410,6 @@ recv_packed_unsigned(#handle{}=H) ->
             recv_packed_unsigned(Byte, Handle)
     end.
 
-recv_packed_unsigned(undefined, Handle) -> recv_packed_unsigned(Handle);
 recv_packed_unsigned(<<254>>,   Handle) -> recv_unsigned(8, Handle);
 recv_packed_unsigned(<<253>>,   Handle) -> recv_unsigned(3, Handle);
 recv_packed_unsigned(<<252>>,   Handle) -> recv_unsigned(2, Handle);
