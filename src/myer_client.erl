@@ -118,11 +118,11 @@ stmt_close(Pid, #prepare{}=P, Timeout)
 -spec stmt_reset(pid(),prepare(),timeout()) -> {ok,prepare()}|{error,_}.
 stmt_reset(Pid, #prepare{}=P, Timeout)
   when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
-    gen_server:call(Pid, {stmt_reset,[P]}, Timeout).
+    gen_server:call(Pid, {stmt_reset,[P#prepare{execute = 0}]}, Timeout). % TODO
 
 -spec stmt_execute(pid(),prepare(),params(),timeout()) ->
                           {ok,prepare()}|
-                          {ok,fields(),rows(),prepare()}|
+                          {ok,rows(),prepare()}|
                           {error,_}.
 stmt_execute(Pid, #prepare{param_count=N}=P, Params, Timeout)
   when is_pid(Pid), is_list(Params), N == length(Params), ?IS_TIMEOUT(Timeout) ->
@@ -130,11 +130,16 @@ stmt_execute(Pid, #prepare{param_count=N}=P, Params, Timeout)
 
 -spec stmt_fetch(pid(),prepare(),timeout()) ->
                         {ok,prepare()}|
-                        {ok,fields(),rows(),prepare()}|
+                        {ok,rows(),prepare()}|
                         {error,_}.
-stmt_fetch(Pid, #prepare{}=P, Timeout)
+stmt_fetch(Pid, #prepare{result=R,execute=E}=P, Timeout)
   when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
-    gen_server:call(Pid, {stmt_fetch,[P]}, Timeout).
+    case ?IS_SET(R#result.status,?SERVER_STATUS_CURSOR_EXISTS) of
+        true  ->
+            gen_server:call(Pid, {stmt_fetch,[P#prepare{execute = E+1}]}, Timeout);
+        false ->
+            {ok, P#prepare{execute = E+1}} % TODO
+    end.
 
 %% == behaviour: gen_server ==
 

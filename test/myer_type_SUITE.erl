@@ -133,13 +133,9 @@ stmt_types_test(Config, Table, true) ->
 
     {ok, P0} = stmt_prepare(Config, Q),
 
-    F = fields(Config,Table),
     R = rows(Config,Table),
 
-    {ok, F1, R, P1} = stmt_execute(Config, P0, [0]),
-
-    F0 = fields_filtered(F),
-    F0 = fields_filtered(F1),
+    {ok, R, P1} = stmt_execute(Config, P0, [0]),
 
     ok = stmt_close(Config, P1).
 

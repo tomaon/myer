@@ -158,14 +158,14 @@ stmt_reset(#myer{worker=W,timeout=T}, Prepare) ->
 
 -spec stmt_execute(myer(),prepare(),[term()])
                   -> {ok,prepare()}|
-                     {ok,fields(),rows(),prepare()}|
+                     {ok,rows(),prepare()}|
                      {error,_}.
 stmt_execute(#myer{worker=W,timeout=T}, Prepare, Params) ->
     myer_client:stmt_execute(W, Prepare, Params, T).
 
 -spec stmt_fetch(myer(),prepare())
                 -> {ok,prepare()}|
-                   {ok,[field()],[term()],prepare()}|{error,_}.
+                   {ok,rows(),prepare()}|{error,_}.
 stmt_fetch(#myer{worker=W,timeout=T}, Prepare) ->
     myer_client:stmt_fetch(W, Prepare, T).
 
@@ -247,7 +247,7 @@ stmt_attr_set(#prepare{}=X, ?STMT_ATTR_PREFETCH_ROWS, Value) ->
     X#prepare{prefetch_rows = Value}.
 
 -spec stmt_warning_count(term()) -> non_neg_integer()|undefined.
-stmt_warning_count(#prepare{result=R}) -> warning_count(R);
+stmt_warning_count(#prepare{warning_count=W}) -> W;
 stmt_warning_count(_) -> undefined.
 
 

@@ -14,8 +14,9 @@
 -export([start_test/1, stop_test/1, version_test/1]).
 -export([checkout_test/1, checkin_test/1]).
 -export([set_timeout_test/1]).
--export([get_server_version_test/1, ping_test/1,
-         refresh_test/1, select_db_test/1, stat_test/1]).
+
+-export([get_server_version_test/1, stat_test/1]).
+-export([ping_test/1, refresh_test/1, select_db_test/1]).
 
 -export([real_test_crud/1,
          real_test_transaction/1,
@@ -447,12 +448,12 @@ stmt_test_crud(Config, true) ->
         {ok, R0} = stmt_prepare(Config, <<"SELECT * FROM " ?TABLE " WHERE id = ?">>),
         0 = stmt_warning_count(R0), 3 = stmt_field_count(R0), 1 = stmt_param_count(R0),
 
-        {ok, _, [], R1} = stmt_execute(Config, R0, [1]),
+        {ok, [], R1} = stmt_execute(Config, R0, [1]),
         undefined = stmt_affected_rows(R1), 0 = stmt_warning_count(R1),
 
         {ok, R2} = stmt_reset(Config, R1),
 
-        {ok, _, [ [560,<<"mysql">>,+5.6] ], R3} = stmt_execute(Config, R2, [560]),
+        {ok, [ [560,<<"mysql">>,+5.6] ], R3} = stmt_execute(Config, R2, [560]),
         undefined = stmt_affected_rows(R3), 0 = stmt_warning_count(R3),
 
         ok = stmt_close(Config, R3)
@@ -511,7 +512,7 @@ stmt_test_count_0_0(Config, true) -> % param=0, field=0 (no-eof)
 
     {ok, P0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (560,'mysql',+5.6)">>),
     undefined = stmt_affected_rows(P0), undefined = stmt_insert_id(P0),
-    undefined = stmt_warning_count(P0), 0 = stmt_field_count(P0), 0 = stmt_param_count(P0),
+    0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 0 = stmt_param_count(P0),
 
     {ok, P1} = stmt_execute(Config, P0, []),
     1 = stmt_affected_rows(P1), 0 = stmt_insert_id(P1), 0 = stmt_warning_count(P1),
@@ -528,7 +529,7 @@ stmt_test_count_0_1(Config, true) -> % param=0, field=1
     {ok, P0} = stmt_prepare(Config, <<"SELECT @@version">>),
     0 = stmt_warning_count(P0), 1 = stmt_field_count(P0), 0 = stmt_param_count(P0),
 
-    {ok, _, _, P1} = stmt_execute(Config, P0, []),
+    {ok,_, P1} = stmt_execute(Config, P0, []),
     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
     ok = stmt_close(Config, P1).
@@ -543,7 +544,7 @@ stmt_test_count_1_1(Config, true) -> % param=1, field=1
     {ok, P0} = stmt_prepare(Config, <<"SHOW STATUS WHERE variable_name = ?">>),
     0 = stmt_warning_count(P0), 2 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    {ok, _, _, P1} = stmt_execute(Config, P0, [<<"uptime">>]),
+    {ok, _, P1} = stmt_execute(Config, P0, [<<"uptime">>]),
     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
     ok = stmt_close(Config, P1).
@@ -631,7 +632,7 @@ stmt_test_fetch(Config, true) ->
         {ok, P11} = stmt_execute(Config, P10, [-1,0]),
         undefined = stmt_affected_rows(P11), 0 = stmt_warning_count(P11),
 
-        {ok, _, [ [+5.1], [+5.5], [+5.6] ], P12} = stmt_fetch(Config, P11),
+        {ok, [ [+5.1], [+5.5], [+5.6] ], P12} = stmt_fetch(Config, P11),
         undefined = stmt_affected_rows(P12), 0 = stmt_warning_count(P12),
 
         {ok, P13} = stmt_fetch(Config, P12),
@@ -648,10 +649,10 @@ stmt_test_fetch(Config, true) ->
         {ok, P21} = stmt_execute(Config, P20, [-1,0]),
         undefined = stmt_affected_rows(P21), 0 = stmt_warning_count(P21),
 
-        {ok, _, [ [+5.1], [+5.5], [+5.6] ], P22} = stmt_fetch(Config, P21),
+        {ok, [ [+5.1], [+5.5], [+5.6] ], P22} = stmt_fetch(Config, P21),
         undefined = stmt_affected_rows(P22), 0 = stmt_warning_count(P22),
 
-        {ok, _, [], P23} = stmt_fetch(Config, P22), % ?!
+        {ok, [], P23} = stmt_fetch(Config, P22), % ?!
         undefined = stmt_affected_rows(P23), 0 = stmt_warning_count(P23),
 
         {ok, P24} = stmt_fetch(Config, P23),
@@ -668,10 +669,10 @@ stmt_test_fetch(Config, true) ->
         {ok, P31} = stmt_execute(Config, P30, [-1,0]),
         undefined = stmt_affected_rows(P31), 0 = stmt_warning_count(P31),
 
-        {ok, _, [ [+5.1], [+5.5] ], P32} = stmt_fetch(Config, P31),
+        {ok, [ [+5.1], [+5.5] ], P32} = stmt_fetch(Config, P31),
         undefined = stmt_affected_rows(P32), 0 = stmt_warning_count(P32),
 
-        {ok, _, [ [+5.6] ], P33} = stmt_fetch(Config, P32),
+        {ok, [ [+5.6] ], P33} = stmt_fetch(Config, P32),
         undefined = stmt_affected_rows(P33), 0 = stmt_warning_count(P33),
 
         {ok, P34} = stmt_fetch(Config, P33),
@@ -702,7 +703,7 @@ stmt_test_call_1(Config, true) ->
     {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p1(?)">>),
     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    {ok, _, [ [2] ], P1} = stmt_execute(Config, P0, [1]),
+    {ok, [ [2] ], P1} = stmt_execute(Config, P0, [1]),
     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
     true = more_results(P1),
@@ -736,12 +737,12 @@ stmt_test_call_2(Config, true) ->
     {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p2(?)">>),
     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    {ok, _, [ [3] ], P1} = stmt_execute(Config, P0, [1]),
+    {ok, [ [3] ], P1} = stmt_execute(Config, P0, [1]),
     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
     true = more_results(P1),
 
-    {ok, _, [ [4] ], P2} = stmt_execute(Config, P1, [1]),
+    {ok, [ [4] ], P2} = stmt_execute(Config, P1, [1]),
     undefined = stmt_affected_rows(P2), 0 = stmt_warning_count(P2),
 
     true = more_results(P2),

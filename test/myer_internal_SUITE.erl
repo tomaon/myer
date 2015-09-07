@@ -12,7 +12,7 @@
 
 %% -- public --
 -export([cover_myer_client_cast/1,
-         cover_myer_client_info1/1, cover_myer_client_info2/1]).
+         cover_myer_client_info1/1, cover_myer_client_info2/1, cover_myer_client_info3/1]).
 
 %% == callback: ct ==
 
@@ -29,7 +29,8 @@ groups() -> [
              {group_normal, [sequence], [
                                          cover_myer_client_cast,
                                          cover_myer_client_info1,
-                                         cover_myer_client_info2  % TODO, @see tmp/x1
+                                         cover_myer_client_info2,
+                                         cover_myer_client_info3  % TODO, @see tmp/x1
                                         ]}
             ].
 
@@ -63,10 +64,7 @@ cover_myer_client_info1(Config) ->
     Pid = element(3, ?config(handle,Config)),
     unlink(Pid),
 
-    Protocol = element(4, sys:get_state(Pid)),
-    true = test(erlang, is_record, [Protocol,protocol]),
-
-    Handle = element(2, Protocol),
+    Handle = element(3, sys:get_state(Pid)),
     handle = test(erlang, element, [1,Handle]),
 
     Socket = element(2, Handle),
@@ -86,10 +84,27 @@ cover_myer_client_info2(Config) ->
     Pid = element(3, ?config(handle,Config)),
     unlink(Pid),
 
-    Protocol = element(4, sys:get_state(Pid)),
-    true = test(erlang, is_record, [Protocol,protocol]),
+    Handle = element(3, sys:get_state(Pid)),
+    handle = test(erlang, element, [1,Handle]),
 
-    Handle = element(2, Protocol),
+    Socket = element(2, Handle),
+    socket = test(erlang, element, [1,Socket]),
+
+    Port = element(2, Socket),
+    true = test(erlang, is_port, [Port]),
+
+    Pid ! {tcp_error,Port}, % ...
+
+    ok = ct:sleep({seconds, 1}),
+
+    false = test(erlang, is_process_alive, [Pid]).
+
+cover_myer_client_info3(Config) ->
+
+    Pid = element(3, ?config(handle,Config)),
+    unlink(Pid),
+
+    Handle = element(3, sys:get_state(Pid)),
     handle = test(erlang, element, [1,Handle]),
 
     Socket = element(2, Handle),

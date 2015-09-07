@@ -83,7 +83,7 @@ auth(Args) ->
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/3, fun send/2, fun auth_alt_post/1]).
+    loop(Args, [fun auth_alt_pre/3, fun send/2, fun recv/1]).
 
 
 -spec stat(args()) -> {ok,binary(),handle()}|{error,_,handle()}. % != result()
@@ -113,7 +113,7 @@ select_db(Args) ->
                         {ok,fields(),rows(),result(),handle()}|
                         {error,_,handle()}.
 real_query(Args) ->
-    loop(Args, [fun query_pre/2, fun send/2, fun query_post/1,
+    loop(Args, [fun real_query_pre/2, fun send/2, fun real_query_post/1,
                 fun recv_fields/2, fun recv_rows/3]).
 
 
@@ -132,18 +132,34 @@ stmt_reset(Args) ->
 
 -spec stmt_execute(args()) ->
                           {ok,prepare(),handle()}|
-                          {ok,fields(),rows(),prepare(),handle()}|
+                          {ok,rows(),prepare(),handle()}|
                           {error,_,handle()}.
 stmt_execute(Args) ->
     loop(Args, [fun stmt_execute_pre/3, fun send/3, fun stmt_execute_post/2,
-                fun recv_stmt_fields/3, fun recv_stmt_rows/3]).
+                fun stmt_execute_recv_fields/3, fun recv_stmt_rows/2]).
 
 -spec stmt_fetch(args()) ->
                         {ok,prepare(),handle()}|
-                        {ok,fields(),rows(),prepare(),handle()}|
+                        {ok,rows(),prepare(),handle()}|
                         {error,_,handle()}.
 stmt_fetch(Args) ->
     loop(Args, [fun stmt_fetch_pre/2, fun send/3, fun recv_stmt_rows/2]).
+
+
+%% -spec next_result(args()) ->
+%%                          {ok,result(),handle()}|
+%%                          {ok,fields(),rows(),result(),handle()}|
+%%                          {error,_,handle()}.
+%% next_result(Args) ->
+%%     loop(Args, [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
+
+%% -spec stmt_next_result(args()) ->
+%%                               {ok,prepare(),handle()}|
+%%                               {ok,fields(),rows(),prepare(),handle()}|
+%%                               {error,_,handle()}.
+%% stmt_next_result(Args) ->
+%%     loop(Args, [fun stmt_next_result_pre/1, fun recv_status/1,
+%%                 fun stmt_next_result_post/3]).
 
 %% -- internal: connect --
 
@@ -196,14 +212,6 @@ auth_alt_pre(Handle, Password, #handshake{seed=S,plugin=P}) ->
     Scrambled = myer_auth:scramble(Password, S, P),
     {ok, [<<Scrambled/binary,0>>,Handle]}.
 
-auth_alt_post(Handle) ->
-    case recv_binary(1, Handle) of
-        {ok, <<0>>, Next} ->
-            recv_result(Next);
-        {ok, <<255>>, Next} ->
-            recv_reason(Next)
-    end.
-
 %% -- internal: ping --
 
 ping_pre(Handle) ->
@@ -234,10 +242,10 @@ select_db_pre(Handle, Database) ->
 
 %% -- internal: query --
 
-query_pre(Handle, Query) ->
+real_query_pre(Handle, Query) ->
     {ok, [<<?COM_QUERY,Query/binary>>,reset(Handle)]}.
 
-query_post(Handle) ->
+real_query_post(Handle) ->
     case recv_binary(1, Handle) of
         {ok, <<0>>, Next} ->
             recv_result(Next);
@@ -261,7 +269,7 @@ stmt_prepare_post(Handle) ->
     end.
 
 stmt_prepare_recv_params(#prepare{param_count=0}=P, Handle) ->
-    {ok, [P#prepare{params = [], result = undefined},Handle]};
+    {ok, [P#prepare{params = []},Handle]};
 stmt_prepare_recv_params(#prepare{param_count=N}=P, Handle) ->
     case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
         {ok, [Result,Params,Next]} when N == length(Params)->
@@ -269,11 +277,12 @@ stmt_prepare_recv_params(#prepare{param_count=N}=P, Handle) ->
     end.
 
 stmt_prepare_recv_fields(#prepare{field_count=0}=P, Handle) ->
-    {ok, [P#prepare{fields = [], result = undefined},Handle]};
+    {ok, [P#prepare{fields = []},Handle]};
 stmt_prepare_recv_fields(#prepare{field_count=N}=P, Handle) ->
     case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
         {ok, [Result,Fields,Next]} when N == length(Fields) ->
-            {ok, [P#prepare{fields = Fields, result = Result},Next]}
+            {ok, [P#prepare{fields = myer_protocol_binary:prepare_fields(Fields),
+                            result = Result},Next]}
     end.
 
 %% -- internal: stmt_close --
@@ -292,7 +301,7 @@ stmt_reset_pre(Handle, #prepare{stmt_id=S}=P) ->
 stmt_reset_post(Prepare, Handle) ->
     case recv_binary(1, Handle) of
         {ok, <<0>>, Next} ->
-            recv_stmt_reset(Prepare, Next);
+            recv_stmt_result(Prepare, Next);
         {ok, <<255>>, Next} ->
             recv_reason(Next)
     end.
@@ -300,7 +309,7 @@ stmt_reset_post(Prepare, Handle) ->
 %% -- internal: stmt_execute --
 
 stmt_execute_pre(Handle, Prepare, Params) ->
-    {ok, [stmt_execute_to_binary(Prepare,Params),Prepare,reset(Handle)]}.
+    {ok, [params_to_binary(Prepare,Params),Prepare,reset(Handle)]}.
 
 stmt_execute_post(Prepare, Handle) ->
     case recv_binary(1, Handle) of
@@ -312,30 +321,27 @@ stmt_execute_post(Prepare, Handle) ->
             recv_fields_length(Byte, Prepare, Next)
     end.
 
+stmt_execute_recv_fields(0, #prepare{}=P, Handle) ->
+    {ok, P#prepare{fields = []}, Handle};
+stmt_execute_recv_fields(N, #prepare{}=P, Handle) ->
+    case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
+        {ok, [#result{status=S}=R,Fields,Next]} when N == length(Fields) ->
+            {ok, [P#prepare{
+                    fields = myer_protocol_binary:prepare_fields(Fields),
+                    result = R},Next], not(?IS_SET(S,?SERVER_STATUS_CURSOR_EXISTS))}
+    end.
+
 %% -- internal: stmt_fetch --
 
-stmt_fetch_pre(#prepare{stmt_id=S,prefetch_rows=R}=P, Handle) ->
+stmt_fetch_pre(Handle, #prepare{stmt_id=S,prefetch_rows=R}=P) ->
     {ok, [<<?COM_STMT_FETCH,S:32/little,R:32/little>>,P,reset(Handle)]}.
 
-%% -spec next_result(protocol())
-%%                  -> {ok,result(),protocol()}|
-%%                     {ok,{[field()],[term()],result()},protocol()}|{error,_,protocol()}.
-%% next_result(#protocol{handle=H}=P)
-%%   when undefined =/= H ->
-%%     loop([P], [fun next_result_pre/1, fun recv_status/1, fun query_post/3]).
+%% -- internal: next_result --
 
-%% -spec stmt_next_result(protocol(),prepare())
-%%                       -> {ok,prepare()}|{ok,[field()],[term()],prepare(),protocol()}|{error,_, protocol()}.
-%% stmt_next_result(#protocol{handle=H}=P, #prepare{}=X)
-%%   when undefined =/= H ->
-%%     loop([X,P], [fun stmt_next_result_pre/2, fun recv_status/2, fun stmt_next_result_post/3]).
+%% next_result_pre(Handle) ->
+%%     {ok, [reset(Handle)]}.
 
-%% -- internal: loop,next_result --
-
-%% next_result_pre(#protocol{}=P) ->
-%%     {ok, [reset(P)]}.
-
-%% -- internal: loop,stmt_next_result --
+%% -- internal: stmt_next_result --
 
 %% stmt_next_result_pre(#prepare{}=X, #protocol{}=P) ->
 %%     {ok, [X,reset(P)]}.
@@ -374,8 +380,14 @@ loop(Args, [H|T]) ->
     try apply(H, Args) of
         {ok, List} ->
             loop(List, T);
+        {ok, List, true} ->        % stmt_execute/1
+            loop(List, T);
+        {ok, List, false} ->       % recv_result/3, real_query/1, stmt_execute/1
+            loop(List, []);
         {error, Reason} ->         % connect_pre/4, send/2-3, recv_reason/3
-            {error, Reason}
+            {error, Reason};
+        {error, Reason, Handle} ->
+            {error, Reason, Handle}
     catch
         {error, Reason, Handle} -> % recv_binary/2, recv_text/2, send/2-3
             {error, Reason, Handle}
@@ -389,8 +401,13 @@ recv(Handle) -> % < loop
             recv_reason(Next)
     end.
 
-recv_fields_func(_) -> % TODO
-    fun myer_protocol_text_old:recv_field_41/2.
+recv_fields_func(_Handle) ->
+    %% case myer_handle:caps(Handle) of
+    %%     C when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
+            fun myer_protocol_text_old:recv_field_41/2.
+    %%     _ ->
+    %%         fun myer_protocol_text_old:recv_field/2
+    %% end.
 
 recv_fields_length(Byte, Handle) ->
     case recv_packed_unsigned(Byte, Handle) of
@@ -445,34 +462,13 @@ recv_rows(_Result, Fields, Handle) -> % < loop
             {ok, [Fields,Rows,Result,Next]}
     end.
 
-recv_stmt_fields(0, Prepare, Handle) -> % < loop
-    {ok, Prepare, Handle};
-recv_stmt_fields(U, #prepare{field_count=U,fields=L}=P, Handle) ->
-    case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
-        {ok, [#result{status=S}=R,L,Next]} ->
-            F = myer_protocol_binary:prepare_fields(L), % force
-            {ok, [S,P#prepare{fields = F, result = R},Next]}
-    end.
-
-recv_stmt_reset(#prepare{}=P, Handle) ->
+recv_stmt_result(#prepare{}=P, Handle) ->
     case recv_result(Handle) of
-        {ok, [Result, Next]} ->
-            {ok, [P#prepare{result = Result, execute = 0},Next]}
+        {ok, [Result,Next], false} ->
+            {ok, [P#prepare{result = Result},Next], false}
     end.
 
-recv_stmt_result(#prepare{execute=E}=P, Handle) ->
-    case recv_result(Handle) of
-        {ok, [Result,Next]} ->
-            {ok, [0,P#prepare{result = Result, execute = E+1},Next]}
-    end.
-
-recv_stmt_rows(#prepare{result=R}=P, Handle) ->
-    recv_stmt_rows(R#result.status, P, Handle).
-
-recv_stmt_rows(Status, Prepare, Handle)
-  when ?IS_SET(Status,?SERVER_STATUS_CURSOR_EXISTS) ->
-    {ok, [Prepare,Handle]};
-recv_stmt_rows(_Status, #prepare{fields=F}=P, Handle) ->
+recv_stmt_rows(#prepare{fields=F}=P, Handle) ->
     case recv_until_eof(fun myer_protocol_binary:recv_row/3, [F], [], Handle) of
         {ok, [Result,Rows,Next]} ->
             {ok, [Rows,P#prepare{result = Result},Next]}
@@ -784,51 +780,51 @@ recv_result(#result{message=undefined}=R, Caps, Handle) ->
     {ok, B, H} = recv_binary(remains(Handle), Handle),
     recv_result(R#result{message = B}, Caps, H);
 recv_result(#result{}=R, _Caps, Handle) ->
-    {ok, [R,Handle]}.
+    {ok, [R,Handle], false}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : *, TODO,TODO,TODO
 %% -----------------------------------------------------------------------------
-stmt_execute_fold_args([], _, _, L1, L2, B) ->
+params_fold_args([], _, _, L1, L2, B) ->
     {lists:reverse(L1), lists:reverse(L2), B};
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+params_fold_args([H|T], N, P, L1, L2, B)
   when is_integer(H), 0 > H ->
     B1 = <<?MYSQL_TYPE_LONGLONG:16/little>>,
     B2 = <<H:8/integer-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([H|T], N, P, L1, L2, B)
   when is_integer(H) ->
     B1 = <<(?MYSQL_TYPE_LONGLONG bor (1 bsl 15)):16/little>>,
     B2 = <<H:8/integer-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([H|T], N, P, L1, L2, B)
   when is_float(H), 0 > H ->
     B1 = <<?MYSQL_TYPE_DOUBLE:16/little>>,
     B2 = <<H:8/float-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([H|T], N, P, L1, L2, B)
   when is_float(H) ->
     B1 = <<(?MYSQL_TYPE_DOUBLE bor (1 bsl 15)):16/little>>,
     B2 = <<H:8/float-unsigned-little-unit:8>>,
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([H|T], N, P, L1, L2, B)
   when is_binary(H), 65536 > size(H) ->
     B1 = <<?MYSQL_TYPE_VAR_STRING:16/little>>,
     B2 = pack_binary(H),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([H|T], N, P, L1, L2, B)
-  when is_binary(H) -> % 16777186 < size(H) -> 'incorrect arguments to mysqld_stmt_execute'??
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([H|T], N, P, L1, L2, B)
+  when is_binary(H) -> % 16777186 < size(H) -> 'incorrect arguments to mysqld_params'??
     B1 = <<?MYSQL_TYPE_BLOB:16/little>>,
     B2 = pack_binary(H),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
-stmt_execute_fold_args([null|T], N, P, L1, L2, B) ->
+    params_fold_args(T, N, P+1, [B1|L1], [B2|L2], B);
+params_fold_args([null|T], N, P, L1, L2, B) ->
     B1 = <<0:16/little>>, % dummy
     X = 1 bsl ((P band 7) + 8 * (N - P div 8 - 1)),
-    stmt_execute_fold_args(T, N, P+1, [B1|L1], L2, B bor X).
+    params_fold_args(T, N, P+1, [B1|L1], L2, B bor X).
 
-stmt_execute_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Params) ->
+params_to_binary(#prepare{stmt_id=S,flags=F,execute=_E}, Params) ->
     W = (length(Params) + 7) div 8,
-    {T, D, U} = stmt_execute_fold_args(Params, W, 0, [], [], 0),
+    {T, D, U} = params_fold_args(Params, W, 0, [], [], 0),
     B = if %0 < E -> iolist_to_binary(lists:flatten([<<0>>,D]));
             true  -> iolist_to_binary(lists:flatten([<<1>>,T,D]))
         end,
