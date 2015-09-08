@@ -53,9 +53,9 @@ connect(Address, Port, MaxLength, Timeout) ->
          {keepalive, true},
          {mode, binary},
          {packet, raw},
-         {packet_size, MaxLength} % TODO
-         %%{send_timeout, ...}
-         %%{send_timeout_close, true}
+         {packet_size, 3+MaxLength}, % TODO
+         {send_timeout, timer:seconds(?NET_WRITE_TIMEOUT)},
+         {send_timeout_close, true}
         ],
     case baseline_socket:connect(Address, Port, L, Timeout) of
         {ok, Socket} ->
