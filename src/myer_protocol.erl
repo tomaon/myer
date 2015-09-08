@@ -276,7 +276,7 @@ stmt_prepare_recv_params(#prepare{param_count=N}=P, Handle) ->
             {ok, [P#prepare{params = Params, result = Result},Next]}
     end.
 
-stmt_prepare_recv_fields(#prepare{field_count=0}=P, Handle) ->
+stmt_prepare_recv_fields(#prepare{field_count=0}=P, Handle) -> % 'CALL'
     {ok, [P#prepare{fields = []},Handle]};
 stmt_prepare_recv_fields(#prepare{field_count=N}=P, Handle) ->
     case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
@@ -321,9 +321,9 @@ stmt_execute_post(Prepare, Handle) ->
             recv_fields_length(Byte, Prepare, Next)
     end.
 
-stmt_execute_recv_fields(0, #prepare{}=P, Handle) ->
-    {ok, P#prepare{fields = []}, Handle};
-stmt_execute_recv_fields(N, #prepare{}=P, Handle) ->
+%%mt_execute_recv_fields(0, #prepare{}=P, Handle) ->
+%%  {ok, P#prepare{fields = []}, Handle};
+stmt_execute_recv_fields(N, #prepare{}=P, Handle) -> % 'CALL': N!=field_count=0
     case recv_until_eof(recv_fields_func(Handle), [], [], Handle) of
         {ok, [#result{status=S}=R,Fields,Next]} when N == length(Fields) ->
             {ok, [P#prepare{
@@ -709,7 +709,7 @@ recv_plugin(#plugin{}=P, Handshake, _Caps, Handle) ->
 recv_prepare(Handle) ->
     recv_prepare(#prepare{
                     flags = ?CURSOR_TYPE_NO_CURSOR,
-                    prefetch_rows = 1,
+                    prefetch_rows = ?DEFAULT_PREFETCH_ROWS,
                     execute = 0
                    },
                  myer_handle:caps(Handle), Handle).

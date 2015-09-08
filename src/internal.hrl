@@ -142,6 +142,9 @@
 -define(MYSQL_TYPE_STRING,      254). % CHAR,BINARY
 -define(MYSQL_TYPE_GEOMETRY,    255). %
 
+%% @see ~/libmysql/libmysql.c
+-define(DEFAULT_PREFETCH_ROWS, 1).
+
 %% == record ==
 
 -record(prepare, {
