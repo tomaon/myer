@@ -30,36 +30,14 @@
 
 %% -- internal --
 
--import(myer_handle, [recv_binary/2, recv_text/2,
-                      remains/1, reset/1]).
+-import(myer_handle, [recv_binary/2, remains/1, reset/1]).
 
 -export([binary_to_float/2,
          recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
 
--record(handshake, {
-          version   :: version(),
-          tid       :: non_neg_integer(),
-          seed1     :: binary(),
-          caps1     :: non_neg_integer(),
-          charset   :: non_neg_integer(),
-          status    :: non_neg_integer(),
-          caps2     :: non_neg_integer(),
-          length    :: non_neg_integer(),
-          reserved  :: binary(),
-          seed2     :: binary(),
-          plugin    :: binary(),
-          maxlength :: non_neg_integer(),
-          seed      :: binary(),
-          caps      :: integer()
-         }).
-
--record(plugin, {
-          name :: binary()
-         }).
-
 -type(args() :: [term()]).
 -type(handle() :: myer_handle:handle()).
--type(handshake() :: #handshake{}).
+-type(handshake() :: myer_auth:handshake()).
 
 %% == private ==
 
@@ -74,16 +52,16 @@ close(Args) ->
 -spec auth(args()) -> {ok,result(),handle()}|{error,_,handle()}.
 auth(Args) ->
     case loop(Args, [fun auth_pre/6, fun send/3, fun auth_post/2]) of
-        {ok, #plugin{name=N}, #handshake{}=H, Handle} ->
-            auth_alt([Handle,lists:nth(3,Args),H#handshake{plugin = N}]);
         {ok, Result, Handle}->
             {ok, Result, Handle};
+        {ok, Plugin, Handshake, Handle} ->
+            auth_alt([Handle,lists:nth(3,Args),Plugin,Handshake]);
         {error, Reason, Handle} ->
             {error, Reason, Handle}
     end.
 
 auth_alt(Args) ->
-    loop(Args, [fun auth_alt_pre/3, fun send/2, fun recv/1]).
+    loop(Args, [fun auth_alt_pre/4, fun send/2, fun recv/1]).
 
 
 -spec stat(args()) -> {ok,binary(),handle()}|{error,_,handle()}. % != result()
@@ -190,27 +168,25 @@ close_post(Handle) ->
 
 %% -- internal: auth --
 
-auth_pre(Handle, User, Password, <<>>, Charset, #handshake{caps=C}=H) ->
-    Handshake = H#handshake{caps = (C bxor ?CLIENT_CONNECT_WITH_DB), charset = Charset},
-    {ok, [auth_to_binary(User,Password,<<>>,Handshake),Handshake,Handle]};
-auth_pre(Handle, User, Password, Database, Charset, #handshake{caps=C}=H) ->
-    Handshake = H#handshake{caps = (C bxor ?CLIENT_NO_SCHEMA), charset = Charset},
-    {ok, [auth_to_binary(User,Password,Database,Handshake),Handshake,Handle]}.
+auth_pre(Handle, User, Password, Database, Charset, Handshake) ->
+    {ok, B, H} = myer_auth:auth_to_binary(User, Password, Database, Charset, Handshake),
+    {ok, [B,H,Handle]}.
 
-auth_post(#handshake{caps=C,version=V}=H, Handle) ->
+auth_post(Handshake, Handle) ->
+    C = myer_auth:caps(Handshake),
+    V = myer_auth:version(Handshake),
     case recv_binary(1, myer_handle:version(myer_handle:caps(Handle,C),V)) of
         {ok, <<0>>, Next} ->
             recv_result(Next);
         {ok, <<254>>, Next} ->
-            recv_plugin(H, Next);
+            recv_plugin(Handshake, Next);
         {ok, <<255>>, Next} ->
             recv_reason(Next)
     end.
 
-
-auth_alt_pre(Handle, Password, #handshake{seed=S,plugin=P}) ->
-    Scrambled = myer_auth:scramble(Password, S, P),
-    {ok, [<<Scrambled/binary,0>>,Handle]}.
+auth_alt_pre(Handle, Password, Plugin, Handshake) ->
+    {ok, B} = myer_auth:auth_to_binary(Password, Plugin, Handshake),
+    {ok, [<<B/binary,0>>,Handle]}.
 
 %% -- internal: ping --
 
@@ -369,11 +345,6 @@ binary_to_float(Binary, _Decimals) ->
             end
     end.
 
-binary_to_version(Binary) ->
-    F = fun(E) -> try binary_to_integer(E,10) catch _:_ -> E end end,
-    L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
-    lists:map(F, lists:sublist(L,3)).
-
 loop(Args, []) ->
     list_to_tuple([ok|Args]);
 loop(Args, [H|T]) ->
@@ -404,10 +375,10 @@ recv(Handle) -> % < loop
 recv_fields_func(_Handle) ->
     %% case myer_handle:caps(Handle) of
     %%     C when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-            fun myer_protocol_text_old:recv_field_41/2.
-    %%     _ ->
-    %%         fun myer_protocol_text_old:recv_field/2
-    %% end.
+    fun myer_protocol_text_old:recv_field_41/2.
+%%     _ ->
+%%         fun myer_protocol_text_old:recv_field/2
+%% end.
 
 recv_fields_length(Byte, Handle) ->
     case recv_packed_unsigned(Byte, Handle) of
@@ -423,6 +394,12 @@ recv_fields_length(Byte, Term, Handle) ->
 
 recv_fields(_, Handle) -> % < loop
     recv_until_eof(recv_fields_func(Handle), [], [], Handle).
+
+recv_handshake(MaxLength, Handle) ->
+    case myer_auth:recv_handshake(MaxLength, Handle) of
+        {ok, Handshake, Next} ->
+            {ok, [Handshake,Next]}
+    end.
 
 recv_packed_binary(Handle) ->
     case recv_packed_unsigned(Handle) of
@@ -448,6 +425,12 @@ recv_packed_unsigned(Handle) ->
     case recv_binary(1, Handle) of
         {ok, Byte, Next} ->
             recv_packed_unsigned(Byte, Next)
+    end.
+
+recv_plugin(Handshake, Handle) ->
+    case myer_auth:recv_plugin(Handle) of
+        {ok, Plugin, Next} ->
+            {ok, [Plugin,Handshake,Next]}
     end.
 
 recv_remains(Byte, Handle) ->
@@ -566,46 +549,6 @@ recv_packed_unsigned(<<252>>, Handle) -> recv_unsigned(2, Handle);
 recv_packed_unsigned(<<251>>, Handle) -> {ok, null, Handle};
 recv_packed_unsigned(<<Int>>, Handle) -> {ok, Int, Handle}.
 
-%% -----------------------------------------------------------------------------
-%% << sql-common/client.c : send_client_reply_packet/3
-%% -----------------------------------------------------------------------------
-auth_to_binary(User, Password, Database,
-               #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
-  when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    X = myer_auth:scramble(Password, S, P),
-    B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
-           true                                -> <<X/binary,0>>
-        end,
-    D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
-           true                              -> <<0>>
-        end,
-    <<
-      C:32/little,
-      M:32/little,
-      E,
-      0:23/integer-unit:8,
-      User/binary, 0,
-      B/binary,
-      D/binary,
-      P/binary
-    >>;
-auth_to_binary(User, Password, Database,
-               #handshake{maxlength=M,seed=S,caps=C,plugin=P}) ->
-    A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
-    X = myer_auth:scramble(Password, S, P),
-    B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
-           true                                -> <<X/binary,0>>
-        end,
-    D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
-           true                              -> <<>>
-        end,
-    <<
-      A:16/little,
-      M:24/little,
-      User/binary, 0,
-      B/binary,
-      D/binary
-    >>.
 
 %% -----------------------------------------------------------------------------
 %% << sql/protocol.cc (< 5.7) : net_send_eof/3
@@ -628,80 +571,6 @@ recv_eof(#result{status=undefined}=R, Term, Caps, Handle) ->
     recv_eof(R#result{status = 0}, Term, Caps, Handle);
 recv_eof(#result{}=R, Term, _Caps, Handle) ->
     {ok, [R,Term,Handle]}.
-
-%% -----------------------------------------------------------------------------
-%% << sql/sql_acl.cc (< 5.7)         : send_server_handshake_packet/3
-%%    sql/auth/sql_authentication.cc : send_server_handshake_packet/3
-%% -----------------------------------------------------------------------------
-recv_handshake(MaxLength, Handle) ->
-    recv_handshake(#handshake{
-                      maxlength = MaxLength
-                     }, myer_handle:caps(Handle), Handle).
-
-recv_handshake(#handshake{version=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv_text(<<0>>, Handle),
-    recv_handshake(R#handshake{version = binary_to_version(B)}, Caps, H);
-recv_handshake(#handshake{tid=undefined}=R, Caps, Handle) ->
-    {ok, U, H} = recv_unsigned(4, Handle),
-    recv_handshake(R#handshake{tid = U}, Caps, H);
-recv_handshake(#handshake{seed1=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv_text(<<0>>, Handle),
-    recv_handshake(R#handshake{seed1 = B}, Caps, H);
-recv_handshake(#handshake{caps1=undefined}=R, Caps, Handle) ->
-    {ok, U, H} = recv_unsigned(2, Handle),
-    recv_handshake(R#handshake{caps1 = U}, Caps, H);
-recv_handshake(#handshake{charset=undefined}=R, Caps, Handle) ->
-    {ok, U, H} = recv_unsigned(1, Handle),
-    recv_handshake(R#handshake{charset = U}, Caps, H);
-recv_handshake(#handshake{status=undefined}=R, Caps, Handle) ->
-    {ok, U, H} = recv_unsigned(2, Handle),
-    recv_handshake(R#handshake{status = U}, Caps, H);
-recv_handshake(#handshake{version=V,caps1=C,caps2=undefined}=R, Caps, Handle)
-  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, U, H} = recv_unsigned(2, Handle),
-    recv_handshake(R#handshake{caps2 = U}, Caps, H);
-recv_handshake(#handshake{caps2=undefined}=R, Caps, Handle) ->
-    recv_handshake(R#handshake{caps2 = 0}, Caps, Handle);
-recv_handshake(#handshake{version=V,caps1=C,length=undefined}=R, Caps, Handle)
-  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, U, H} = recv_unsigned(1, Handle),
-    recv_handshake(R#handshake{length = U}, Caps, H);
-recv_handshake(#handshake{length=undefined}=R, Caps, Handle) ->
-    recv_handshake(R#handshake{length = 8}, Caps, Handle);   % 8?, TODO
-recv_handshake(#handshake{version=V,caps1=C,reserved=undefined}=R, Caps, Handle)
-  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv_binary(10, Handle),
-    recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"
-recv_handshake(#handshake{reserved=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv_binary(13, Handle),
-    recv_handshake(R#handshake{reserved = B}, Caps, H); % "always 0"?
-recv_handshake(#handshake{version=V,caps1=C,seed2=undefined}=R, Caps, Handle)
-  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv_text(<<0>>, Handle),
-    recv_handshake(R#handshake{seed2 = B}, Caps, H);
-recv_handshake(#handshake{seed2=undefined}=R, Caps, Handle) ->
-    recv_handshake(R#handshake{seed2 = <<>>}, Caps, Handle);
-recv_handshake(#handshake{version=V,caps1=C,plugin=undefined}=R, Caps, Handle)
-  when V >= [4,1,1]; ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    {ok, B, H} = recv_text(<<0>>, Handle),
-    recv_handshake(R#handshake{plugin = B}, Caps, H);
-recv_handshake(#handshake{plugin=undefined}=R, Caps, Handle) ->
-    recv_handshake(R#handshake{plugin = <<"mysql_native_password">>}, Caps, Handle);
-recv_handshake(#handshake{caps1=C1,caps2=C2,seed1=S1,seed2=S2}=R, Caps, Handle) ->
-    {ok, [R#handshake{caps = Caps band ((C2 bsl 16) bor C1), seed = <<S1/binary,S2/binary>>}, Handle]}.
-
-%% -----------------------------------------------------------------------------
-%% << sql/sql_acl.cc (< 5.7)         : send_plugin_request_packet/3
-%%    sql/auth/sql_authentication.cc : send_plugin_request_packet/3
-%% -----------------------------------------------------------------------------
-recv_plugin(Term, Handle) ->
-    recv_plugin(#plugin{}, Term, myer_handle:caps(Handle), Handle).
-
-recv_plugin(#plugin{name=undefined}=P, Handshake, Caps, Handle) ->
-    {ok, B, H} = recv_text(<<0>>, Handle),
-    recv_plugin(P#plugin{name = B}, Handshake, Caps, H);
-recv_plugin(#plugin{}=P, Handshake, _Caps, Handle) ->
-    {ok, [P,Handshake,Handle]}.
 
 %% -----------------------------------------------------------------------------
 %% << sql/sql_prepare.cc : send_prep_stmt/2
