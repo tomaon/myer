@@ -49,18 +49,17 @@
           name :: binary()
          }).
 
+-type(handle() :: myer_handle:handle()).
 -type(handshake() :: #handshake{}).
 -type(plugin() :: #plugin{}).
 
 -export_type([handshake/0, plugin/0]).
 
--type(handle() :: myer_handle:handle()).
-
-%% == private ==
+%% == internal ==
 
 -spec auth_to_binary(binary(),plugin(),handshake()) -> {ok,binary()}.
 auth_to_binary(Password, #plugin{name=N}, #handshake{seed=S}) ->
-    Scrambled = myer_auth:scramble(Password, S, N),
+    Scrambled = scramble(Password, S, N),
     {ok, <<Scrambled/binary,0>>}.
 
 -spec auth_to_binary(binary(),binary(),binary(),non_neg_integer(),handshake()) ->
@@ -75,9 +74,7 @@ auth_to_binary(User, Password, Database, Charset, #handshake{caps=C}=H) ->
 
 -spec recv_handshake(non_neg_integer(),handle()) -> {ok,handshake(),handle()}.
 recv_handshake(MaxLength, Handle) ->
-    recv_handshake(#handshake{
-                      maxlength = MaxLength
-                     }, myer_handle:caps(Handle), Handle).
+    recv_handshake(#handshake{maxlength = MaxLength}, myer_handle:caps(Handle), Handle).
 
 -spec recv_plugin(handle()) -> {ok,plugin(),handle()}.
 recv_plugin(Handle) ->

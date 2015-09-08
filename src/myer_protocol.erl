@@ -29,11 +29,10 @@
 %%xport([next_result/1, stmt_next_result/2]).
 
 %% -- internal --
-
--import(myer_handle, [recv_binary/2, remains/1, reset/1]).
-
 -export([binary_to_float/2,
          recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
+
+-import(myer_handle, [recv_binary/2, remains/1, reset/1]).
 
 -type(args() :: [term()]).
 -type(handle() :: myer_handle:handle()).
