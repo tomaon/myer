@@ -43,8 +43,8 @@ groups() -> [
                                            ]},
 
              {group_normal, [sequence], [
-                                         {group,real_test},
-                                         {group,stmt_test}
+                                         {group,real_test}
+                                       % {group,stmt_test}
                                         ]},
 
              {real_test, [], [

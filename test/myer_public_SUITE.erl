@@ -22,12 +22,12 @@
          real_test_transaction/1,
          real_test_multi/1,
          real_test_call_1/1, real_test_call_2/1]).
--export([stmt_test_crud/1,
-         stmt_test_count_0_0/1, stmt_test_count_0_1/1,
-         stmt_test_count_1_1/1, stmt_test_count_3_0/1,
-         stmt_test_fetch/1,
-         stmt_test_call_1/1, stmt_test_call_2/1,
-         stmt_test_blob/1]).
+%% -export([stmt_test_crud/1,
+%%          stmt_test_count_0_0/1, stmt_test_count_0_1/1,
+%%          stmt_test_count_1_1/1, stmt_test_count_3_0/1,
+%%          stmt_test_fetch/1,
+%%          stmt_test_call_1/1, stmt_test_call_2/1,
+%%          stmt_test_blob/1]).
 
 -export([cover_myer/1]).
 
@@ -63,12 +63,12 @@ groups() -> [
                                 real_test_crud,
                                 real_test_transaction,
                                 real_test_multi,
-                                real_test_call_1, real_test_call_2,
-                                stmt_test_crud,
-                                stmt_test_count_0_0, stmt_test_count_0_1,
-                                stmt_test_count_1_1, stmt_test_count_3_0,
-                                stmt_test_fetch,
-                                stmt_test_call_1, stmt_test_call_1
+                                real_test_call_1, real_test_call_2
+                              % stmt_test_crud
+                              % stmt_test_count_0_0, stmt_test_count_0_1
+                              % stmt_test_count_1_1, stmt_test_count_3_0
+                              % stmt_test_fetch
+                              % stmt_test_call_1, stmt_test_call_2
                               % stmt_test_blob
                                ]},
 
@@ -420,397 +420,414 @@ real_test_call_2(Config, true) ->
 
 %% -- stmt_* --
 
-stmt_test_crud(Config) ->
-    stmt_test_crud(Config, ?config(version,Config) > [5,1,0]).
+%% stmt_test_crud(Config) ->
+%%     stmt_test_crud(Config, ?config(version,Config) > [5,1,0]).
 
-stmt_test_crud(_Config, false) ->
-    {skip, not_supported};
-stmt_test_crud(Config, true) ->
+%% stmt_test_crud(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_crud(Config, true) ->
 
-    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+%%     {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
-    {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
-                                   "  id    INT"
-                                   ", name  VARCHAR(5)"
-                                   ", extra DOUBLE"
-                                   ")">>),
-    begin % -- Create --
-        {ok, C0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?,?)">>),
-        0 = stmt_warning_count(C0), 0 = stmt_field_count(C0), 3 = stmt_param_count(C0),
+%%     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
+%%                                    "  id    INT"
+%%                                    ", name  VARCHAR(5)"
+%%                                    ", extra DOUBLE"
+%%                                    ")">>),
+%%     begin % -- Create --
+%%         {ok, C0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?,?)">>),
+%%         0 = stmt_warning_count(C0), 0 = stmt_field_count(C0), 3 = stmt_param_count(C0),
 
-        {ok, C1} = stmt_execute(Config, C0, [560,<<"mysql">>,+5.6]),
-        1 = stmt_affected_rows(C1), 0 = stmt_insert_id(C1), 0 = stmt_warning_count(C1),
+%%         {ok, C1} = stmt_execute(Config, C0, [560,<<"mysql">>,+5.6]),
+%%         1 = stmt_affected_rows(C1), 0 = stmt_insert_id(C1), 0 = stmt_warning_count(C1),
 
-        ok = stmt_close(Config, C1)
-    end,
+%%         ok = stmt_close(Config, C1)
+%%     end,
 
-    begin % -- Read --
-        {ok, R0} = stmt_prepare(Config, <<"SELECT * FROM " ?TABLE " WHERE id = ?">>),
-        0 = stmt_warning_count(R0), 3 = stmt_field_count(R0), 1 = stmt_param_count(R0),
+%%     begin % -- Read --
+%%         {ok, R0} = stmt_prepare(Config, <<"SELECT * FROM " ?TABLE " WHERE id = ?">>),
+%%         0 = stmt_warning_count(R0), 3 = stmt_field_count(R0), 1 = stmt_param_count(R0),
 
-        {ok, [], R1} = stmt_execute(Config, R0, [1]),
-        undefined = stmt_affected_rows(R1), 0 = stmt_warning_count(R1),
+%%         {ok, [], R1} = stmt_execute(Config, R0, [1]),
+%%         undefined = stmt_affected_rows(R1), 0 = stmt_warning_count(R1),
 
-        {ok, R2} = stmt_reset(Config, R1),
+%%         {ok, R2} = stmt_reset(Config, R1),
 
-        {ok, [ [560,<<"mysql">>,+5.6] ], R3} = stmt_execute(Config, R2, [560]),
-        undefined = stmt_affected_rows(R3), 0 = stmt_warning_count(R3),
+%%         {ok, [ [560,<<"mysql">>,+5.6] ], R3} = stmt_execute(Config, R2, [560]),
+%%         undefined = stmt_affected_rows(R3), 0 = stmt_warning_count(R3),
 
-        ok = stmt_close(Config, R3)
-    end,
+%%         ok = stmt_close(Config, R3)
+%%     end,
 
-    begin % -- Update --
-        {ok, U0} = stmt_prepare(Config, <<"UPDATE " ?TABLE " SET extra = -1 WHERE id = ?">>),
-        0 = stmt_warning_count(U0), 0 = stmt_field_count(U0), 1 = stmt_param_count(U0),
+%%     begin % -- Update --
+%%         {ok, U0} = stmt_prepare(Config, <<"UPDATE " ?TABLE " SET extra = -1 WHERE id = ?">>),
+%%         0 = stmt_warning_count(U0), 0 = stmt_field_count(U0), 1 = stmt_param_count(U0),
 
-        {ok, U1} = stmt_execute(Config, U0, [1]),
-        0 = stmt_affected_rows(U1), 0 = stmt_warning_count(U1),
+%%         {ok, U1} = stmt_execute(Config, U0, [1]),
+%%         0 = stmt_affected_rows(U1), 0 = stmt_warning_count(U1),
 
-        {ok, U2} = stmt_reset(Config, U1),
+%%         {ok, U2} = stmt_reset(Config, U1),
 
-        {ok, U3} = stmt_execute(Config, U2, [560]),
-        1 = stmt_affected_rows(U3), 0 = stmt_warning_count(U3),
+%%         {ok, U3} = stmt_execute(Config, U2, [560]),
+%%         1 = stmt_affected_rows(U3), 0 = stmt_warning_count(U3),
 
-        ok = stmt_close(Config, U3),
+%%         ok = stmt_close(Config, U3),
 
-        {ok, _, [ [-1.0] ], _} =
-            real_query(Config, <<"SELECT extra FROM " ?TABLE " WHERE id = 560">>)
-    end,
+%%         {ok, _, [ [-1.0] ], _} =
+%%             real_query(Config, <<"SELECT extra FROM " ?TABLE " WHERE id = 560">>)
+%%     end,
 
-    begin % -- Delete --
-        {ok, D0} = stmt_prepare(Config, <<"DELETE FROM " ?TABLE " WHERE id = ?">>),
-        0 = stmt_warning_count(D0), 0 = stmt_field_count(D0), 1 = stmt_param_count(D0),
+%%     begin % -- Delete --
+%%         {ok, D0} = stmt_prepare(Config, <<"DELETE FROM " ?TABLE " WHERE id = ?">>),
+%%         0 = stmt_warning_count(D0), 0 = stmt_field_count(D0), 1 = stmt_param_count(D0),
 
-        {ok, D1} = stmt_execute(Config, D0, [1]),
-        0 = stmt_affected_rows(D1), 0 = stmt_warning_count(D1),
+%%         {ok, D1} = stmt_execute(Config, D0, [1]),
+%%         0 = stmt_affected_rows(D1), 0 = stmt_warning_count(D1),
 
-        {ok, D2} = stmt_reset(Config, D1),
+%%         {ok, D2} = stmt_reset(Config, D1),
 
-        {ok, D3} = stmt_execute(Config, D2, [560]),
-        1 = stmt_affected_rows(D3), 0 = stmt_warning_count(D3),
+%%         {ok, D3} = stmt_execute(Config, D2, [560]),
+%%         1 = stmt_affected_rows(D3), 0 = stmt_warning_count(D3),
 
-        ok = stmt_close(Config, D3),
+%%         ok = stmt_close(Config, D3),
 
-        {ok, _, [], _} =
-            real_query(Config, <<"SELECT extra FROM " ?TABLE " WHERE id = 560">>)
-    end.
+%%         {ok, _, [], _} =
+%%             real_query(Config, <<"SELECT extra FROM " ?TABLE " WHERE id = 560">>)
+%%     end.
 
-stmt_test_count_0_0(Config) ->
-    stmt_test_count_0_0(Config, ?config(version,Config) > [5,1,0]).
+%% stmt_test_count_0_0(Config) ->
+%%     stmt_test_count_0_0(Config, ?config(version,Config) > [5,1,0]).
 
-stmt_test_count_0_0(_Config, false) ->
-    {skip, not_supported};
-stmt_test_count_0_0(Config, true) -> % param=0, field=0 (no-eof)
+%% stmt_test_count_0_0(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_count_0_0(Config, true) -> % param=0, field=0 (no-eof)
 
-    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+%%     {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
-    {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
-                                   "  id    INT"
-                                   ", name  VARCHAR(5)"
-                                   ", extra DOUBLE"
-                                   ")">>),
+%%     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
+%%                                    "  id    INT"
+%%                                    ", name  VARCHAR(5)"
+%%                                    ", extra DOUBLE"
+%%                                    ")">>),
 
-    {ok, P0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (560,'mysql',+5.6)">>),
-    undefined = stmt_affected_rows(P0), undefined = stmt_insert_id(P0),
-    0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 0 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (560,'mysql',+5.6)">>),
+%%     undefined = stmt_affected_rows(P0), undefined = stmt_insert_id(P0),
+%%     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 0 = stmt_param_count(P0),
 
-    {ok, P1} = stmt_execute(Config, P0, []),
-    1 = stmt_affected_rows(P1), 0 = stmt_insert_id(P1), 0 = stmt_warning_count(P1),
+%%     {ok, P1} = stmt_execute(Config, P0, []),
+%%     1 = stmt_affected_rows(P1), 0 = stmt_insert_id(P1), 0 = stmt_warning_count(P1),
 
-    ok = stmt_close(Config, P1).
+%%     ok = stmt_close(Config, P1).
 
-stmt_test_count_0_1(Config) ->
-    stmt_test_count_0_1(Config, ?config(version,Config) > [5,1,0]).
+%% stmt_test_count_0_1(Config) ->
+%%     stmt_test_count_0_1(Config, ?config(version,Config) > [5,1,0]).
 
-stmt_test_count_0_1(_Config, false) ->
-    {skip, not_supported};
-stmt_test_count_0_1(Config, true) -> % param=0, field=1
+%% stmt_test_count_0_1(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_count_0_1(Config, true) -> % param=0, field=1
 
-    {ok, P0} = stmt_prepare(Config, <<"SELECT @@version">>),
-    0 = stmt_warning_count(P0), 1 = stmt_field_count(P0), 0 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"SELECT @@version">>),
+%%     0 = stmt_warning_count(P0), 1 = stmt_field_count(P0), 0 = stmt_param_count(P0),
 
-    {ok,_, P1} = stmt_execute(Config, P0, []),
-    undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
+%%     {ok,_, P1} = stmt_execute(Config, P0, []),
+%%     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
-    ok = stmt_close(Config, P1).
+%%     ok = stmt_close(Config, P1).
 
-stmt_test_count_1_1(Config) ->
-    stmt_test_count_1_1(Config, ?config(version,Config) > [5,1,0]).
+%% stmt_test_count_1_1(Config) ->
+%%     stmt_test_count_1_1(Config, ?config(version,Config) > [5,1,0]).
 
-stmt_test_count_1_1(_Config, false) ->
-    {skip, not_supported};
-stmt_test_count_1_1(Config, true) -> % param=1, field=1
+%% stmt_test_count_1_1(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_count_1_1(Config, true) -> % param=1, field=1
 
-    {ok, P0} = stmt_prepare(Config, <<"SHOW STATUS WHERE variable_name = ?">>),
-    0 = stmt_warning_count(P0), 2 = stmt_field_count(P0), 1 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"SHOW STATUS WHERE variable_name = ?">>),
+%%     0 = stmt_warning_count(P0), 2 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    {ok, _, P1} = stmt_execute(Config, P0, [<<"uptime">>]),
-    undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
+%%     {ok, _, P1} = stmt_execute(Config, P0, [<<"uptime">>]),
+%%     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
-    ok = stmt_close(Config, P1).
+%%     ok = stmt_close(Config, P1).
 
-stmt_test_count_3_0(Config) ->
-    stmt_test_count_3_0(Config, ?config(version,Config) > [5,1,0]).
+%% stmt_test_count_3_0(Config) ->
+%%     stmt_test_count_3_0(Config, ?config(version,Config) > [5,1,0]).
 
-stmt_test_count_3_0(_Config, false) ->
-    {skip, not_supported};
-stmt_test_count_3_0(Config, true) -> % param=3, field=0
+%% stmt_test_count_3_0(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_count_3_0(Config, true) -> % param=3, field=0
 
-    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+%%     {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
-    {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
-                                   "  id    INT"
-                                   ", name  VARCHAR(5)"
-                                   ", extra DOUBLE"
-                                   ")">>),
+%%     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
+%%                                    "  id    INT"
+%%                                    ", name  VARCHAR(5)"
+%%                                    ", extra DOUBLE"
+%%                                    ")">>),
 
-    {ok, P0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?,?)">>),
-    0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 3 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?,?)">>),
+%%     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 3 = stmt_param_count(P0),
 
-    {ok, P1} = stmt_execute(Config, P0, [560,<<"mysql">>,+5.6]),
-    1 = stmt_affected_rows(P1), 0 = stmt_insert_id(P1), 0 = stmt_warning_count(P1),
+%%     {ok, P1} = stmt_execute(Config, P0, [560,<<"mysql">>,+5.6]),
+%%     1 = stmt_affected_rows(P1), 0 = stmt_insert_id(P1), 0 = stmt_warning_count(P1),
 
-    {ok, P2} = stmt_reset(Config, P1),
+%%     {ok, P2} = stmt_reset(Config, P1),
 
-    {ok, P3} = stmt_execute(Config, P2, [550,<<"mysql">>,-5.5]),
-    1 = stmt_affected_rows(P3), 0 = stmt_insert_id(P3), 0 = stmt_warning_count(P3),
+%%     {ok, P3} = stmt_execute(Config, P2, [550,<<"mysql">>,-5.5]),
+%%     1 = stmt_affected_rows(P3), 0 = stmt_insert_id(P3), 0 = stmt_warning_count(P3),
 
-    {ok, P4} = stmt_reset(Config, P3),
+%%     {ok, P4} = stmt_reset(Config, P3),
 
-    {ok, P5} = stmt_execute(Config, P4, [510,<<"mysql">>,null]),
-    1 = stmt_affected_rows(P5), 0 = stmt_insert_id(P5), 0 = stmt_warning_count(P5),
+%%     {ok, P5} = stmt_execute(Config, P4, [510,<<"mysql">>,null]),
+%%     1 = stmt_affected_rows(P5), 0 = stmt_insert_id(P5), 0 = stmt_warning_count(P5),
 
-    {ok, P6} = stmt_reset(Config, P5),
+%%     {ok, P6} = stmt_reset(Config, P5),
 
-    {ok, P7} = stmt_execute(Config, P6, [410,null,-4.1]),
-    1 = stmt_affected_rows(P7), 0 = stmt_insert_id(P7), 0 = stmt_warning_count(P7),
+%%     {ok, P7} = stmt_execute(Config, P6, [410,null,-4.1]),
+%%     1 = stmt_affected_rows(P7), 0 = stmt_insert_id(P7), 0 = stmt_warning_count(P7),
 
-    {ok, P8} = stmt_reset(Config, P7),
+%%     {ok, P8} = stmt_reset(Config, P7),
 
-    {ok, P9} = stmt_execute(Config, P8, [null,<<"mysql">>,-4.0]),
-    1 = stmt_affected_rows(P9), 0 = stmt_insert_id(P9), 0 = stmt_warning_count(P9),
+%%     {ok, P9} = stmt_execute(Config, P8, [null,<<"mysql">>,-4.0]),
+%%     1 = stmt_affected_rows(P9), 0 = stmt_insert_id(P9), 0 = stmt_warning_count(P9),
 
-    ok = stmt_close(Config, P9).
+%%     ok = stmt_close(Config, P9).
 
-stmt_test_fetch(Config) ->
-    stmt_test_fetch(Config, (?config(version,Config) > [5,1,0])).
+%% stmt_test_fetch(Config) ->
+%%     stmt_test_fetch(Config, (?config(version,Config) > [5,1,0])).
 
-stmt_test_fetch(_Config, false) ->
-    {skip, not_supported};
-stmt_test_fetch(Config, true) ->
+%% stmt_test_fetch(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_fetch(Config, true) ->
 
-    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+%%     {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
-    {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
-                                   "  id    INT"
-                                   ", name  VARCHAR(5)"
-                                   ", extra DOUBLE"
-                                   ")">>),
+%%     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
+%%                                    "  id    INT"
+%%                                    ", name  VARCHAR(5)"
+%%                                    ", extra DOUBLE"
+%%                                    ")">>),
 
-    {ok, _} = real_query(Config, <<"INSERT INTO " ?TABLE " VALUES"
-                                   "  (400,'mysql',-4.0)"
-                                   ", (410,'mysql',-4.1)"
-                                   ", (500,'mysql',-5.0)"
-                                   ", (510,'mysql',+5.1)"
-                                   ", (550,'mysql',+5.5)"
-                                   ", (560,'mysql',+5.6)"
-                                 >>),
+%%     {ok, _} = real_query(Config, <<"INSERT INTO " ?TABLE " VALUES"
+%%                                    "  (400,'mysql',-4.0)"
+%%                                    ", (410,'mysql',-4.1)"
+%%                                    ", (500,'mysql',-5.0)"
+%%                                    ", (510,'mysql',+5.1)"
+%%                                    ", (550,'mysql',+5.5)"
+%%                                    ", (560,'mysql',+5.6)"
+%%                                  >>),
 
-    {ok, P0} = stmt_prepare(Config, <<"SELECT extra FROM " ?TABLE
-                                      " WHERE id > ? AND extra > ?">>),
-    0 = stmt_warning_count(P0), 1 = stmt_field_count(P0), 2 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"SELECT extra FROM " ?TABLE
+%%                                       " WHERE id > ? AND extra > ?">>),
+%%     0 = stmt_warning_count(P0), 1 = stmt_field_count(P0), 2 = stmt_param_count(P0),
 
-    ?CURSOR_TYPE_NO_CURSOR = stmt_attr_get(P0, ?STMT_ATTR_CURSOR_TYPE),
-    1 = stmt_attr_get(P0, ?STMT_ATTR_PREFETCH_ROWS),
+%%     ?CURSOR_TYPE_NO_CURSOR = stmt_attr_get(P0, ?STMT_ATTR_CURSOR_TYPE),
+%%     1 = stmt_attr_get(P0, ?STMT_ATTR_PREFETCH_ROWS),
 
-    P1 = stmt_attr_set(P0, ?STMT_ATTR_CURSOR_TYPE, ?CURSOR_TYPE_READ_ONLY),
+%%     P1 = stmt_attr_set(P0, ?STMT_ATTR_CURSOR_TYPE, ?CURSOR_TYPE_READ_ONLY),
 
-    begin % -- prefetch=5 --
+%%     begin % -- prefetch=4 --
 
-        P10 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 4),
+%%         P10 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 4),
 
-        {ok, P11} = stmt_execute(Config, P10, [-1,0]),
-        undefined = stmt_affected_rows(P11), 0 = stmt_warning_count(P11),
+%%         {ok, P11} = stmt_execute(Config, P10, [-1,0]),
+%%         undefined = stmt_affected_rows(P11), 0 = stmt_warning_count(P11),
 
-        {ok, [ [+5.1], [+5.5], [+5.6] ], P12} = stmt_fetch(Config, P11),
-        undefined = stmt_affected_rows(P12), 0 = stmt_warning_count(P12),
+%%         {ok, [ [+5.1], [+5.5], [+5.6] ], P12} = stmt_fetch(Config, P11),
+%%         undefined = stmt_affected_rows(P12), 0 = stmt_warning_count(P12),
 
-        {ok, P13} = stmt_fetch(Config, P12),
-        undefined = stmt_affected_rows(P13), 0 = stmt_warning_count(P13),
+%%         {ok, P13} = stmt_fetch(Config, P12),
+%%         undefined = stmt_affected_rows(P13), 0 = stmt_warning_count(P13),
 
-        {ok, P14} = stmt_reset(Config, P13),
-        0 = stmt_affected_rows(P14), 0 = stmt_warning_count(P14)
-    end,
+%%         {ok, P14} = stmt_reset(Config, P13),
+%%         0 = stmt_affected_rows(P14), 0 = stmt_warning_count(P14)
+%%     end,
 
-    begin % -- prefetch=4 --
+%%     begin % -- prefetch=3 --
 
-        P20 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 3),
+%%         P20 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 3),
 
-        {ok, P21} = stmt_execute(Config, P20, [-1,0]),
-        undefined = stmt_affected_rows(P21), 0 = stmt_warning_count(P21),
+%%         {ok, P21} = stmt_execute(Config, P20, [-1,0]),
+%%         undefined = stmt_affected_rows(P21), 0 = stmt_warning_count(P21),
 
-        {ok, [ [+5.1], [+5.5], [+5.6] ], P22} = stmt_fetch(Config, P21),
-        undefined = stmt_affected_rows(P22), 0 = stmt_warning_count(P22),
+%%         {ok, [ [+5.1], [+5.5], [+5.6] ], P22} = stmt_fetch(Config, P21),
+%%         undefined = stmt_affected_rows(P22), 0 = stmt_warning_count(P22),
 
-        {ok, [], P23} = stmt_fetch(Config, P22), % ?!
-        undefined = stmt_affected_rows(P23), 0 = stmt_warning_count(P23),
+%%         {ok, [], P23} = stmt_fetch(Config, P22), % ?!
+%%         undefined = stmt_affected_rows(P23), 0 = stmt_warning_count(P23),
 
-        {ok, P24} = stmt_fetch(Config, P23),
-        undefined = stmt_affected_rows(P24), 0 = stmt_warning_count(P24),
+%%         {ok, P24} = stmt_fetch(Config, P23),
+%%         undefined = stmt_affected_rows(P24), 0 = stmt_warning_count(P24),
 
-        {ok, P25} = stmt_reset(Config, P24),
-        0 = stmt_affected_rows(P25), 0 = stmt_warning_count(P25)
-    end,
+%%         {ok, P25} = stmt_reset(Config, P24),
+%%         0 = stmt_affected_rows(P25), 0 = stmt_warning_count(P25)
+%%     end,
 
-    begin % -- prefetch=3 --
+%%     begin % -- prefetch=2 --
 
-        P30 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 2),
+%%         P30 = stmt_attr_set(P1, ?STMT_ATTR_PREFETCH_ROWS, 2),
 
-        {ok, P31} = stmt_execute(Config, P30, [-1,0]),
-        undefined = stmt_affected_rows(P31), 0 = stmt_warning_count(P31),
+%%         {ok, P31} = stmt_execute(Config, P30, [-1,0]),
+%%         undefined = stmt_affected_rows(P31), 0 = stmt_warning_count(P31),
 
-        {ok, [ [+5.1], [+5.5] ], P32} = stmt_fetch(Config, P31),
-        undefined = stmt_affected_rows(P32), 0 = stmt_warning_count(P32),
+%%         {ok, [ [+5.1], [+5.5] ], P32} = stmt_fetch(Config, P31),
+%%         undefined = stmt_affected_rows(P32), 0 = stmt_warning_count(P32),
 
-        {ok, [ [+5.6] ], P33} = stmt_fetch(Config, P32),
-        undefined = stmt_affected_rows(P33), 0 = stmt_warning_count(P33),
+%%         {ok, [ [+5.6] ], P33} = stmt_fetch(Config, P32),
+%%         undefined = stmt_affected_rows(P33), 0 = stmt_warning_count(P33),
 
-        {ok, P34} = stmt_fetch(Config, P33),
-        undefined = stmt_affected_rows(P34), 0 = stmt_warning_count(P34),
+%%         {ok, P34} = stmt_fetch(Config, P33),
+%%         undefined = stmt_affected_rows(P34), 0 = stmt_warning_count(P34),
 
-        {ok, P35} = stmt_reset(Config, P34),
-        0 = stmt_affected_rows(P35), 0 = stmt_warning_count(P35)
-    end,
+%%         {ok, P35} = stmt_reset(Config, P34),
+%%         0 = stmt_affected_rows(P35), 0 = stmt_warning_count(P35)
+%%     end,
 
-    ok = stmt_close(Config, P1).
+%%     ok = stmt_close(Config, P1).
 
-stmt_test_call_1(Config) ->
-    stmt_test_call_1(Config, ?config(version,Config) > [5,5,0]).
+%% stmt_test_call_1(Config) ->
+%%     stmt_test_call_1(Config, ?config(version,Config) > [5,5,0]).
 
-stmt_test_call_1(_Config, false) ->
-    {skip, not_supported};
-stmt_test_call_1(Config, true) ->
+%% stmt_test_call_1(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_call_1(Config, true) ->
 
-    {ok, _} = real_query(Config, <<"DROP PROCEDURE IF EXISTS " ?TABLE "_p1">>),
+%%     {ok, _} = real_query(Config, <<"DROP PROCEDURE IF EXISTS " ?TABLE "_p1">>),
 
-    {ok, _} = real_query(Config, <<"CREATE PROCEDURE " ?TABLE "_p1 ("
-                                   "  IN i_in INT"
-                                   ")"
-                                   "BEGIN"
-                                   "  SELECT i_in * 2 AS value;"
-                                   "END">>),
+%%     {ok, _} = real_query(Config, <<"CREATE PROCEDURE " ?TABLE "_p1 ("
+%%                                    "  INOUT i_inout INT"
+%%                                    ")"
+%%                                    "BEGIN"
+%%                                    "  SELECT i_inout * 2 AS i_inout;"
+%%                                    "END">>),
 
-    {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p1(?)">>),
-    0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
+%%     {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p1(?)">>),
+%%     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    {ok, [ [2] ], P1} = stmt_execute(Config, P0, [1]),
-    undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
+%%     {ok, [ [2] ], P1} = stmt_execute(Config, P0, [1]),
+%%     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
-    true = more_results(P1),
+%%     {ok, P2} = stmt_fetch(Config, P1),
+%%     undefined = stmt_affected_rows(P2), 0 = stmt_warning_count(P2),
 
-    {ok, P2} = stmt_next_result(Config, P1),
-    0 = stmt_affected_rows(P2), 0 = stmt_warning_count(P2),
+%%     true = more_results(P2),
 
-    false = more_results(P2),
+%%     {ok, [ [1] ], P3} = stmt_next_result(Config, P2), % ???, TODO
+%%     undefined = stmt_affected_rows(P3), 0 = stmt_warning_count(P3),
 
-    ok = stmt_close(Config, P2),
+%%     {ok, P4} = stmt_fetch(Config, P3),
+%%     undefined = stmt_affected_rows(P4), 0 = stmt_warning_count(P4),
 
-    {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p1">>).
+%%     false = more_results(P4),
 
-stmt_test_call_2(Config) ->
-    stmt_test_call_2(Config, ?config(version,Config) > [5,5,0]).
+%%     {ok, P5} = stmt_reset(Config, P4),
 
-stmt_test_call_2(_Config, false) ->
-    {skip, not_supported};
-stmt_test_call_2(Config, true) ->
+%%     ok = stmt_close(Config, P5),
 
-    {ok, _} = real_query(Config, <<"DROP PROCEDURE IF EXISTS " ?TABLE "_p2">>),
+%%     {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p1">>).
 
-    {ok, _} = real_query(Config, <<"CREATE PROCEDURE " ?TABLE "_p2 ("
-                                   "  IN i_in INT"
-                                   ")"
-                                   "BEGIN"
-                                   "  SELECT i_in * 3 AS value;"
-                                   "  SELECT i_in * 4 AS value;"
-                                   "END">>),
+%% stmt_test_call_2(Config) ->
+%%     stmt_test_call_2(Config, ?config(version,Config) > [5,5,0]).
 
-    {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p2(?)">>),
-    0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
+%% stmt_test_call_2(_Config, false) ->
+%%     {skip, not_supported};
+%% stmt_test_call_2(Config, true) ->
 
-    {ok, [ [3] ], P1} = stmt_execute(Config, P0, [1]),
-    undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
+%%     {ok, _} = real_query(Config, <<"DROP PROCEDURE IF EXISTS " ?TABLE "_p2">>),
 
-    true = more_results(P1),
+%%     {ok, _} = real_query(Config, <<"CREATE PROCEDURE " ?TABLE "_p2 ("
+%%                                    "  INOUT i_inout INT"
+%%                                    ")"
+%%                                    "BEGIN"
+%%                                    "  SELECT i_inout * 3 AS i_inout;"
+%%                                    "  SELECT i_inout * 4 AS i_inout;"
+%%                                    "END">>),
 
-    {ok, [ [4] ], P2} = stmt_execute(Config, P1, [1]),
-    undefined = stmt_affected_rows(P2), 0 = stmt_warning_count(P2),
+%%     {ok, P0} = stmt_prepare(Config, <<"CALL " ?TABLE "_p2(?)">>),
+%%     0 = stmt_warning_count(P0), 0 = stmt_field_count(P0), 1 = stmt_param_count(P0),
 
-    true = more_results(P2),
+%%     {ok, [ [3] ], P1} = stmt_execute(Config, P0, [1]),
+%%     undefined = stmt_affected_rows(P1), 0 = stmt_warning_count(P1),
 
-    {ok, P3} = stmt_next_result(Config, P2),
-    0 = stmt_affected_rows(P3), 0 = stmt_warning_count(P3),
+%%     {ok, P2} = stmt_fetch(Config, P1),
+%%     undefined = stmt_affected_rows(P2), 0 = stmt_warning_count(P2),
 
-    false = more_results(P3),
+%%     true = more_results(P2),
 
-    ok = stmt_close(Config, P3),
+%%     {ok, [ [4] ], P3} = stmt_next_result(Config, P2),
+%%     undefined = stmt_affected_rows(P3), 0 = stmt_warning_count(P3),
 
-    {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p2">>).
+%%     {ok, P4} = stmt_fetch(Config, P3),
+%%     undefined = stmt_affected_rows(P4), 0 = stmt_warning_count(P4),
 
+%%     true = more_results(P4),
 
-stmt_test_blob(Config) ->
+%%     {ok, [ [1] ], P5} = stmt_next_result(Config, P4), % ???, TODO
+%%     undefined = stmt_affected_rows(P5), 0 = stmt_warning_count(P5),
 
-    {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
+%%     {ok, P6} = stmt_fetch(Config, P5),
+%%     undefined = stmt_affected_rows(P6), 0 = stmt_warning_count(P6),
 
-    {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
-                                   "  id    INT"
-                                   ", value LONGBLOB"
-                                   ")">>),
+%%     false = more_results(P6),
 
-    {ok, L} = application:get_env(myer, mysql_pool),
+%%     ok = stmt_close(Config, P6),
 
-    D = case proplists:get_value(compress, L) of
-            true ->
-                [
-                 225, 226, 251,
-                 65508, 65509, 65536,
-                 16777183, 16777184, 16777215, 16777216
-                ];
-            false ->
-                [
-                 221, 222, 251,
-                 65504, 65505, 65536,
-                 16777184, 16777185, 16777215, 16777216
-                ]
-        end,
+%%     {ok, _} = real_query(Config, <<"DROP PROCEDURE " ?TABLE "_p2">>).
 
-    L = begin % -- Create --
 
-            {ok, C0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?)">>),
-            0 = stmt_warning_count(C0), 0 = stmt_field_count(C0), 2 = stmt_param_count(C0),
+%% stmt_test_blob(Config) ->
 
-            F = fun(E, A) ->
+%%     {ok, _} = real_query(Config, <<"DROP TABLE IF EXISTS " ?TABLE>>),
 
-                        B = list_to_binary([ crypto:rand_bytes(1) || _ <- lists:seq(1,E)]),
+%%     {ok, _} = real_query(Config, <<"CREATE TABLE " ?TABLE " ("
+%%                                    "  id    INT"
+%%                                    ", value LONGBLOB"
+%%                                    ")">>),
 
-                        {ok, P} = stmt_execute(Config,A,[E,B]),
-                        1 = stmt_affected_rows(P), 0 = stmt_warning_count(P),
+%%     {ok, L} = application:get_env(myer, mysql_pool),
 
-                        { [E,crypto:hash(md5,B)], P} % TODO
-                end,
-            {L1, C1} = lists:mapfoldl(F, C0, D),
+%%     D = case proplists:get_value(compress, L) of
+%%             true ->
+%%                 [
+%%                  225, 226, 251,
+%%                  65508, 65509, 65536,
+%%                  16777183, 16777184, 16777215, 16777216
+%%                 ];
+%%             false ->
+%%                 [
+%%                  221, 222, 251,
+%%                  65504, 65505, 65536,
+%%                  16777184, 16777185, 16777215, 16777216
+%%                 ]
+%%         end,
 
-            ok = stmt_close(Config, C1),
+%%     L = begin % -- Create --
 
-            L1
-        end,
+%%             {ok, C0} = stmt_prepare(Config, <<"INSERT INTO " ?TABLE " VALUES (?,?)">>),
+%%             0 = stmt_warning_count(C0), 0 = stmt_field_count(C0), 2 = stmt_param_count(C0),
 
-    begin % -- Read --
+%%             F = fun(E, A) ->
 
-        Q = <<"SELECT id, MD5(value) AS x FROM " ?TABLE " ORDER BY id">>,
+%%                         B = list_to_binary([ crypto:rand_bytes(1) || _ <- lists:seq(1,E)]),
 
-        {ok, _, L, R} = real_query(Config, Q),
-        undefined = affected_rows(R), 0 = warning_count(R)
-    end.
+%%                         {ok, P} = stmt_execute(Config,A,[E,B]),
+%%                         1 = stmt_affected_rows(P), 0 = stmt_warning_count(P),
+
+%%                         { [E,crypto:hash(md5,B)], P} % TODO
+%%                 end,
+%%             {L1, C1} = lists:mapfoldl(F, C0, D),
+
+%%             ok = stmt_close(Config, C1),
+
+%%             L1
+%%         end,
+
+%%     begin % -- Read --
+
+%%         Q = <<"SELECT id, MD5(value) AS x FROM " ?TABLE " ORDER BY id">>,
+
+%%         {ok, _, L, R} = real_query(Config, Q),
+%%         undefined = affected_rows(R), 0 = warning_count(R)
+%%     end.
 
 
 cover_myer(_Config) ->
@@ -824,12 +841,6 @@ cover_myer(_Config) ->
     false     = call(more_results,       [?MODULE]),
     undefined = call(sqlstate,           [?MODULE]),
     undefined = call(warning_count,      [?MODULE]),
-    undefined = call(stmt_affected_rows, [?MODULE]),
-    undefined = call(stmt_field_count,   [?MODULE]),
-    undefined = call(stmt_insert_id,     [?MODULE]),
-    undefined = call(stmt_param_count,   [?MODULE]),
-    undefined = call(stmt_attr_get,      [?MODULE,?STMT_ATTR_CURSOR_TYPE]),
-    undefined = call(stmt_warning_count, [?MODULE]),
 
     ok.
 
@@ -861,7 +872,6 @@ call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,C
 set_env(List) -> baseline_ct:set_env(List).
 test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
-
 version(_Config) -> call(version, []).
 
 autocommit(Config, Bool) -> call(Config, autocommit, [Bool]).
@@ -874,13 +884,6 @@ rollback(Config) -> call(Config, rollback, []).
 select_db(Config, Database) -> call(Config, select_db, [Database]).
 stat(Config) -> call(Config, stat, []).
 
-stmt_close(Config, Prepare) -> call(Config, stmt_close, [Prepare]).
-stmt_execute(Config, Prepare, Args) -> call(Config, stmt_execute, [Prepare,Args]).
-stmt_fetch(Config, Prepare) -> call(Config, stmt_fetch, [Prepare]).
-stmt_prepare(Config, Query) -> call(Config, stmt_prepare, [Query]).
-stmt_reset(Config, Prepare) -> call(Config, stmt_reset, [Prepare]).
-stmt_next_result(Config, Prepare) -> call(Config, stmt_next_result, [Prepare]).
-
 affected_rows(Result) -> call(affected_rows, [Result]).
 errno(Reason) -> call(errno, [Reason]).
 errmsg(Reason) -> call(errmsg, [Reason]).
@@ -888,11 +891,3 @@ insert_id(Record) -> call(insert_id, [Record]).
 more_results(Record) -> call(more_results, [Record]).
 sqlstate(Reason) -> call(sqlstate, [Reason]).
 warning_count(Result) -> call(warning_count, [Result]).
-
-stmt_affected_rows(Prepare) -> call(stmt_affected_rows, [Prepare]).
-stmt_field_count(Prepare) -> call(stmt_field_count, [Prepare]).
-stmt_insert_id(Prepare) -> call(stmt_insert_id, [Prepare]).
-stmt_param_count(Prepare) -> call(stmt_param_count, [Prepare]).
-stmt_attr_get(Prepare, AttrType) -> call(stmt_attr_get, [Prepare,AttrType]).
-stmt_attr_set(Prepare, AttrType, Value) -> call(stmt_attr_set, [Prepare,AttrType,Value]).
-stmt_warning_count(Prepare) -> call(stmt_warning_count, [Prepare]).

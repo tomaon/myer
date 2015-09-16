@@ -41,19 +41,6 @@
 -define(REFRESH_GENERAL_LOG,                    (1 bsl 12)).
 -define(REFRESH_SLOW_LOG,                       (1 bsl 13)).
 
-%% -- enum: enum_cursor_type --
--define(CURSOR_TYPE_NO_CURSOR,  0).
--define(CURSOR_TYPE_READ_ONLY,  1).
-%%efine(CURSOR_TYPE_FOR_UPDATE, 2).
-%%efine(CURSOR_TYPE_SCROLLABLE, 4).
-
-%% == ~/include/mysql.h ==
-
-%% -- enum: enum_stmt_attr_type --
-%%efine(STMT_ATTR_UPDATE_MAX_LENGTH, 0).
--define(STMT_ATTR_CURSOR_TYPE,       1).
--define(STMT_ATTR_PREFETCH_ROWS,     2).
-
 %% == ~/strings/* ==
 
 %% @see "SELECT * FROM information_schema.collations ORDER BY id"
@@ -105,6 +92,7 @@
          }).
 
 %% == type ==
+
 -type(field() :: #field{}).
 -type(fields() :: [field()]).
 -type(param() :: term()).

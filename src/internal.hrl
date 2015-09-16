@@ -96,13 +96,13 @@
 %%efine(COM_TABLE_DUMP,          19). % internal
 %%efine(COM_CONNECT_OUT,         20). % internal
 %%efine(COM_REGISTER_SLAVE,      21). % internal?
--define(COM_STMT_PREPARE,        22).
--define(COM_STMT_EXECUTE,        23).
--define(COM_STMT_SEND_LONG_DATA, 24).
--define(COM_STMT_CLOSE,          25).
--define(COM_STMT_RESET,          26).
+%%efine(COM_STMT_PREPARE,        22).
+%%efine(COM_STMT_EXECUTE,        23).
+%%efine(COM_STMT_SEND_LONG_DATA, 24).
+%%efine(COM_STMT_CLOSE,          25).
+%%efine(COM_STMT_RESET,          26).
 %%efine(COM_SET_OPTION,          27).
--define(COM_STMT_FETCH,          28).
+%%efine(COM_STMT_FETCH,          28).
 %%efine(COM_DAEMON,              29).
 %%efine(COM_BINLOG_DUMP_GTID,    30). % > 5.6
 %%efine(COM_RESET_CONNECTION,    31). % > 5.7
@@ -147,20 +147,6 @@
 
 %% == record ==
 
--record(prepare, {
-          stmt_id :: non_neg_integer(),
-          field_count :: non_neg_integer(),
-          fields :: list(),
-          param_count :: non_neg_integer(),
-          params :: list(),
-          warning_count :: non_neg_integer(),
-          reserved :: binary(),
-          flags :: non_neg_integer(),
-          prefetch_rows :: non_neg_integer(),
-          result :: tuple(),
-          execute :: non_neg_integer()
-         }).
-
 -record(reason, {
           errno :: non_neg_integer(),
           reserved :: binary(),
@@ -180,6 +166,5 @@
 
 -type(properties() :: [{atom(),term()}]).
 
--type(prepare() :: #prepare{}).
 -type(reason() :: #reason{}).
 -type(result() :: #result{}).

@@ -29,18 +29,12 @@
 %% -- public: worker --
 -export([get_server_version/1, stat/1]).
 -export([ping/1, refresh/2, select_db/2]).
--export([real_query/2, autocommit/2, commit/1, rollback/1 ]).
--export([stmt_prepare/2, stmt_close/2, stmt_reset/2,
-         stmt_execute/3, stmt_fetch/2]).
-
--export([next_result/1]).
--export([stmt_next_result/2]).
+-export([real_query/2, next_result/1]).
+-export([autocommit/2, commit/1, rollback/1]).
 
 %% -- public: record --
 -export([affected_rows/1, errno/1, errmsg/1, insert_id/1, more_results/1, sqlstate/1,
          warning_count/1]).
--export([stmt_affected_rows/1, stmt_field_count/1, stmt_insert_id/1, stmt_param_count/1,
-         stmt_attr_get/2, stmt_attr_set/3, stmt_warning_count/1]).
 
 %% -- internal --
 -record(myer, {
@@ -132,6 +126,15 @@ select_db(#myer{worker=W,timeout=T}, Database) ->
 real_query(#myer{worker=W,timeout=T}, Query) ->
     myer_client:real_query(W, Query, T).
 
+-spec next_result(myer()) ->
+                         {ok,result()}|
+                         {ok,fields(),rows(),result()}|
+                         {error,_}.
+next_result(#myer{worker=W,timeout=T})
+  when is_pid(W) ->
+    myer_client:next_result(W, T).
+
+
 -spec autocommit(myer(),boolean()) -> {ok,result()}|{error,_}.
 autocommit(#myer{worker=W,timeout=T}, Boolean) ->
     myer_client:autocommit(W, Boolean, T).
@@ -143,47 +146,6 @@ commit(#myer{worker=W,timeout=T}) ->
 -spec rollback(myer()) -> {ok,result()}|{error,_}.
 rollback(#myer{worker=W,timeout=T}) ->
     myer_client:rollback(W, T).
-
-
--spec stmt_prepare(myer(),binary()) -> {ok,prepare()}|{error,_}.
-stmt_prepare(#myer{worker=W,timeout=T}, Query) ->
-    myer_client:stmt_prepare(W, Query, T).
-
--spec stmt_close(myer(),prepare()) -> ok|{error,_}.
-stmt_close(#myer{worker=W,timeout=T}, Prepare) ->
-    myer_client:stmt_close(W, Prepare, T).
-
--spec stmt_reset(myer(),prepare()) -> {ok,prepare()}|{error,_}.
-stmt_reset(#myer{worker=W,timeout=T}, Prepare) ->
-    myer_client:stmt_reset(W, Prepare, T).
-
--spec stmt_execute(myer(),prepare(),[term()])
-                  -> {ok,prepare()}|
-                     {ok,rows(),prepare()}|
-                     {error,_}.
-stmt_execute(#myer{worker=W,timeout=T}, Prepare, Params) ->
-    myer_client:stmt_execute(W, Prepare, Params, T).
-
--spec stmt_fetch(myer(),prepare())
-                -> {ok,prepare()}|
-                   {ok,rows(),prepare()}|{error,_}.
-stmt_fetch(#myer{worker=W,timeout=T}, Prepare) ->
-    myer_client:stmt_fetch(W, Prepare, T).
-
-
-
--spec next_result(myer()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
-next_result(#myer{worker=W})
-  when is_pid(W) ->
-    myer_client:call(W, {next_result,[]}).
-
--spec stmt_next_result(myer(),prepare())
-                      -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
-stmt_next_result(#myer{worker=W}, #prepare{}=X)
-  when is_pid(W) ->
-    myer_client:call(W, {stmt_next_result,[X]}).
-
-%% stmt_send_long_data, TODO
 
 %% == public: record ==
 
@@ -204,8 +166,6 @@ insert_id(#result{insert_id=I}) -> I;
 insert_id(_) -> undefined.
 
 -spec more_results(term()) -> boolean().
-more_results(#prepare{result=R}) ->
-    more_results(R);
 more_results(#result{status=S})
   when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) ->
     true;
@@ -220,49 +180,17 @@ sqlstate(_) -> undefined.
 warning_count(#result{warning_count=W}) -> W;
 warning_count(_) -> undefined.
 
--spec stmt_affected_rows(term()) -> non_neg_integer()|undefined.
-stmt_affected_rows(#prepare{result=R}) -> affected_rows(R);
-stmt_affected_rows(_) -> undefined.
-
--spec stmt_field_count(term()) -> non_neg_integer()|undefined.
-stmt_field_count(#prepare{field_count=F}) -> F;
-stmt_field_count(_) -> undefined.
-
--spec stmt_insert_id(term()) -> non_neg_integer()|undefined.
-stmt_insert_id(#prepare{result=R}) -> insert_id(R);
-stmt_insert_id(_) -> undefined.
-
--spec stmt_param_count(term()) -> non_neg_integer()|undefined.
-stmt_param_count(#prepare{param_count=P}) -> P;
-stmt_param_count(_) -> undefined.
-
--spec stmt_attr_get(term(),non_neg_integer()) -> non_neg_integer()|undefined.
-stmt_attr_get(#prepare{flags=F}, ?STMT_ATTR_CURSOR_TYPE) -> F;
-stmt_attr_get(#prepare{prefetch_rows=P}, ?STMT_ATTR_PREFETCH_ROWS) -> P;
-stmt_attr_get(_,_) -> undefined.
-
--spec stmt_attr_set(prepare(),non_neg_integer(),non_neg_integer()) -> prepare().
-stmt_attr_set(#prepare{}=X, ?STMT_ATTR_CURSOR_TYPE, Value) ->
-    X#prepare{flags = Value};
-stmt_attr_set(#prepare{}=X, ?STMT_ATTR_PREFETCH_ROWS, Value) ->
-    X#prepare{prefetch_rows = Value}.
-
--spec stmt_warning_count(term()) -> non_neg_integer()|undefined.
-stmt_warning_count(#prepare{warning_count=W}) -> W;
-stmt_warning_count(_) -> undefined.
-
-
 %% mysql_affected_rows mysql_autocommit mysql_close mysql_commit
 %% mysql_errno mysql_error mysql_get_server_version mysql_insert_id
 %% mysql_ping mysql_real_connect mysql_real_query mysql_refresh
 %% mysql_rollback mysql_select_db mysql_sqlstate mysql_warning_count
+%% mysql_more_results mysql_next_result
+
 %% mysql_stmt_attr_get mysql_stmt_attr_set mysql_stmt_close
 %% mysql_stmt_errno mysql_stmt_error mysql_stmt_execute
 %% mysql_stmt_fetch mysql_stmt_field_count mysql_stmt_insert_id
 %% mysql_stmt_param_count mysql_stmt_prepare mysql_stmt_reset
 %% mysql_stmt_sqlstate mysql_stat mysql_stmt_send_long_data
-%% mysql_more_results mysql_next_result
-
 %% mysql_stmt_next_result
 %% mysql_escape_string mysql_real_escape_string
 %% mysql_set_local_infile_default mysql_set_local_infile_handler
