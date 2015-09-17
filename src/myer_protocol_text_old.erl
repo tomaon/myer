@@ -48,7 +48,7 @@ recv_field_41(Handle, Byte) ->
     <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
     {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
                 name = NA, org_name = ON, charsetnr = E, length = L,
-                type = T, flags = F, decimals = N, cast = cast(T) }, H7}. % TODO: mask(flags)
+                type = T, flags = F, decimals = N, cast = decode(T) }, H7}. % TODO: mask(flags)
 
 -spec recv_field(handle(),binary()) -> {ok,field(),handle()}.
 recv_field(Handle, Byte) ->
@@ -57,7 +57,7 @@ recv_field(Handle, Byte) ->
     {ok, B,  H3} = recv_binary(10, H2),
     <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
     {ok, #field{table = TA, name = NA, length = L,
-                type = T, flags = F, decimals = N, cast = cast(T)}, H3}. % TODO: mask(flags)
+                type = T, flags = F, decimals = N, cast = decode(T)}, H3}. % TODO: mask(flags)
 
 -spec recv_row(handle(),binary(),fields()) -> {ok,row(),handle()}.
 recv_row(Handle, Byte, Fields) ->
@@ -83,37 +83,37 @@ recv_row1(Handle, Byte, [#field{cast=C}=F|T], List) ->
 
 %% == internal ==
 
-%%st(?MYSQL_TYPE_DECIMAL)     -> undefined
-cast(?MYSQL_TYPE_TINY)        -> fun to_integer/2;
-cast(?MYSQL_TYPE_SHORT)       -> fun to_integer/2;
-cast(?MYSQL_TYPE_LONG)        -> fun to_integer/2;
-cast(?MYSQL_TYPE_FLOAT)       -> fun to_float/2;
-cast(?MYSQL_TYPE_DOUBLE)      -> fun to_float/2;
-%%st(?MYSQL_TYPE_NULL)        -> undefined
-cast(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/2;
-cast(?MYSQL_TYPE_LONGLONG)    -> fun to_integer/2;
-cast(?MYSQL_TYPE_INT24)       -> fun to_integer/2;
-cast(?MYSQL_TYPE_DATE)        -> fun to_date/2;
-cast(?MYSQL_TYPE_TIME)        -> fun to_time/2;
-cast(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/2;
-cast(?MYSQL_TYPE_YEAR)        -> fun to_integer/2;
-%%st(?MYSQL_TYPE_NEWDATE)     -> undefined
-%%st(?MYSQL_TYPE_VARCHAR)     -> undefined
-cast(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
-%%st(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
-%%st(?MYSQL_TYPE_DATETIME2)   -> undefined
-%%st(?MYSQL_TYPE_TIME2)       -> undefined
-%%st(?MYSQL_TYPE_JSON)        -> undefined
-cast(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/2;
-%%st(?MYSQL_TYPE_ENUM)        -> undefined
-%%st(?MYSQL_TYPE_SET)         -> undefined
-%%st(?MYSQL_TYPE_TINY_BLOB)   -> undefined
-%%st(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined
-%%st(?MYSQL_TYPE_LONG_BLOB)   -> undefined
-cast(?MYSQL_TYPE_BLOB)        -> fun to_binary/2;
-cast(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/2;
-cast(?MYSQL_TYPE_STRING)      -> fun to_binary/2.
-%%st(?MYSQL_TYPE_GEOMETRY)    -> undefined;
+%%code(?MYSQL_TYPE_DECIMAL)     -> undefined
+decode(?MYSQL_TYPE_TINY)        -> fun to_integer/2;
+decode(?MYSQL_TYPE_SHORT)       -> fun to_integer/2;
+decode(?MYSQL_TYPE_LONG)        -> fun to_integer/2;
+decode(?MYSQL_TYPE_FLOAT)       -> fun to_float/2;
+decode(?MYSQL_TYPE_DOUBLE)      -> fun to_float/2;
+%%code(?MYSQL_TYPE_NULL)        -> undefined
+decode(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/2;
+decode(?MYSQL_TYPE_LONGLONG)    -> fun to_integer/2;
+decode(?MYSQL_TYPE_INT24)       -> fun to_integer/2;
+decode(?MYSQL_TYPE_DATE)        -> fun to_date/2;
+decode(?MYSQL_TYPE_TIME)        -> fun to_time/2;
+decode(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/2;
+decode(?MYSQL_TYPE_YEAR)        -> fun to_integer/2;
+%%code(?MYSQL_TYPE_NEWDATE)     -> undefined
+%%code(?MYSQL_TYPE_VARCHAR)     -> undefined
+decode(?MYSQL_TYPE_BIT)         -> fun to_bit/2;
+%%code(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
+%%code(?MYSQL_TYPE_DATETIME2)   -> undefined
+%%code(?MYSQL_TYPE_TIME2)       -> undefined
+%%code(?MYSQL_TYPE_JSON)        -> undefined
+decode(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/2;
+%%code(?MYSQL_TYPE_ENUM)        -> undefined
+%%code(?MYSQL_TYPE_SET)         -> undefined
+%%code(?MYSQL_TYPE_TINY_BLOB)   -> undefined
+%%code(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined
+%%code(?MYSQL_TYPE_LONG_BLOB)   -> undefined
+decode(?MYSQL_TYPE_BLOB)        -> fun to_binary/2;
+decode(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/2;
+decode(?MYSQL_TYPE_STRING)      -> fun to_binary/2.
+%%code(?MYSQL_TYPE_GEOMETRY)    -> undefined;
 
 
 to_binary(Binary, _Field) ->
