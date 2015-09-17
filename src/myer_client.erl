@@ -27,6 +27,7 @@
 -export([ping/2, refresh/3, select_db/3]).
 -export([real_query/3, next_result/2]).
 -export([autocommit/3, commit/2, rollback/2]).
+-export([prepare/4, unprepare/3]).
 
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
@@ -111,6 +112,15 @@ commit(Pid, Timeout) ->
 -spec rollback(pid(),timeout()) -> {ok,result()}|{error,_}.
 rollback(Pid, Timeout) ->
     real_query(Pid, <<"ROLLBACK">>, Timeout).
+
+
+-spec prepare(pid(),binary(),binary(),timeout()) -> {ok,result()}|{error,_}.
+prepare(Pid, Name, Query, Timeout) ->
+    real_query(Pid,  <<"PREPARE ",Name/binary," FROM '",Query/binary,"'">>, Timeout).
+
+-spec unprepare(pid(),binary(),timeout()) -> {ok,result()}|{error,_}.
+unprepare(Pid, Name, Timeout) ->
+    real_query(Pid, <<"DEALLOCATE PREPARE ", Name/binary>>, Timeout).
 
 %% == behaviour: gen_server ==
 
