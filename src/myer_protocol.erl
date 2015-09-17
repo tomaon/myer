@@ -240,9 +240,9 @@ recv(Handle) -> % < loop
 recv_fields_func(_Handle) ->
     %% case myer_handle:caps(Handle) of
     %%     C when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    fun myer_protocol_text_old:recv_field_41/2.
+    fun myer_protocol_text:recv_field_41/2.
 %%     _ ->
-%%         fun myer_protocol_text_old:recv_field/2
+%%         fun myer_protocol_text:recv_field/2
 %% end.
 
 recv_fields_length(Byte, Handle) ->
