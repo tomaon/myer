@@ -22,7 +22,7 @@
 %% -- public --
 -export([connect/4, close/1]).
 -export([recv_binary/2, recv_text/2, send/2]).
--export([remains/1, reset/1]).
+-export([reset/1]).
 -export([caps/1, caps/2, version/1, version/2]).
 
 %% -- internal --
@@ -82,10 +82,6 @@ recv_text(Pattern, #handle{buf=B,start=S,length=L}=H) ->
 send(Binary, #handle{}=H) ->
     send(H, Binary, 0, byte_size(Binary)).
 
-
--spec remains(handle()) -> non_neg_integer().
-remains(#handle{length=L}) ->
-    L.
 
 -spec reset(handle()) -> handle().
 reset(#handle{}=H) ->

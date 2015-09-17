@@ -29,7 +29,9 @@
 -export([binary_to_float/2,
          recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
 
--import(myer_handle, [recv_binary/2, remains/1, reset/1]).
+-import(myer_handle, [recv_binary/2, reset/1]).
+
+-define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
 
 -type(args() :: [term()]).
 -type(handle() :: myer_handle:handle()).
@@ -293,7 +295,7 @@ recv_plugin(Handshake, Handle) ->
     end.
 
 recv_remains(Byte, Handle) ->
-    case recv_binary(remains(Handle), Handle) of
+    case recv_binary(?REMAINS(Handle), Handle) of
         {ok, Binary, Next} ->
             {ok, [<<Byte/binary,Binary/binary>>,Next]}
     end.
@@ -422,7 +424,7 @@ recv_reason(#reason{state=undefined}=R, Caps, Handle)
     {ok, B, H} = recv_binary(5, Handle),
     recv_reason(R#reason{state = B}, Caps, H);
 recv_reason(#reason{message=undefined}=R, Caps, Handle)->
-    {ok, B, H} = recv_binary(remains(Handle), Handle),
+    {ok, B, H} = recv_binary(?REMAINS(Handle), Handle),
     recv_reason(R#reason{message = B}, Caps, H);
 recv_reason(#reason{}=R, _Caps, Handle) ->
     {error, R, Handle}. % != ok
@@ -447,8 +449,9 @@ recv_result(#result{warning_count=undefined}=R, Caps, Handle)
   when ?IS_SET(Caps,?CLIENT_PROTOCOL_41) ->
     {ok, U, H} = recv_unsigned(2, Handle),
     recv_result(R#result{warning_count = U}, Caps, H);
-recv_result(#result{message=undefined}=R, Caps, Handle) ->
-    {ok, B, H} = recv_binary(remains(Handle), Handle),
+recv_result(#result{message=undefined}=R, Caps, Handle)
+  when 0 < ?REMAINS(Handle) ->
+    {ok, B, H} = recv_packed_binary(Handle),
     recv_result(R#result{message = B}, Caps, H);
 recv_result(#result{}=R, _Caps, Handle) ->
     {ok, [R,Handle], false}.
