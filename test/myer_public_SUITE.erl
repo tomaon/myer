@@ -847,23 +847,12 @@ cover_myer(_Config) ->
 %% == internal ==
 
 cleanup(Config) ->
-    case ?config(handle, Config) of
-        undefined ->
-            Config;
-        _ ->
-            {ok, _} = autocommit(Config, true),
-            Config
-    end,
+    {ok, _} = autocommit(Config, true),
     lists:foldl(fun proplists:delete/2, Config, [version]).
 
 setup(Config) ->
-    case ?config(handle, Config) of
-        undefined ->
-            Config;
-        _ ->
-            {ok, _} = autocommit(Config, false),
-            Config
-    end.
+    {ok, _} = autocommit(Config, false),
+    Config.
 
 
 call(Function, Args) -> test(myer, Function, Args).
