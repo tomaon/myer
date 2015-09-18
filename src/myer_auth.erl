@@ -55,7 +55,7 @@
 
 -export_type([handshake/0, plugin/0]).
 
-%% == internal ==
+%% == private ==
 
 -spec auth_to_binary(binary(),plugin(),handshake()) -> {ok,binary()}.
 auth_to_binary(Password, #plugin{name=N}, #handshake{seed=S}) ->

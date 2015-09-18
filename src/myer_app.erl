@@ -32,7 +32,6 @@ start(_StartType, StartArgs) ->
                               [ get_childspec(E) || E <- baseline_app:args(myer,StartArgs) ]
                             }).
 
-
 stop([]) ->
     void.
 

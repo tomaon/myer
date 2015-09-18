@@ -19,14 +19,13 @@
 
 -include("internal.hrl").
 
-%% -- public --
+%% -- private --
 -export([connect/4, close/1]).
 -export([recv_binary/2, recv_text/2, send/2]).
 -export([reset/1]).
 -export([caps/1, caps/2, version/1, version/2]).
 
 %% -- internal --
-
 -record(handle, {
           socket        :: tuple(),             % baseline_socket:socket()
           maxlength     :: non_neg_integer(),
@@ -43,7 +42,7 @@
 
 -export_type([handle/0]).
 
-%% == public ==
+%% == private ==
 
 -spec connect(inet:ip_address()|inet:hostname(),inet:port_number(),
               non_neg_integer(),timeout()) -> {ok,handle()}|{error,_}.
