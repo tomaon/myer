@@ -24,6 +24,7 @@
 -export([stat/1, version/1]).
 -export([ping/1, refresh/1, select_db/1]).
 -export([real_query/1, next_result/1]).
+-export([autocommit/1]).
 
 %% -- internal --
 -export([binary_to_float/2,
@@ -99,6 +100,13 @@ real_query(Args) ->
 next_result(Args) ->
     loop(Args, [fun next_result_pre/1, fun real_query_post/1,
                 fun recv_fields/2, fun recv_rows/3]).
+
+
+-spec autocommit(args()) -> {ok,result(),handle()}|{error,_,handle()}.
+autocommit([Handle,true]) ->
+    real_query([Handle,<<"SET autocommit=1">>]);
+autocommit([Handle,false]) ->
+    real_query([Handle,<<"SET autocommit=0">>]).
 
 %% -- internal: connect --
 

@@ -15,6 +15,7 @@
                    %              {database, <<"">>},
                    %              {default_character_set, 45}, % 45=CHARSET_utf8bm4_general_ci
                    %              {compress, false},
+                   %              {autocommit, false},
                    %              {max_allowed_packet, 4194304},
                    %              {timeout, 10}
                    %             ]}

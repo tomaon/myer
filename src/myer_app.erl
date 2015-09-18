@@ -81,6 +81,7 @@ update(Args) ->
          {database,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
          {default_character_set, fun baseline_lists:get_as_integer/4, [?CHARSET_utf8_general_ci]},
          {compress,              fun baseline_lists:get_as_boolean/4, [false]},
+         {autocommit,            fun baseline_lists:get_as_boolean/4, [false]},
          {max_allowed_packet,    fun baseline_lists:get_as_integer/6, [4194304,?MAX_PACKET_LENGTH,?MIN_PACKET_LENGTH]},
          {timeout,               fun baseline_lists:get_as_integer/4, [10]} % != infinity
         ],

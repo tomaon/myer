@@ -34,9 +34,9 @@
 
 %% -- internal --
 -record(state, {
-          args    :: properties(),
-          handle  :: tuple(),                   % myer_handle:handle()
-          reason  :: reason()
+          args   :: properties(),
+          handle :: tuple(),                    % myer_handle:handle()
+          reason :: reason()
          }).
 
 %% == public ==
@@ -92,10 +92,8 @@ next_result(Pid, Timeout)
 
 
 -spec autocommit(pid(),boolean(),timeout()) -> {ok,result()}|{error,_}.
-autocommit(Pid, true, Timeout) ->
-    real_query(Pid, <<"SET autocommit=1">>, Timeout);
-autocommit(Pid, false, Timeout) ->
-    real_query(Pid, <<"SET autocommit=0">>, Timeout).
+autocommit(Pid, Bool, Timeout) ->
+    gen_server:call(Pid, {autocommit,[Bool]}, Timeout).
 
 -spec commit(pid(),timeout()) -> {ok,result()}|{error,_}.
 commit(Pid, Timeout) ->
@@ -178,15 +176,13 @@ loaded(Args, #state{}=S) ->
 
 
 initialized(#state{args=A}=S) ->
-    case apply(myer_protocol, connect, [
-                                        [
-                                         get(address, A),
-                                         get(port, A),
-                                         get(max_allowed_packet, A),
-                                         get(compress, A),
-                                         get(timeout, A)
-                                        ]
-                                       ]) of
+    case myer_protocol:connect([
+                                get(address, A),
+                                get(port, A),
+                                get(max_allowed_packet, A),
+                                get(compress, A),
+                                get(timeout, A)
+                               ]) of
         {ok, Handshake, Handle} ->
             connected(Handshake, S#state{handle = Handle});
         {error, Reason} ->
@@ -196,32 +192,36 @@ initialized(#state{args=A}=S) ->
     end.
 
 connected(Handshake, #state{args=A,handle=H}=S) ->
-    case apply(myer_protocol, auth, [
-                                     [
-                                      H,
-                                      get(user, A),
-                                      get(password, A),
-                                      get(database, A),
-                                      get(default_character_set, A),
-                                      Handshake
-                                     ]
-                                    ]) of
+    case myer_protocol:auth([
+                             H,
+                             get(user, A),
+                             get(password, A),
+                             get(database, A),
+                             get(default_character_set, A),
+                             Handshake
+                            ]) of
         {ok, _Result, Handle} ->
             authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
             interrupted(S#state{handle = Handle, reason = Reason})
     end.
 
-authorized(#state{}=S) ->
-    {noreply, S#state{args = undefined}}.
+authorized(#state{args=A,handle=H}=S) ->
+    case myer_protocol:autocommit([
+                                   H,
+                                   get(autocommit, A)
+                                  ]) of
+        {ok, _Result, Handle} ->
+            {noreply, S#state{args = undefined, handle = Handle}};
+        {error, Reason, Handle} ->
+            interrupted(S#state{handle = Handle, reason = Reason})
+    end.
 
 
 ready(Func, Args, #state{handle=H}=S) ->
     case apply(myer_protocol, Func, [
                                      [H|Args]
                                     ]) of
-        {ok, Handle} ->
-            {reply, ok, S#state{handle = Handle}};
         {ok, Term, Handle} ->
             {reply, {ok,Term}, S#state{handle = Handle}};
         {ok, Term1, Term2, Term3, Handle} ->
