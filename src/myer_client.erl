@@ -27,7 +27,7 @@
 -export([ping/2, refresh/3, select_db/3]).
 -export([real_query/3, next_result/2]).
 -export([autocommit/3, commit/2, rollback/2]).
--export([prepare/4, unprepare/3]).
+-export([prepare/4, unprepare/3, execute/4]).
 
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
@@ -120,7 +120,17 @@ prepare(Pid, Name, Query, Timeout) ->
 
 -spec unprepare(pid(),binary(),timeout()) -> {ok,result()}|{error,_}.
 unprepare(Pid, Name, Timeout) ->
-    real_query(Pid, <<"DEALLOCATE PREPARE ", Name/binary>>, Timeout).
+    real_query(Pid, <<"DEALLOCATE PREPARE ",Name/binary>>, Timeout).
+
+-spec execute(pid(),binary(),[term()],timeout()) -> {ok,result()}|{error,_}.
+execute(Pid, Name, Params, Timeout) ->
+    {ok, B1, B2} = params_to_binary(Name, 0, Params, [], []),
+    case real_query(Pid, <<"SET ",B1/binary,"; EXECUTE ",Name/binary," USING ",B2/binary>>, Timeout) of
+        {ok, #result{status=S}} when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) -> % SET
+            next_result(Pid, Timeout);                                         % EXECUTE
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %% == behaviour: gen_server ==
 
@@ -236,3 +246,28 @@ interrupted(#state{reason=R}=S) ->
 
 get(Key, List) ->
     baseline_lists:get(Key, 1, List, undefined).
+
+params_to_binary(_Name, _N, [], [_|T1], [_|T2]) ->
+    {ok, list_to_binary(lists:reverse(T1)), list_to_binary(lists:reverse(T2))};
+params_to_binary(Name, N, [H|T], L1, L2) ->
+    S = integer_to_binary(N),
+    K = <<$@, Name/binary, $_, S/binary>>,
+    V = to_binary(H),
+    params_to_binary(Name, N+1, T, [$,|[<<K/binary,$=,V/binary>>|L1]], [$,|[K|L2]]).
+
+to_binary(null)  ->
+    <<"null">>;
+to_binary(Term) when is_binary(Term) ->
+    <<"'", Term/binary, "'">>;
+to_binary(Term) when is_integer(Term) ->
+    integer_to_binary(Term, 10);
+to_binary(Term) when is_float(Term) ->
+    list_to_binary(io_lib:format("~w", [Term]));
+to_binary({{Year,Month,Day},{Hour,Minute,Second}}) ->
+    list_to_binary(io_lib:fwrite("'~.4.0w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w'",[Year,Month,Day,Hour,Minute,Second]));
+to_binary({bit, Unsigned}) ->
+    binary:encode_unsigned(Unsigned, big);
+to_binary({date,{Year,Month,Day}}) ->
+    list_to_binary(io_lib:fwrite("'~.4.0w-~.2.0w-~.2.0w'",[Year,Month,Day]));
+to_binary({time,{Hour,Minute,Second}}) ->
+    list_to_binary(io_lib:fwrite("'~.2.0w:~.2.0w:~.2.0w'",[Hour,Minute,Second])).

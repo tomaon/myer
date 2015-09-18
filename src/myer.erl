@@ -31,7 +31,7 @@
 -export([ping/1, refresh/2, select_db/2]).
 -export([real_query/2, next_result/1]).
 -export([autocommit/2, commit/1, rollback/1]).
--export([prepare/3, unprepare/2]).
+-export([prepare/3, unprepare/2, execute/3]).
 
 %% -- public: record --
 -export([affected_rows/1, errno/1, errmsg/1, insert_id/1, more_results/1, sqlstate/1,
@@ -156,6 +156,10 @@ prepare(#myer{worker=W,timeout=T}, Name, Query) ->
 -spec unprepare(myer(),binary()) -> {ok,result()}|{error,_}.
 unprepare(#myer{worker=W,timeout=T}, Name) ->
     myer_client:unprepare(W, Name, T).
+
+-spec execute(myer(),binary(),[term()]) -> {ok,result()}|{error,_}.
+execute(#myer{worker=W,timeout=T}, Name, Params) ->
+    myer_client:execute(W, Name, Params, T).
 
 %% == public: record ==
 
