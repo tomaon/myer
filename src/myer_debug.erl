@@ -27,7 +27,7 @@
 
 %% == public ==
 
--spec stat(integer()) -> string().
+-spec stat(integer()|result()) -> string().
 stat(S)
   when is_integer(S) ->
     L = [
@@ -47,6 +47,8 @@ stat(S)
          ?BCHECK(S,?SERVER_SESSION_STATE_CHANGED, "SERVER_SESSION_STATE_CHANGED")
         ],
     string:join([ E || E <- L, length(E) > 0 ], ",");
+stat(#result{status=S}) ->
+    stat(S);
 stat(_) ->
     "?".
 
@@ -86,7 +88,7 @@ caps(C)
 caps(_) ->
     "?".
 
--spec flags(integer()) -> string().
+-spec flags(integer()|field()) -> string().
 flags(C)
   when is_integer(C) ->
     L = [
@@ -112,10 +114,12 @@ flags(C)
          ?BCHECK(C,?FIELD_IN_PART_FUNC_FLAG, "FIELD_IN_PART_FUNC_FLAG")
         ],
     string:join([ E || E <- L, length(E) > 0 ], ",");
+flags(#field{flags=F}) ->
+    flags(F);
 flags(_) ->
     "?".
 
--spec type(integer()) -> string().
+-spec type(integer()|field()) -> string().
 type(T)
   when is_integer(T), T > 0 ->
     L = [
@@ -152,5 +156,7 @@ type(T)
          {?MYSQL_TYPE_GEOMETRY, "MYSQL_TYPE_GEOMETRY"}
         ],
     proplists:get_value(T, L, "unknown");
+type(#field{type=T}) ->
+    type(T);
 type(_) ->
     "?".
