@@ -21,8 +21,6 @@
 
 %% -- public --
 -export([start_link/1]).
--export([call/2]).
-
 -export([stat/2, version/2]).
 -export([ping/2, refresh/3, select_db/3]).
 -export([real_query/3, next_result/2]).
@@ -47,12 +45,6 @@
 start_link(Args)
   when is_list(Args) ->
     gen_server:start_link(?MODULE, Args, []).
-
-
--spec call(pid(),term()) -> term().
-call(Pid, Command)
-  when is_pid(Pid) ->
-    gen_server:call(Pid, Command).
 
 
 -spec stat(pid(),timeout()) -> {ok,binary()}|{error,_}.
