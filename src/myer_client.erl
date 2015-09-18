@@ -122,7 +122,10 @@ prepare(Pid, Name, Query, Timeout) ->
 unprepare(Pid, Name, Timeout) ->
     real_query(Pid, <<"DEALLOCATE PREPARE ",Name/binary>>, Timeout).
 
--spec execute(pid(),binary(),[term()],timeout()) -> {ok,result()}|{error,_}.
+-spec execute(pid(),binary(),[term()],timeout()) ->
+                     {ok,result()}|
+                     {ok,fields(),rows(),result()}|
+                     {error,_}.
 execute(Pid, Name, Params, Timeout) ->
     {ok, B1, B2} = params_to_binary(Name, 0, Params, [], []),
     case real_query(Pid, <<"SET ",B1/binary,"; EXECUTE ",Name/binary," USING ",B2/binary>>, Timeout) of

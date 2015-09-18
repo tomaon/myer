@@ -157,7 +157,10 @@ prepare(#myer{worker=W,timeout=T}, Name, Query) ->
 unprepare(#myer{worker=W,timeout=T}, Name) ->
     myer_client:unprepare(W, Name, T).
 
--spec execute(myer(),binary(),[term()]) -> {ok,result()}|{error,_}.
+-spec execute(myer(),binary(),[term()]) ->
+                     {ok,result()}|
+                     {ok,fields(),rows(),result()}|
+                     {error,_}.
 execute(#myer{worker=W,timeout=T}, Name, Params) ->
     myer_client:execute(W, Name, Params, T).
 
