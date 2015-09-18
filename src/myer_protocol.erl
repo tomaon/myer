@@ -26,10 +26,10 @@
 -export([real_query/1, next_result/1]).
 -export([autocommit/1]).
 
-%% -- internal --
--export([binary_to_float/2,
-         recv_packed_binary/1, recv_packed_binary/2, recv_unsigned/2]).
+-export([recv_packed_binary/1, recv_packed_binary/2,
+         recv_unsigned/2]).
 
+%% -- internal --
 -import(myer_handle, [recv_binary/2, reset/1]).
 
 -define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
@@ -206,19 +206,6 @@ next_result_pre(Handle) ->
     {ok, [Handle]}. % != reset
 
 %% == internal ==
-
-binary_to_float(Binary, _Decimals) ->
-    try binary_to_float(Binary)
-    catch
-        _:_ ->
-            try binary_to_integer(Binary) of
-                I ->
-                    I * 1.0
-            catch
-                _:_ ->
-                    undefined % for v5.1 (out_of_range)
-            end
-    end.
 
 loop(Args, []) ->
     list_to_tuple([ok|Args]);

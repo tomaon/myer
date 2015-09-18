@@ -100,10 +100,7 @@ real_types_test(Config, Table, true) ->
     F = fields(Config,Table),
     R = rows(Config,Table),
 
-    {ok, F1, R, _} = real_query(Config, Q),
-
-    F0 = fields_filtered(F),
-    F0 = fields_filtered(F1),
+    {ok, F, R, _} = real_query(Config, Q),
 
     ok.
 
@@ -379,9 +376,6 @@ fields(_Config, <<"data_types_11_4_5">>=B) ->
 fields(_Config, _Table) ->
     [].
 
-fields_filtered(List) ->
-    lists:map(fun (E) -> erlang:delete_element(#field.cast, E) end, List).
-
 %% -- rows --
 
 rows(Config, Table) ->
@@ -598,7 +592,6 @@ rows(_Config, _Table, _Cond) ->
 
 call(Config, Function, Args) -> call(Config, myer, Function, Args).
 call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,Config)|Args]).
-get_value(Config, List) -> lists:foldl(fun proplists:get_value/2, Config, List).
 test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
 execute(Config, Name, Params) -> call(Config, execute, [Name,Params]).

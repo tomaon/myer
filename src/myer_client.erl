@@ -112,7 +112,7 @@ prepare(Pid, Name, Query, Timeout) ->
 unprepare(Pid, Name, Timeout) ->
     real_query(Pid, <<"DEALLOCATE PREPARE ",Name/binary>>, Timeout).
 
--spec execute(pid(),binary(),[term()],timeout()) ->
+-spec execute(pid(),binary(),params(),timeout()) ->
                      {ok,result()}|
                      {ok,fields(),rows(),result()}|
                      {error,_}.
