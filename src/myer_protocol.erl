@@ -218,11 +218,9 @@ loop(Args, [H|T]) ->
     try apply(H, Args) of
         {ok, List} ->
             loop(List, T);
-        {ok, List, true} ->
-            loop(List, T);
-        {ok, List, false} ->
+        {ok, List, false} ->       % real_query_post/1
             loop(List, []);
-        {error, Reason} ->
+        {error, Reason} ->         % connect_pre/5
             {error, Reason};
         {error, Reason, Handle} ->
             {error, Reason, Handle}
@@ -316,8 +314,6 @@ recv_until_eof(Func, Args, List, Handle) ->
     case recv_binary(1, Handle) of
         {ok, <<254>>, Next} ->
             recv_eof(lists:reverse(List), Next);
-        {ok, <<255>>, Next} ->
-            recv_reason(Next);
         {ok, Byte, Next} ->
             recv_until_eof(Func, Args, List, Byte, Next)
     end.

@@ -43,8 +43,8 @@ groups() -> [
                                            ]},
 
              {group_normal, [sequence], [
-                                         {group,real_test}
-                                       % {group,stmt_test}
+                                         {group,real_test},
+                                         {group,stmt_test}
                                         ]},
 
              {real_test, [], [
@@ -131,13 +131,15 @@ stmt_types_test(Config, Table, true) ->
 
     Q = <<"SELECT * FROM ", Table/binary,  " WHERE k > ?">>,
 
-    {ok, P0} = stmt_prepare(Config, Q),
+    Name = list_to_binary(?MODULE_STRING),
+
+    {ok, _} = prepare(Config, Name, Q),
 
     R = rows(Config,Table),
 
-    {ok, R, P1} = stmt_execute(Config, P0, [0]),
+    {ok, _, R, _} = execute(Config, Name, [0]),
 
-    ok = stmt_close(Config, P1).
+    {ok, _} = unprepare(Config, Name).
 
 stmt_types_test_11_2_1(Config) -> stmt_types_test(Config, <<"data_types_11_2_1">>).
 stmt_types_test_11_2_2(Config) -> stmt_types_test(Config, <<"data_types_11_2_2">>).
@@ -457,90 +459,59 @@ rows(_Config, <<"data_types_11_2_2">>, all) ->
      [903,null,null,null,null,null,null,null,null,10.0]
     ];
 rows(Config, <<"data_types_11_2_3">>, all) ->
-    case atom_to_binary(get_value(Config,[tc_group_properties,name]), latin1) of
-        <<"real", _Rest/binary>> ->
-            case ?config(version, Config) of
-                V when V > [5,5,0] -> [
-                                       [101,0.0,null,null,null,null,null],
-                                       [102,-3.40282e38,null,null,null,null,null],
-                                       [103,-1.17549e-38,null,null,null,null,null],
-                                       [104,1.17549e-38,null,null,null,null,null],
-                                       [105,3.40282e38,null,null,null,null,null],
-                                       [201,null,0.0,null,null,null,null],
-                                       [202,null,-1.7976931348623157e308,null,null,null,null],
-                                       [203,null,-2.2250738585072014e-308,null,null,null,null],
-                                       [204,null,2.2250738585072014e-308,null,null,null,null],
-                                       [205,null,1.7976931348623157e308,null,null,null,null],
-                                       [301,null,null,0.0,null,null,null],
-                                       [302,null,null,-1.7976931348623157e308,null,null,null],
-                                       [303,null,null,-2.2250738585072014e-308,null,null,null],
-                                       [304,null,null,2.2250738585072014e-308,null,null,null],
-                                       [305,null,null,1.7976931348623157e308,null,null,null],
-                                       [401,null,null,null,0.0,null,null],
-                                       [404,null,null,null,1.17549e-38,null,null],
-                                       [405,null,null,null,3.40282e38,null,null],
-                                       [501,null,null,null,null,0.0,null],
-                                       [504,null,null,null,null,2.2250738585072014e-308,null],
-                                       [505,null,null,null,null,1.7976931348623157e308,null],
-                                       [601,null,null,null,null,null,0.0],
-                                       [604,null,null,null,null,null,2.2250738585072014e-308],
-                                       [605,null,null,null,null,null,1.7976931348623157e308]
-                                      ];
-                V when V > [5,1,0] -> [
-                                       [101,0.0,null,null,null,null,null],
-                                       [102,-3.40282e38,null,null,null,null,null],
-                                       [103,-1.17549e-38,null,null,null,null,null],
-                                       [104,1.17549e-38,null,null,null,null,null],
-                                       [105,3.40282e38,null,null,null,null,null],
-                                       [201,null,0.0,null,null,null,null],
-                                       [202,null,undefined,null,null,null,null],
-                                       [203,null,-2.2250738585072e-308,null,null,null,null],
-                                       [204,null,2.2250738585072e-308,null,null,null,null],
-                                       [205,null,undefined,null,null,null,null],
-                                       [301,null,null,0.0,null,null,null],
-                                       [302,null,null,undefined,null,null,null],
-                                       [303,null,null,-2.2250738585072e-308,null,null,null],
-                                       [304,null,null,2.2250738585072e-308,null,null,null],
-                                       [305,null,null,undefined,null,null,null],
-                                       [401,null,null,null,0.0,null,null],
-                                       [404,null,null,null,1.17549e-38,null,null],
-                                       [405,null,null,null,3.40282e38,null,null],
-                                       [501,null,null,null,null,0.0,null],
-                                       [504,null,null,null,null,2.2250738585072e-308,null],
-                                       [505,null,null,null,null,undefined,null],
-                                       [601,null,null,null,null,null,0.0],
-                                       [604,null,null,null,null,null,2.2250738585072e-308],
-                                       [605,null,null,null,null,null,undefined]
-                                      ]
-            end;
-        <<"stmt", _Rest/binary>> ->
-            [
-             [101,0.0,null,null,null,null,null],
-             [102,-3.4028234663852886e38,null,null,null,null,null],
-             [103,-1.1754943508222875e-38,null,null,null,null,null],
-             [104,1.1754943508222875e-38,null,null,null,null,null],
-             [105,3.4028234663852886e38,null,null,null,null,null],
-             [201,null,0.0,null,null,null,null],
-             [202,null,-1.7976931348623157e308,null,null,null,null],
-             [203,null,-2.2250738585072014e-308,null,null,null,null],
-             [204,null,2.2250738585072014e-308,null,null,null,null],
-             [205,null,1.7976931348623157e308,null,null,null,null],
-             [301,null,null,0.0,null,null,null],
-             [302,null,null,-1.7976931348623157e308,null,null,null],
-             [303,null,null,-2.2250738585072014e-308,null,null,null],
-             [304,null,null,2.2250738585072014e-308,null,null,null],
-             [305,null,null,1.7976931348623157e308,null,null,null],
-             [401,null,null,null,0.0,null,null],
-             [404,null,null,null,1.1754943508222875e-38,null,null],
-             [405,null,null,null,3.4028234663852886e38,null,null],
-             [501,null,null,null,null,0.0,null],
-             [504,null,null,null,null,2.2250738585072014e-308,null],
-             [505,null,null,null,null,1.7976931348623157e308,null],
-             [601,null,null,null,null,null,0.0],
-             [604,null,null,null,null,null,2.2250738585072014e-308],
-             [605,null,null,null,null,null,1.7976931348623157e308]
-            ];
-        _ -> []
+    case ?config(version, Config) of
+        V when V > [5,5,0] -> [
+                               [101,0.0,null,null,null,null,null],
+                               [102,-3.40282e38,null,null,null,null,null],
+                               [103,-1.17549e-38,null,null,null,null,null],
+                               [104,1.17549e-38,null,null,null,null,null],
+                               [105,3.40282e38,null,null,null,null,null],
+                               [201,null,0.0,null,null,null,null],
+                               [202,null,-1.7976931348623157e308,null,null,null,null],
+                               [203,null,-2.2250738585072014e-308,null,null,null,null],
+                               [204,null,2.2250738585072014e-308,null,null,null,null],
+                               [205,null,1.7976931348623157e308,null,null,null,null],
+                               [301,null,null,0.0,null,null,null],
+                               [302,null,null,-1.7976931348623157e308,null,null,null],
+                               [303,null,null,-2.2250738585072014e-308,null,null,null],
+                               [304,null,null,2.2250738585072014e-308,null,null,null],
+                               [305,null,null,1.7976931348623157e308,null,null,null],
+                               [401,null,null,null,0.0,null,null],
+                               [404,null,null,null,1.17549e-38,null,null],
+                               [405,null,null,null,3.40282e38,null,null],
+                               [501,null,null,null,null,0.0,null],
+                               [504,null,null,null,null,2.2250738585072014e-308,null],
+                               [505,null,null,null,null,1.7976931348623157e308,null],
+                               [601,null,null,null,null,null,0.0],
+                               [604,null,null,null,null,null,2.2250738585072014e-308],
+                               [605,null,null,null,null,null,1.7976931348623157e308]
+                              ];
+        V when V > [5,1,0] -> [
+                               [101,0.0,null,null,null,null,null],
+                               [102,-3.40282e38,null,null,null,null,null],
+                               [103,-1.17549e-38,null,null,null,null,null],
+                               [104,1.17549e-38,null,null,null,null,null],
+                               [105,3.40282e38,null,null,null,null,null],
+                               [201,null,0.0,null,null,null,null],
+                               [202,null,undefined,null,null,null,null],
+                               [203,null,-2.2250738585072e-308,null,null,null,null],
+                               [204,null,2.2250738585072e-308,null,null,null,null],
+                               [205,null,undefined,null,null,null,null],
+                               [301,null,null,0.0,null,null,null],
+                               [302,null,null,undefined,null,null,null],
+                               [303,null,null,-2.2250738585072e-308,null,null,null],
+                               [304,null,null,2.2250738585072e-308,null,null,null],
+                               [305,null,null,undefined,null,null,null],
+                               [401,null,null,null,0.0,null,null],
+                               [404,null,null,null,1.17549e-38,null,null],
+                               [405,null,null,null,3.40282e38,null,null],
+                               [501,null,null,null,null,0.0,null],
+                               [504,null,null,null,null,2.2250738585072e-308,null],
+                               [505,null,null,null,null,undefined,null],
+                               [601,null,null,null,null,null,0.0],
+                               [604,null,null,null,null,null,2.2250738585072e-308],
+                               [605,null,null,null,null,null,undefined]
+                              ]
     end;
 rows(_Config, <<"data_types_11_2_4">>, all) ->
     [
@@ -630,8 +601,7 @@ call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,C
 get_value(Config, List) -> lists:foldl(fun proplists:get_value/2, Config, List).
 test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
-
+execute(Config, Name, Params) -> call(Config, execute, [Name,Params]).
+prepare(Config, Name, Query) -> call(Config, prepare, [Name,Query]).
 real_query(Config, Query) -> call(Config, real_query, [Query]).
-stmt_close(Config, Prepare) -> call(Config, stmt_close, [Prepare]).
-stmt_execute(Config, Prepare, Args) -> call(Config, stmt_execute, [Prepare,Args]).
-stmt_prepare(Config, Query) -> call(Config, stmt_prepare, [Query]).
+unprepare(Config, Name) -> call(Config, unprepare, [Name]).
