@@ -1,7 +1,7 @@
 #
  ERLANG_HOME ?= /opt/erlang/release/latest
 
- REBAR ?= ../bin/rebar3
+ REBAR ?= ./rebar3
 
  ENV  =
  ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
