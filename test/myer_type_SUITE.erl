@@ -19,7 +19,8 @@
          real_types_test_11_4_1/1,
          real_types_test_11_4_2/1,
          real_types_test_11_4_3/1,
-         real_types_test_11_4_4/1, real_types_test_11_4_5/1]).
+         real_types_test_11_4_4/1, real_types_test_11_4_5/1,
+         real_types_test_11_6/1]).
 -export([stmt_types_test_11_2_1/1,
          stmt_types_test_11_2_2/1,
          stmt_types_test_11_2_3/1, stmt_types_test_11_2_4/1,
@@ -28,7 +29,8 @@
          stmt_types_test_11_4_1/1,
          stmt_types_test_11_4_2/1,
          stmt_types_test_11_4_3/1,
-         stmt_types_test_11_4_4/1, stmt_types_test_11_4_5/1]).
+         stmt_types_test_11_4_4/1, stmt_types_test_11_4_5/1,
+         stmt_types_test_11_6/1]).
 
 %% == callback: ct ==
 
@@ -56,7 +58,8 @@ groups() -> [
                               real_types_test_11_4_1,
                               real_types_test_11_4_2,
                               real_types_test_11_4_3,
-                              real_types_test_11_4_4, real_types_test_11_4_5
+                              real_types_test_11_4_4, real_types_test_11_4_5,
+                              real_types_test_11_6
                              ]},
 
              {stmt_test, [], [
@@ -68,7 +71,8 @@ groups() -> [
                               stmt_types_test_11_4_1,
                               stmt_types_test_11_4_2,
                               stmt_types_test_11_4_3,
-                              stmt_types_test_11_4_4, stmt_types_test_11_4_5
+                              stmt_types_test_11_4_4, stmt_types_test_11_4_5,
+                              stmt_types_test_11_6
                              ]}
             ].
 
@@ -88,8 +92,11 @@ end_per_testcase(TestCase, Config) ->
 
 %% -- real_* --
 
+real_types_test(Config, Table)
+  when <<"data_types_11_6">> =:= Table ->
+    real_types_test(Config, Table, ?config(version,Config) >= [5,7,0]);
 real_types_test(Config, Table) ->
-    real_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
+    real_types_test(Config, Table, ?config(version,Config) >= [5,1,0]).
 
 real_types_test(_Config, _Table, false) ->
     {skip, not_supported};
@@ -116,11 +123,15 @@ real_types_test_11_4_2(Config) -> real_types_test(Config, <<"data_types_11_4_2">
 real_types_test_11_4_3(Config) -> real_types_test(Config, <<"data_types_11_4_3">>).
 real_types_test_11_4_4(Config) -> real_types_test(Config, <<"data_types_11_4_4">>).
 real_types_test_11_4_5(Config) -> real_types_test(Config, <<"data_types_11_4_5">>).
+real_types_test_11_6(Config) -> real_types_test(Config, <<"data_types_11_6">>).
 
 %%  -- stmt_* --
 
+stmt_types_test(Config, Table)
+  when <<"data_types_11_6">> =:= Table ->
+    stmt_types_test(Config, Table, ?config(version,Config) >= [5,7,0]);
 stmt_types_test(Config, Table) ->
-    stmt_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
+    stmt_types_test(Config, Table, ?config(version,Config) >= [5,1,0]).
 
 stmt_types_test(_Config, _Table, false) ->
     {skip, not_supported};
@@ -150,6 +161,7 @@ stmt_types_test_11_4_2(Config) -> stmt_types_test(Config, <<"data_types_11_4_2">
 stmt_types_test_11_4_3(Config) -> stmt_types_test(Config, <<"data_types_11_4_3">>).
 stmt_types_test_11_4_4(Config) -> stmt_types_test(Config, <<"data_types_11_4_4">>).
 stmt_types_test_11_4_5(Config) -> stmt_types_test(Config, <<"data_types_11_4_5">>).
+stmt_types_test_11_6(Config) -> stmt_types_test(Config, <<"data_types_11_6">>).
 
 %% == internal ==
 
@@ -242,7 +254,7 @@ fields(_Config, <<"data_types_11_2_4">>=B) ->
 fields(Config, <<"data_types_11_3_1">>=B) ->
     F = field(B),
     case ?config(version, Config) of % diff: flags
-        Version when Version > [5,6,0] ->
+        Version when Version >= [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -253,7 +265,7 @@ fields(Config, <<"data_types_11_3_1">>=B) ->
              F#field{name = <<"ts">>, org_name = <<"ts">>,
                      length = 19, type = 7, flags = 128, decimals = 0}
             ];
-        Version when Version > [5,1,0] ->
+        Version when Version >= [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -268,14 +280,14 @@ fields(Config, <<"data_types_11_3_1">>=B) ->
 fields(Config, <<"data_types_11_3_2">>=B) ->
     F = field(B),
     case ?config(version, Config) of % diff:length
-        Version when Version > [5,6,0] ->
+        Version when Version >= [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"t">>, org_name = <<"t">>,
                      length = 10, type = 11, flags = 128, decimals = 0} % 128, << 7
             ];
-        Version when Version > [5,1,0] ->
+        Version when Version >= [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -373,6 +385,14 @@ fields(_Config, <<"data_types_11_4_5">>=B) ->
      F#field{name = <<"s">>, org_name = <<"s">>, charsetnr = 33,
              length = 15, type = 254, flags = 2048, decimals = 0} % 2048, << 11
     ];
+fields(_Config, <<"data_types_11_6">>=B) ->
+    F = field(B),
+    [
+     F#field{name = <<"k">>, org_name = <<"k">>,
+             length = 11, type = 3, flags = 20483, decimals = 0},
+     F#field{name = <<"j">>, org_name = <<"j">>, charsetnr = 63,
+             length = 4294967295, type = 245, flags = 144, decimals = 0} % 144, << 7,4
+    ];
 fields(_Config, _Table) ->
     [].
 
@@ -454,58 +474,60 @@ rows(_Config, <<"data_types_11_2_2">>, all) ->
     ];
 rows(Config, <<"data_types_11_2_3">>, all) ->
     case ?config(version, Config) of
-        V when V > [5,5,0] -> [
-                               [101,0.0,null,null,null,null,null],
-                               [102,-3.40282e38,null,null,null,null,null],
-                               [103,-1.17549e-38,null,null,null,null,null],
-                               [104,1.17549e-38,null,null,null,null,null],
-                               [105,3.40282e38,null,null,null,null,null],
-                               [201,null,0.0,null,null,null,null],
-                               [202,null,-1.7976931348623157e308,null,null,null,null],
-                               [203,null,-2.2250738585072014e-308,null,null,null,null],
-                               [204,null,2.2250738585072014e-308,null,null,null,null],
-                               [205,null,1.7976931348623157e308,null,null,null,null],
-                               [301,null,null,0.0,null,null,null],
-                               [302,null,null,-1.7976931348623157e308,null,null,null],
-                               [303,null,null,-2.2250738585072014e-308,null,null,null],
-                               [304,null,null,2.2250738585072014e-308,null,null,null],
-                               [305,null,null,1.7976931348623157e308,null,null,null],
-                               [401,null,null,null,0.0,null,null],
-                               [404,null,null,null,1.17549e-38,null,null],
-                               [405,null,null,null,3.40282e38,null,null],
-                               [501,null,null,null,null,0.0,null],
-                               [504,null,null,null,null,2.2250738585072014e-308,null],
-                               [505,null,null,null,null,1.7976931348623157e308,null],
-                               [601,null,null,null,null,null,0.0],
-                               [604,null,null,null,null,null,2.2250738585072014e-308],
-                               [605,null,null,null,null,null,1.7976931348623157e308]
-                              ];
-        V when V > [5,1,0] -> [
-                               [101,0.0,null,null,null,null,null],
-                               [102,-3.40282e38,null,null,null,null,null],
-                               [103,-1.17549e-38,null,null,null,null,null],
-                               [104,1.17549e-38,null,null,null,null,null],
-                               [105,3.40282e38,null,null,null,null,null],
-                               [201,null,0.0,null,null,null,null],
-                               [202,null,undefined,null,null,null,null],
-                               [203,null,-2.2250738585072e-308,null,null,null,null],
-                               [204,null,2.2250738585072e-308,null,null,null,null],
-                               [205,null,undefined,null,null,null,null],
-                               [301,null,null,0.0,null,null,null],
-                               [302,null,null,undefined,null,null,null],
-                               [303,null,null,-2.2250738585072e-308,null,null,null],
-                               [304,null,null,2.2250738585072e-308,null,null,null],
-                               [305,null,null,undefined,null,null,null],
-                               [401,null,null,null,0.0,null,null],
-                               [404,null,null,null,1.17549e-38,null,null],
-                               [405,null,null,null,3.40282e38,null,null],
-                               [501,null,null,null,null,0.0,null],
-                               [504,null,null,null,null,2.2250738585072e-308,null],
-                               [505,null,null,null,null,undefined,null],
-                               [601,null,null,null,null,null,0.0],
-                               [604,null,null,null,null,null,2.2250738585072e-308],
-                               [605,null,null,null,null,null,undefined]
-                              ]
+        Version when Version >= [5,5,0] ->
+            [
+             [101,0.0,null,null,null,null,null],
+             [102,-3.40282e38,null,null,null,null,null],
+             [103,-1.17549e-38,null,null,null,null,null],
+             [104,1.17549e-38,null,null,null,null,null],
+             [105,3.40282e38,null,null,null,null,null],
+             [201,null,0.0,null,null,null,null],
+             [202,null,-1.7976931348623157e308,null,null,null,null],
+             [203,null,-2.2250738585072014e-308,null,null,null,null],
+             [204,null,2.2250738585072014e-308,null,null,null,null],
+             [205,null,1.7976931348623157e308,null,null,null,null],
+             [301,null,null,0.0,null,null,null],
+             [302,null,null,-1.7976931348623157e308,null,null,null],
+             [303,null,null,-2.2250738585072014e-308,null,null,null],
+             [304,null,null,2.2250738585072014e-308,null,null,null],
+             [305,null,null,1.7976931348623157e308,null,null,null],
+             [401,null,null,null,0.0,null,null],
+             [404,null,null,null,1.17549e-38,null,null],
+             [405,null,null,null,3.40282e38,null,null],
+             [501,null,null,null,null,0.0,null],
+             [504,null,null,null,null,2.2250738585072014e-308,null],
+             [505,null,null,null,null,1.7976931348623157e308,null],
+             [601,null,null,null,null,null,0.0],
+             [604,null,null,null,null,null,2.2250738585072014e-308],
+             [605,null,null,null,null,null,1.7976931348623157e308]
+            ];
+        Version when Version > [5,1,0] ->
+            [
+             [101,0.0,null,null,null,null,null],
+             [102,-3.40282e38,null,null,null,null,null],
+             [103,-1.17549e-38,null,null,null,null,null],
+             [104,1.17549e-38,null,null,null,null,null],
+             [105,3.40282e38,null,null,null,null,null],
+             [201,null,0.0,null,null,null,null],
+             [202,null,undefined,null,null,null,null],
+             [203,null,-2.2250738585072e-308,null,null,null,null],
+             [204,null,2.2250738585072e-308,null,null,null,null],
+             [205,null,undefined,null,null,null,null],
+             [301,null,null,0.0,null,null,null],
+             [302,null,null,undefined,null,null,null],
+             [303,null,null,-2.2250738585072e-308,null,null,null],
+             [304,null,null,2.2250738585072e-308,null,null,null],
+             [305,null,null,undefined,null,null,null],
+             [401,null,null,null,0.0,null,null],
+             [404,null,null,null,1.17549e-38,null,null],
+             [405,null,null,null,3.40282e38,null,null],
+             [501,null,null,null,null,0.0,null],
+             [504,null,null,null,null,2.2250738585072e-308,null],
+             [505,null,null,null,null,undefined,null],
+             [601,null,null,null,null,null,0.0],
+             [604,null,null,null,null,null,2.2250738585072e-308],
+             [605,null,null,null,null,null,undefined]
+            ]
     end;
 rows(_Config, <<"data_types_11_2_4">>, all) ->
     [
@@ -585,6 +607,11 @@ rows(_Config, <<"data_types_11_4_5">>, all) ->
     [
      [101,<<"S">>],
      [102,<<"L">>]
+    ];
+rows(_Config, <<"data_types_11_6">>, all) ->
+    [
+     [101,<<"{}">>],
+     [102,<<"{\"k\": 102, \"v\": \"102\"}">>]
     ];
 rows(_Config, _Table, _Cond) ->
     [].

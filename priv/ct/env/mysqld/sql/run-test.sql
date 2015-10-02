@@ -91,7 +91,7 @@ CREATE TABLE data_types_11_2_2 (
 , ds DECIMAL(5,2)
 , dm DECIMAL(65,0)
 , dd DECIMAL(31,30) -- M >= D
-, de DECIMAL(31,15) -- limit? 
+, de DECIMAL(31,15) -- limit?
 , n  NUMERIC        -- (10,0)
 , ns NUMERIC(5,2)
 , nm NUMERIC(65,0)
@@ -122,14 +122,14 @@ INSERT INTO data_types_11_2_2 (k, dd) VALUES
 ;
 INSERT INTO data_types_11_2_2 (k, de) VALUES
   (501, 0)
-, (502, -  99999999999999.9)  -- ok 
+, (502, -  99999999999999.9)  -- ok
 , (503, - 999999999999999.9)  -- ok
 , (504, -9999999999999999.9)  -- -1.0e16
 , (505, - 999999999999999.99) -- -1.0e15
 , (506, -9.99999999999999)    -- ok
 , (507, -9.999999999999999)   -- -9.999999999999998
-, (508, -9.9999999999999999)  -- -10.0 
-, (512,    99999999999999.9)  -- ok 
+, (508, -9.9999999999999999)  -- -10.0
+, (512,    99999999999999.9)  -- ok
 , (513,   999999999999999.9)  -- ok
 , (514,  9999999999999999.9)  -- 1.0e16
 , (515,   999999999999999.99) -- 1.0e15
@@ -567,4 +567,30 @@ COMMIT
 ;
 
 SELECT * FROM data_types_11_4_5 ORDER BY k
+;
+
+--
+-- 11.6. The JSON Data Type
+--
+--  @see http://dev.mysql.com/doc/refman/5.7/en/json.html
+--
+
+/*!50700 DROP TABLE IF EXISTS data_types_11_6 */
+;
+/*!50700 CREATE TABLE data_types_11_6 ( */
+/*!50700   k  INTEGER NOT NULL PRIMARY KEY */
+/*!50700 , j  JSON */
+/*!50700 ) */
+/*!50700 ENGINE=InnoDB */
+;
+
+/*!50700 INSERT INTO data_types_11_6 (k, j) VALUES */
+/*!50700   (101, '{}') */
+/*!50700 , (102, '{"k": 102, "v": "102"}') */
+;
+
+/*!50700 COMMIT */
+;
+
+/*!50700 SELECT * FROM data_types_11_6 ORDER BY k */
 ;

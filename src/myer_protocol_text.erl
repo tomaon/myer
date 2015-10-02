@@ -31,8 +31,10 @@
 
 %% == private ==
 
-%% @see sql/protocol.cc : Protocol_text::store*
-
+%% -----------------------------------------------------------------------------
+%% << sql/protocol.cc (< 5.7) : Protocol::send_result_set_metadata/2
+%%    sql/protocol_classic.cc : Protocol_classic::send_field_metadata/2
+%% -----------------------------------------------------------------------------
 -spec recv_field_41(handle(),binary()) -> {ok,field(),handle()}.
 recv_field_41(Handle, Byte) ->
     {ok, CT, H1} = recv_packed_binary(Byte, Handle),
@@ -56,6 +58,9 @@ recv_field(Handle, Byte) ->
     {ok, #field{table = TA, name = NA, length = L,
                 type = T, flags = F, decimals = N}, H3}. % TODO: mask(flags)
 
+%% -----------------------------------------------------------------------------
+%% << sql/item.cc : Item::send/2
+%% -----------------------------------------------------------------------------
 -spec recv_row(handle(),binary(),fields()) -> {ok,row(),handle()}.
 recv_row(Handle, Byte, Fields) ->
     recv_columns(Handle, Byte, [ decode(T) || #field{type=T} <- Fields], []).
@@ -101,7 +106,7 @@ decode(?MYSQL_TYPE_BIT)         -> fun to_bit/1;
 %%code(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
 %%code(?MYSQL_TYPE_DATETIME2)   -> undefined
 %%code(?MYSQL_TYPE_TIME2)       -> undefined
-%%code(?MYSQL_TYPE_JSON)        -> undefined
+decode(?MYSQL_TYPE_JSON)        -> fun to_binary/1;
 decode(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/1;
 %%code(?MYSQL_TYPE_ENUM)        -> undefined
 %%code(?MYSQL_TYPE_SET)         -> undefined
