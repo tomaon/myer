@@ -167,35 +167,25 @@ execute(#myer{worker=W,timeout=T}, Name, Params) ->
 %% == public: record ==
 
 -spec affected_rows(term()) -> non_neg_integer()|undefined.
-affected_rows(#result{affected_rows=A}) -> A;
-affected_rows(_) -> undefined.
+affected_rows(Term) -> myer_client:affected_rows(Term).
 
 -spec errno(term()) -> non_neg_integer()|undefined.
-errno(#reason{errno=E}) -> E;
-errno(_) -> undefined.
+errno(Term) -> myer_client:errno(Term).
 
 -spec errmsg(term()) -> binary()|undefined.
-errmsg(#reason{message=M}) -> M; % rename error/1 to errmsg/1
-errmsg(_) -> undefined.
+errmsg(Term) -> myer_client:errmsg(Term).
 
 -spec insert_id(term()) -> non_neg_integer()|undefined.
-insert_id(#result{insert_id=I}) -> I;
-insert_id(_) -> undefined.
+insert_id(Term) -> myer_client:insert_id(Term).
 
 -spec more_results(term()) -> boolean().
-more_results(#result{status=S})
-  when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) ->
-    true;
-more_results(_) ->
-    false.
+more_results(Term) -> myer_client:more_results(Term).
 
 -spec sqlstate(term()) -> binary()|undefined.
-sqlstate(#reason{state=S}) -> S;
-sqlstate(_) -> undefined.
+sqlstate(Term) -> myer_client:sqlstate(Term).
 
 -spec warning_count(term()) -> non_neg_integer()|undefined.
-warning_count(#result{warning_count=W}) -> W;
-warning_count(_) -> undefined.
+warning_count(Term) -> myer_client:warning_count(Term).
 
 %% mysql_affected_rows mysql_autocommit mysql_close mysql_commit
 %% mysql_errno mysql_error mysql_get_server_version mysql_insert_id

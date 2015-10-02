@@ -27,6 +27,9 @@
 -export([autocommit/3, commit/2, rollback/2]).
 -export([prepare/4, unprepare/3, execute/4]).
 
+-export([affected_rows/1, errno/1, errmsg/1, insert_id/1,
+         more_results/1, sqlstate/1, warning_count/1]).
+
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
@@ -124,6 +127,35 @@ execute(Pid, Name, Params, Timeout) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+-spec affected_rows(term()) -> non_neg_integer()|undefined.
+affected_rows(#result{affected_rows=A}) -> A;
+affected_rows(_) -> undefined.
+
+-spec errno(term()) -> non_neg_integer()|undefined.
+errno(#reason{errno=E}) -> E;
+errno(_) -> undefined.
+
+-spec errmsg(term()) -> binary()|undefined.
+errmsg(#reason{message=M}) -> M; % rename error/1 to errmsg/1
+errmsg(_) -> undefined.
+
+-spec insert_id(term()) -> non_neg_integer()|undefined.
+insert_id(#result{insert_id=I}) -> I;
+insert_id(_) -> undefined.
+
+-spec more_results(term()) -> boolean().
+more_results(#result{status=S}) when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) -> true;
+more_results(_) -> false.
+
+-spec sqlstate(term()) -> binary()|undefined.
+sqlstate(#reason{state=S}) -> S;
+sqlstate(_) -> undefined.
+
+-spec warning_count(term()) -> non_neg_integer()|undefined.
+warning_count(#result{warning_count=W}) -> W;
+warning_count(_) -> undefined.
 
 %% == behaviour: gen_server ==
 
