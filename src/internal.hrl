@@ -142,9 +142,7 @@
 -define(MYSQL_TYPE_STRING,      254). % CHAR,BINARY
 -define(MYSQL_TYPE_GEOMETRY,    255). %
 
-%% @see ~/libmysql/libmysql.c
--define(DEFAULT_PREFETCH_ROWS, 1).
-
+%% -- other --
 
 -define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
 
