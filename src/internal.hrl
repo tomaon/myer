@@ -145,6 +145,9 @@
 %% @see ~/libmysql/libmysql.c
 -define(DEFAULT_PREFETCH_ROWS, 1).
 
+
+-define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
+
 %% == record ==
 
 -record(reason, {

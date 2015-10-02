@@ -32,8 +32,6 @@
 %% -- internal --
 -import(myer_handle, [recv_binary/2, reset/1]).
 
--define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
-
 -type(args() :: [term()]).
 -type(handle() :: myer_handle:handle()).
 -type(handshake() :: myer_auth:handshake()).
@@ -354,14 +352,14 @@ default_caps(Caps) ->
          ?CLIENT_SECURE_CONNECTION, % > 5.7, CLIENT_RESERVED2
          ?CLIENT_MULTI_STATEMENTS,
          ?CLIENT_MULTI_RESULTS,
-         ?CLIENT_PS_MULTI_RESULTS
+         ?CLIENT_PS_MULTI_RESULTS,
          %%?CLIENT_REMEMBER_OPTIONS
-         %%?CLIENT_PLUGIN_AUTH                         % TODO
-         %%?CLIENT_CONNECT_ATTRS
-         %%?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
-         %%?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS
-         %%?CLIENT_SESSION_TRACK
-         %%?CLIENT_DEPRECATE_EOF
+         ?CLIENT_PLUGIN_AUTH
+         %%?CLIENT_CONNECT_ATTRS                   % > 5.6
+         %%?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA  % > 5.6
+         %%?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS    % > 5.6
+         %%?CLIENT_SESSION_TRACK                   % > 5.7
+         %%?CLIENT_DEPRECATE_EOF                   % > 5.7
         ],
     lists:foldl(fun(E,A) -> A bor E end, Caps, L).
 

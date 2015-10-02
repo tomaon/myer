@@ -46,7 +46,8 @@
          }).
 
 -record(plugin, {
-          name :: binary()
+          name :: binary(),
+          data :: binary()
          }).
 
 -type(handle() :: myer_handle:handle()).
@@ -168,10 +169,13 @@ auth_to_binary(User, Password, Database,
   when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
     X = scramble(Password, S, P),
     B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
-           true                                -> <<X/binary,0>>
+           true                                 -> <<0>>
         end,
     D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
-           true                              -> <<0>>
+           true                               -> <<>>
+        end,
+    A = if ?IS_SET(C,?CLIENT_PLUGIN_AUTH) -> <<P/binary,0>>;
+           true                           -> <<>>
         end,
     <<
       C:32/little,
@@ -181,17 +185,17 @@ auth_to_binary(User, Password, Database,
       User/binary, 0,
       B/binary,
       D/binary,
-      P/binary
+      A/binary
     >>;
 auth_to_binary(User, Password, Database,
                #handshake{maxlength=M,seed=S,caps=C,plugin=P}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
     X = scramble(Password, S, P),
     B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
-           true                                -> <<X/binary,0>>
+           true                                 -> <<0>>
         end,
     D = if ?IS_SET(C,?CLIENT_CONNECT_WITH_DB) -> <<Database/binary,0>>;
-           true                              -> <<>>
+           true                               -> <<>>
         end,
     <<
       A:16/little,
@@ -266,4 +270,5 @@ recv_plugin(#plugin{name=undefined}=P, Caps, Handle) ->
     {ok, B, H} = recv_text(<<0>>, Handle),
     recv_plugin(P#plugin{name = B}, Caps, H);
 recv_plugin(#plugin{}=P, _Caps, Handle) ->
-    {ok, P, Handle}.
+    {ok, B, H} = recv_binary(?REMAINS(Handle), Handle), % TODO
+    {ok, P#plugin{data = B}, H}.
