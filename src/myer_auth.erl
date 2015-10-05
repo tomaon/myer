@@ -101,6 +101,8 @@ scramble(<<>>, _Seed, <<"mysql_native_password">>) ->
     <<>>;
 scramble(Password, Seed, <<"mysql_native_password">>) ->
     scramble(Password, Seed);
+scramble(Password, _Seed, <<"auth_test_plugin">>) ->
+    Password;
 scramble(<<>>, _Seed, _Plugin) ->
     <<0:64>>;
 scramble(Password, Seed, _Plugin) ->
