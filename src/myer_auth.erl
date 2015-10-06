@@ -60,8 +60,7 @@
 
 -spec auth_to_binary(binary(),plugin(),handshake()) -> {ok,binary()}.
 auth_to_binary(Password, #plugin{name=N}, #handshake{seed=S}) ->
-    Scrambled = scramble(Password, S, N),
-    {ok, <<Scrambled/binary,0>>}.
+    {ok, scramble(N,Password,S)}.
 
 -spec auth_to_binary(binary(),binary(),binary(),non_neg_integer(),handshake()) ->
                             {ok,binary(),handshake()}.
@@ -97,16 +96,12 @@ binary_to_version(Binary) ->
     L = binary:split(<<Binary/binary,".0.0">>, [<<$.>>,<<$->>], [global]),
     lists:map(F, lists:sublist(L,3)).
 
-scramble(<<>>, _Seed, <<"mysql_native_password">>) ->
-    <<>>;
-scramble(Password, Seed, <<"mysql_native_password">>) ->
-    scramble(Password, Seed);
-scramble(Password, _Seed, <<"auth_test_plugin">>) ->
-    Password;
-scramble(<<>>, _Seed, _Plugin) ->
-    <<0:64>>;
-scramble(Password, Seed, _Plugin) ->
-    scramble_323(Password, Seed).
+scramble(<<"mysql_native_password">>, Password, Seed) ->
+    if <<>> =/= Password -> scramble(Password, Seed); true -> <<>> end;
+scramble(<<"mysql_old_password">>, Password, Seed) ->
+    if <<>> =/= Password -> scramble_323(Password, Seed); true -> <<0:64>> end;
+scramble(<<"auth_test_plugin">>, <<>>, _Seed) ->
+    <<>>.
 
 %% -----------------------------------------------------------------------------
 %% << sql/password.c : scramble/3, check_scramble/3
@@ -169,7 +164,7 @@ scramble_323(Password, Seed) when is_binary(Seed) ->
 auth_to_binary(User, Password, Database,
                #handshake{maxlength=M,seed=S,caps=C,charset=E,plugin=P})
   when ?IS_SET(C,?CLIENT_PROTOCOL_41) ->
-    X = scramble(Password, S, P),
+    X = scramble(P, Password, S),
     B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
            true                                 -> <<0>>
         end,
@@ -192,7 +187,7 @@ auth_to_binary(User, Password, Database,
 auth_to_binary(User, Password, Database,
                #handshake{maxlength=M,seed=S,caps=C,plugin=P}) ->
     A = (C bor ?CLIENT_LONG_PASSWORD) band 16#ffff, % FORCE
-    X = scramble(Password, S, P),
+    X = scramble(P, Password, S),
     B = if ?IS_SET(C,?CLIENT_SECURE_CONNECTION) -> N = size(X), <<N,X/binary>>;
            true                                 -> <<0>>
         end,
