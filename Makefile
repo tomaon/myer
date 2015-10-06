@@ -4,6 +4,7 @@
  REBAR ?= ../bin/rebar3
 
  ENV  =
+ ENV += REBAR_CONFIG=rebar3.config
  ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
 #ENV += DEBUG=1
 
