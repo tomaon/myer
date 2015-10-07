@@ -1,0 +1,14 @@
+%% -*- erlang -*-
+
+{cross, [
+         {all, [
+                myer,
+                myer_app,
+                myer_auth,
+                myer_client,
+              % myer_debug,
+                myer_handle,
+                myer_protocol,
+                myer_protocol_text
+               ]}
+        ]}.
