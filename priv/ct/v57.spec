@@ -2,7 +2,7 @@
 
 {label, "v57"}.
 
-{cover, "v57.cover"}.
+{cover, "all.cover"}.
 
 {config, "v57.config"}.
 
