@@ -16,7 +16,7 @@ SET old_passwords = 0;
 SET PASSWORD FOR 'test'@'127.0.0.1' = PASSWORD('test');
 GRANT ALL ON test.* TO  'test'@'127.0.0.1';
 GRANT SELECT ON mysql.* TO  'test'@'127.0.0.1'; 
-/*!50700 GRANT RELOAD,SHUTDOWN ON *.* TO 'test'@'127.0.0.1' */;
+/*!50600 GRANT RELOAD,SHUTDOWN ON *.* TO 'test'@'127.0.0.1' */;
 
 CREATE USER 'test_nopwd'@'127.0.0.1';
 GRANT SELECT ON test.* TO 'test_nopwd'@'127.0.0.1';

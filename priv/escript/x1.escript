@@ -29,7 +29,7 @@ run(p, H, myer) ->
 run(1, undefined, myer) ->
     case myer:checkout(mysql_pool) of
         {ok, H} ->
-            run(p, H, myer),
+            run(2, H, myer),
             ok = myer:checkin(H)
     end;
 %% -- emysql --
