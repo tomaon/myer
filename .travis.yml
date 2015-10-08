@@ -4,5 +4,6 @@ otp_release:
   - 18.1
 
 before_script:
+  - mysql -u root -e "INSTALL PLUGIN test_plugin_server SONAME 'auth_test_plugin.so'"
   - mysql -u root < priv/ct/env/mysqld/sql/run-root.sql
   - mysql -u test --password=test < priv/ct/env/mysqld/sql/run-test.sql
