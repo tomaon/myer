@@ -25,7 +25,7 @@
 -export([stmt_test_crud/1,
          stmt_test_multi/1,
          stmt_test_call_1/1, stmt_test_call_2/1
-        %stmt_test_blob/1
+                                                %stmt_test_blob/1
         ]).
 
 -export([cover_myer/1]).
@@ -177,7 +177,7 @@ ping_test(Config) ->
     {ok, _} = ping(Config).
 
 refresh_test(Config) ->
-    refresh_test(Config, ?config(version,Config) > [5,1,0]).
+    refresh_test(Config, ?config(version,Config) > [5,1,0] andalso not(travis())).
 
 refresh_test(_Config, false) ->
     {skip, not_supported};
@@ -717,3 +717,5 @@ insert_id(Record) -> call(insert_id, [Record]).
 more_results(Record) -> call(more_results, [Record]).
 sqlstate(Reason) -> call(sqlstate, [Reason]).
 warning_count(Result) -> call(warning_count, [Result]).
+
+travis() -> false =/= os:getenv("TRAVIS_OTP_RELEASE"). % bin-log: RDONLY
