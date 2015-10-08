@@ -43,7 +43,7 @@ rm-logs:
 	@for D in cover logs; do rm -rf .rebar3/test/$$D; done
 
 cross_cover_analyse:
-	@$(ENV) escript deps/baseline/priv/escript/$@.escript .rebar3/test/logs
+	@$(ENV) escript .rebar3/test/lib/baseline/priv/escript/$@.escript .rebar3/test/logs
 
 #
 n%: compile
