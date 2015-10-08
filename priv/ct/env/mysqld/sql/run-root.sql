@@ -1,15 +1,12 @@
-CREATE DATABASE IF NOT EXISTS test
-;
+CREATE DATABASE IF NOT EXISTS test;
 
--- DROP USER /*!50700 IF EXISTS */
---   'test'@'127.0.0.1'
--- , 'test_nopwd'@'127.0.0.1'
--- , 'test_oldpwd'@'127.0.0.1'
--- , 'test_oldnopwd'@'127.0.0.1'
--- , 'test_sha256pwd'@'127.0.0.1'
--- , 'test_sha256nopwd'@'127.0.0.1'
--- , 'test_dev'@'127.0.0.1'
--- ;
+
+CREATE USER 'test'@'localhost';
+SET old_passwords = 0;
+SET PASSWORD FOR 'test'@'localhost' = PASSWORD('test');
+GRANT ALL ON test.* TO  'test'@'localhost';
+GRANT SELECT ON mysql.* TO  'test'@'localhost';
+
 
 CREATE USER 'test'@'127.0.0.1';
 SET old_passwords = 0;
@@ -40,7 +37,9 @@ GRANT SELECT ON test.* TO 'test_oldnopwd'@'127.0.0.1';
 CREATE USER 'test_dev'@'127.0.0.1' /*!50500 IDENTIFIED WITH 'test_plugin_server' */;
 GRANT SELECT ON test.* TO 'test_dev'@'127.0.0.1';
 
+
 FLUSH PRIVILEGES;
+
 
 SELECT
   host
