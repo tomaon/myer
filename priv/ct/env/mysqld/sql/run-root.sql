@@ -1,13 +1,6 @@
 CREATE DATABASE IF NOT EXISTS test;
 
 
-CREATE USER 'test'@'localhost';
-SET old_passwords = 0;
-SET PASSWORD FOR 'test'@'localhost' = PASSWORD('test');
-GRANT ALL ON test.* TO  'test'@'localhost';
-GRANT SELECT ON mysql.* TO  'test'@'localhost';
-
-
 CREATE USER 'test'@'127.0.0.1';
 SET old_passwords = 0;
 SET PASSWORD FOR 'test'@'127.0.0.1' = PASSWORD('test');

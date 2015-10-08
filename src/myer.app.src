@@ -8,7 +8,7 @@
   {applications, [crypto,kernel,stdlib]},
   {mod, {myer_app, [
                    %{mysql_pool, [
-                   %              {address, "localhost"},
+                   %              {address, {127,0,0,1}},
                    %              {port, 3306},
                    %              {user, <<"root">>},
                    %              {password, <<"">>},

@@ -73,7 +73,7 @@ get_childspec({Name,Args}) ->
 
 update(Args) ->
     L = [
-         {address,               fun baseline_lists:get/4,            ["localhost"]},
+         {address,               fun baseline_lists:get/4,            [{127,0,0,1}]},
          {port,                  fun baseline_lists:get_as_integer/4, [3306]},
          {user,                  fun baseline_lists:get_as_binary/4,  [<<"root">>]},
          {password,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
