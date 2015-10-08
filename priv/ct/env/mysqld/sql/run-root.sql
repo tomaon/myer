@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS test
 ;
 
-DROP USER
+DROP USER /*!50700 IF EXISTS */
   'test'@'127.0.0.1'
 , 'test_nopwd'@'127.0.0.1'
 , 'test_oldpwd'@'127.0.0.1'
