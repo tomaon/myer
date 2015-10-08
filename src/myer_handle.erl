@@ -105,20 +105,14 @@ version(#handle{}=H, Version) ->
 
 %% == internal ==
 
-update(Handle, Binary, Length) ->
-    case recv(Handle) of
-        {ok, Packet, #handle{}=H} ->
-            {ok, H#handle{buf = <<Binary/binary,Packet/binary>>,
-                          start = 0, length = Length+byte_size(Packet)}}
-    end.
-
-recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
+recv(#handle{socket=S,timeout=T,seqnum=N}=H, Binary, Length) ->
     case baseline_socket:recv(S, 4, T) of
         {ok, <<L:24/little,N>>, S1} ->
             case baseline_socket:recv(S1, L, T) of
                 {ok, Packet, S2} ->
-                    {ok, Packet, H#handle{socket = S2, seqnum = N+1,
-                                          buf = <<>>, start = 0, length = 0}};
+                    {ok, H#handle{socket = S2, seqnum = N+1,
+                                  buf = <<Binary/binary,Packet/binary>>,
+                                  start = 0, length = Length+byte_size(Packet)}};
                 {error, Reason, Handle} ->
                     throw({error,Reason,Handle})
             end;
@@ -129,7 +123,7 @@ recv(#handle{socket=S,timeout=T,seqnum=N}=H) ->
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, true) ->
     {ok, binary_part(B,S,Length), H#handle{start = S+Length, length = L-Length}};
 recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
-    case update(H, binary_part(B,S,L), L) of
+    case recv(H, binary_part(B,S,L), L) of
         {ok, Handle} ->
             recv_binary(Length, Handle) % CAUTION
     end.
@@ -137,22 +131,24 @@ recv_binary(#handle{buf=B,start=S,length=L}=H, Length, false) ->
 recv_text(#handle{start=S}=H, _Pattern, Binary, Length, {MS,ML}) ->
     {ok, binary_part(Binary,0,MS), H#handle{start = S+(MS+ML), length = Length-(MS+ML)}};
 recv_text(#handle{}=H, Pattern, Binary, Length, nomatch) ->
-    case update(H, Binary, Length) of
+    case recv(H, Binary, Length) of
         {ok, Handle} ->
             recv_text(Pattern, Handle) % CAUTION
     end.
 
-send(#handle{socket=S,maxlength=M,seqnum=N}=H, Binary, Start, Length)
-  when M >= Length ->
-    B = binary_part(Binary, Start, Length),
-    case baseline_socket:send(S, <<Length:24/little,N,B/binary>>) of
+send(#handle{socket=S,seqnum=N}=H, Binary, Length) ->
+    case baseline_socket:send(S, <<Length:24/little,N,Binary/binary>>) of
         ok ->
             {ok, H#handle{seqnum = N+1}};
         {error, Reason, Handle} ->
             throw({error,Reason,Handle})
-    end;
-send(#handle{maxlength=M}=H, Binary, Start, Length) ->
+    end.
+
+send(#handle{maxlength=M}=H, Binary, Start, Length)
+  when M < Length ->
     case send(H, Binary, Start, M) of
         {ok, Handle} ->
             send(Handle, Binary, Start+M, Length-M)
-    end.
+    end;
+send(Handle, Binary, Start, Length) ->
+    send(Handle, binary_part(Binary,Start,Length), Length).
