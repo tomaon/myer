@@ -5,6 +5,6 @@ otp_release:
 
 before_script:
   - mysql -u root -e "INSTALL PLUGIN test_plugin_server SONAME 'auth_test_plugin.so'"
-  - mysql -U root -e "SET GLOBAL log_bin = mysqld-bin"
+  - mysql -u root -e "SET GLOBAL log_bin = mysqld-bin"
   - mysql -u root < priv/ct/env/mysqld/sql/run-root.sql
   - mysql -u test --host=127.0.0.1 --password=test test < priv/ct/env/mysqld/sql/run-test.sql
