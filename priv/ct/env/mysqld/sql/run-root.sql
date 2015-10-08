@@ -1,15 +1,15 @@
 CREATE DATABASE IF NOT EXISTS test
 ;
 
-DROP USER /*!50700 IF EXISTS */
-  'test'@'127.0.0.1'
-, 'test_nopwd'@'127.0.0.1'
-, 'test_oldpwd'@'127.0.0.1'
-, 'test_oldnopwd'@'127.0.0.1'
-, 'test_sha256pwd'@'127.0.0.1'
-, 'test_sha256nopwd'@'127.0.0.1'
-, 'test_dev'@'127.0.0.1'
-;
+-- DROP USER /*!50700 IF EXISTS */
+--   'test'@'127.0.0.1'
+-- , 'test_nopwd'@'127.0.0.1'
+-- , 'test_oldpwd'@'127.0.0.1'
+-- , 'test_oldnopwd'@'127.0.0.1'
+-- , 'test_sha256pwd'@'127.0.0.1'
+-- , 'test_sha256nopwd'@'127.0.0.1'
+-- , 'test_dev'@'127.0.0.1'
+-- ;
 
 CREATE USER 'test'@'127.0.0.1';
 SET old_passwords = 0;
