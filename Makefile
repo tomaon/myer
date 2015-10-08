@@ -17,7 +17,7 @@ default: compile
 
 all: build
 
-test: ct
+test: ct cross_cover_analyse
 
 #
 build:
@@ -41,6 +41,9 @@ rm-dump:
 	@-rm -f erl_crash.dump
 rm-logs:
 	@for D in cover logs; do rm -rf .rebar3/test/$$D; done
+
+cross_cover_analyse:
+	@$(ENV) escript deps/baseline/priv/escript/$@.escript .rebar3/test/logs
 
 #
 n%: compile
