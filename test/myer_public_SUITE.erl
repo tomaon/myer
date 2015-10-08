@@ -183,7 +183,7 @@ refresh_test(_Config, false) ->
     {skip, not_supported};
 refresh_test(Config, true) ->
     {error, R} = refresh(Config, ?REFRESH_GRANT),
-    io:format("R: ~p~n"),
+    io:format("R: ~p~n", [R]),
     {ok, _} = refresh(Config, ?REFRESH_GRANT),
     {ok, _} = refresh(Config, ?REFRESH_LOG),
     {ok, _} = refresh(Config, ?REFRESH_TABLES),
