@@ -25,7 +25,7 @@
 -export([stmt_test_crud/1,
          stmt_test_multi/1,
          stmt_test_call_1/1, stmt_test_call_2/1
-                                                %stmt_test_blob/1
+        %stmt_test_blob/1
         ]).
 
 -export([cover_myer/1]).
@@ -55,7 +55,7 @@ groups() -> [
                                         ]},
 
              {group_compress, [sequence], [
-                                         % {group, group_query}
+                                           {group, group_query}
                                           ]},
 
              {group_query, [], [

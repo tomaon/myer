@@ -127,7 +127,7 @@ connect_post(MaxLength, Handle) ->
 %% -- internal: close --
 
 close_pre(Handle) ->
-    {ok, [<<?COM_QUIT>>,Handle]}.
+    {ok, [<<?COM_QUIT>>,reset(Handle)]}.
 
 close_post(Handle) ->
     _ = myer_handle:close(Handle),

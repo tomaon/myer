@@ -144,7 +144,7 @@
 
 %% -- other --
 
--define(REMAINS(H), (element(10,H))). % myer_handle:handle().length
+-define(REMAINS(H), (element(13,H))). % myer_handle:handle().length
 
 %% == record ==
 
