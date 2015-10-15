@@ -183,8 +183,7 @@ handle_info({tcp_closed,_Socket}, #state{}=S) ->
     {stop, tcp_closed, S#state{handle = undefined}};
 handle_info({tcp_error,_Socket}, #state{}=S) ->
     {stop, tcp_error, S#state{handle = undefined}};
-handle_info({'EXIT',Socket,normal}, #state{}=S)
-  when is_port(Socket) ->
+handle_info({'EXIT',_Socket,normal}, #state{}=S) ->
     {stop, port_closed, S#state{handle = undefined}};
 handle_info({'EXIT',_Pid,Reason}, State) ->
     {stop, Reason, State}.
@@ -199,7 +198,7 @@ cleanup(#state{}) ->
     baseline:flush().
 
 setup(Args) ->
-    process_flag(trap_exit, true),
+    _ = process_flag(trap_exit, true),
     loaded(Args, #state{}).
 
 
