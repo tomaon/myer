@@ -2,7 +2,7 @@
 {application, myer,
  [
   {description, "myer : MySQL driver, using the MySQL network protocol"},
-  {vsn, "0.3.0"},
+  {vsn, "0.4.0"},
   {registered, [myer_sup]},
   {included_applications, []},
   {applications, [crypto,kernel,stdlib]},
