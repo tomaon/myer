@@ -1,33 +1,33 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
+%% Copyright 2013-2015 AONO Tomohiko
 %%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
+%% This library is free software; you can redistribute it and/or
+%% modify it under the terms of the GNU Lesser General Public
+%% License version 2.1 as published by the Free Software Foundation.
 %%
-%% http://www.apache.org/licenses/LICENSE-2.0
+%% This library is distributed in the hope that it will be useful,
+%% but WITHOUT ANY WARRANTY; without even the implied warranty of
+%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+%% Lesser General Public License for more details.
 %%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%% You should have received a copy of the GNU Lesser General Public
+%% License along with this library; if not, write to the Free Software
+%% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
 -module(myer_debug).
 
--include("myer_internal.hrl").
+-include("internal.hrl").
 
 %% -- public --
 -export([stat/1, caps/1, flags/1, type/1]).
--export([md5/1]).
 
-%% -- private --
+%% -- internal --
 -define(BCHECK(B,K,V), (case B band K of 0 -> ""; _ -> V end)).
 
 %% == public ==
 
--spec stat(integer()) -> string().
+-spec stat(integer()|result()) -> string().
 stat(S)
   when is_integer(S) ->
     L = [
@@ -43,9 +43,12 @@ stat(S)
          ?BCHECK(S,?SERVER_STATUS_METADATA_CHANGED, "SERVER_STATUS_METADATA_CHANGED"),
          ?BCHECK(S,?SERVER_QUERY_WAS_SLOW, "SERVER_QUERY_WAS_SLOW"),
          ?BCHECK(S,?SERVER_PS_OUT_PARAMS, "SERVER_PS_OUT_PARAMS"),
-         ?BCHECK(S,?SERVER_STATUS_IN_TRANS_READONLY, "SERVER_STATUS_IN_TRANS_READONLY")
+         ?BCHECK(S,?SERVER_STATUS_IN_TRANS_READONLY, "SERVER_STATUS_IN_TRANS_READONLY"),
+         ?BCHECK(S,?SERVER_SESSION_STATE_CHANGED, "SERVER_SESSION_STATE_CHANGED")
         ],
     string:join([ E || E <- L, length(E) > 0 ], ",");
+stat(#result{status=S}) ->
+    stat(S);
 stat(_) ->
     "?".
 
@@ -76,6 +79,8 @@ caps(C)
          ?BCHECK(C,?CLIENT_CONNECT_ATTRS, "CLIENT_CONNECT_ATTRS"),
          ?BCHECK(C,?CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA, "CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA"),
          ?BCHECK(C,?CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS, "CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS"),
+         ?BCHECK(C,?CLIENT_SESSION_TRACK, "CLIENT_SESSION_TRACK"),
+         ?BCHECK(C,?CLIENT_DEPRECATE_EOF, "CLIENT_DEPRECATE_EOF"),
          ?BCHECK(C,?CLIENT_SSL_VERIFY_SERVER_CERT, "CLIENT_SSL_VERIFY_SERVER_CERT"),
          ?BCHECK(C,?CLIENT_REMEMBER_OPTIONS, "CLIENT_REMEMBER_OPTIONS")
         ],
@@ -83,7 +88,7 @@ caps(C)
 caps(_) ->
     "?".
 
--spec flags(integer()) -> string().
+-spec flags(integer()|field()) -> string().
 flags(C)
   when is_integer(C) ->
     L = [
@@ -109,46 +114,49 @@ flags(C)
          ?BCHECK(C,?FIELD_IN_PART_FUNC_FLAG, "FIELD_IN_PART_FUNC_FLAG")
         ],
     string:join([ E || E <- L, length(E) > 0 ], ",");
+flags(#field{flags=F}) ->
+    flags(F);
 flags(_) ->
     "?".
 
--spec type(integer()) -> string().
+-spec type(integer()|field()) -> string().
 type(T)
   when is_integer(T), T > 0 ->
     L = [
-	 {?MYSQL_TYPE_DECIMAL, "MYSQL_TYPE_DECIMAL"},
-	 {?MYSQL_TYPE_TINY, "MYSQL_TYPE_TINY"},
-	 {?MYSQL_TYPE_SHORT, "MYSQL_TYPE_SHORT"},
-	 {?MYSQL_TYPE_LONG, "MYSQL_TYPE_LONG"},
-	 {?MYSQL_TYPE_FLOAT, "MYSQL_TYPE_FLOAT"},
-	 {?MYSQL_TYPE_DOUBLE, "MYSQL_TYPE_DOUBLE"},
-	 {?MYSQL_TYPE_NULL, "MYSQL_TYPE_NULL"},
-	 {?MYSQL_TYPE_TIMESTAMP, "MYSQL_TYPE_TIMESTAMP"},
-	 {?MYSQL_TYPE_LONGLONG, "MYSQL_TYPE_LONGLONG"},
-	 {?MYSQL_TYPE_INT24, "MYSQL_TYPE_INT24"},
-	 {?MYSQL_TYPE_DATE, "MYSQL_TYPE_DATE"},
-	 {?MYSQL_TYPE_TIME, "MYSQL_TYPE_TIME"},
-	 {?MYSQL_TYPE_DATETIME, "MYSQL_TYPE_DATETIME"},
-	 {?MYSQL_TYPE_YEAR, "MYSQL_TYPE_YEAR"},
-	 {?MYSQL_TYPE_NEWDATE, "MYSQL_TYPE_NEWDATE"},
-	 {?MYSQL_TYPE_VARCHAR, "MYSQL_TYPE_VARCHAR"},
-	 {?MYSQL_TYPE_BIT, "MYSQL_TYPE_BIT"},
-	 {?MYSQL_TYPE_NEWDECIMAL, "MYSQL_TYPE_NEWDECIMAL"},
-	 {?MYSQL_TYPE_ENUM, "MYSQL_TYPE_ENUM"},
-	 {?MYSQL_TYPE_SET, "MYSQL_TYPE_SET"},
-	 {?MYSQL_TYPE_TINY_BLOB, "MYSQL_TYPE_TINY_BLOB"},
-	 {?MYSQL_TYPE_MEDIUM_BLOB, "MYSQL_TYPE_MEDIUM_BLOB"},
-	 {?MYSQL_TYPE_LONG_BLOB, "MYSQL_TYPE_LONG_BLOB"},
-	 {?MYSQL_TYPE_BLOB, "MYSQL_TYPE_BLOB"},
-	 {?MYSQL_TYPE_VAR_STRING, "MYSQL_TYPE_VAR_STRING"},
-	 {?MYSQL_TYPE_STRING, "MYSQL_TYPE_STRING"},
-	 {?MYSQL_TYPE_GEOMETRY, "MYSQL_TYPE_GEOMETRY"}
-	],
+         {?MYSQL_TYPE_DECIMAL, "MYSQL_TYPE_DECIMAL"},
+         {?MYSQL_TYPE_TINY, "MYSQL_TYPE_TINY"},
+         {?MYSQL_TYPE_SHORT, "MYSQL_TYPE_SHORT"},
+         {?MYSQL_TYPE_LONG, "MYSQL_TYPE_LONG"},
+         {?MYSQL_TYPE_FLOAT, "MYSQL_TYPE_FLOAT"},
+         {?MYSQL_TYPE_DOUBLE, "MYSQL_TYPE_DOUBLE"},
+         {?MYSQL_TYPE_NULL, "MYSQL_TYPE_NULL"},
+         {?MYSQL_TYPE_TIMESTAMP, "MYSQL_TYPE_TIMESTAMP"},
+         {?MYSQL_TYPE_LONGLONG, "MYSQL_TYPE_LONGLONG"},
+         {?MYSQL_TYPE_INT24, "MYSQL_TYPE_INT24"},
+         {?MYSQL_TYPE_DATE, "MYSQL_TYPE_DATE"},
+         {?MYSQL_TYPE_TIME, "MYSQL_TYPE_TIME"},
+         {?MYSQL_TYPE_DATETIME, "MYSQL_TYPE_DATETIME"},
+         {?MYSQL_TYPE_YEAR, "MYSQL_TYPE_YEAR"},
+         {?MYSQL_TYPE_NEWDATE, "MYSQL_TYPE_NEWDATE"},
+         {?MYSQL_TYPE_VARCHAR, "MYSQL_TYPE_VARCHAR"},
+         {?MYSQL_TYPE_BIT, "MYSQL_TYPE_BIT"},
+         {?MYSQL_TYPE_TIMESTAMP2, "MYSQL_TYPE_TIMESTAMP2"},
+         {?MYSQL_TYPE_DATETIME2, "MYSQL_TYPE_DATETIME2"},
+         {?MYSQL_TYPE_TIME2, "MYSQL_TYPE_TIME2"},
+         {?MYSQL_TYPE_JSON, "MYSQL_TYPE_JSON"},
+         {?MYSQL_TYPE_NEWDECIMAL, "MYSQL_TYPE_NEWDECIMAL"},
+         {?MYSQL_TYPE_ENUM, "MYSQL_TYPE_ENUM"},
+         {?MYSQL_TYPE_SET, "MYSQL_TYPE_SET"},
+         {?MYSQL_TYPE_TINY_BLOB, "MYSQL_TYPE_TINY_BLOB"},
+         {?MYSQL_TYPE_MEDIUM_BLOB, "MYSQL_TYPE_MEDIUM_BLOB"},
+         {?MYSQL_TYPE_LONG_BLOB, "MYSQL_TYPE_LONG_BLOB"},
+         {?MYSQL_TYPE_BLOB, "MYSQL_TYPE_BLOB"},
+         {?MYSQL_TYPE_VAR_STRING, "MYSQL_TYPE_VAR_STRING"},
+         {?MYSQL_TYPE_STRING, "MYSQL_TYPE_STRING"},
+         {?MYSQL_TYPE_GEOMETRY, "MYSQL_TYPE_GEOMETRY"}
+        ],
     proplists:get_value(T, L, "unknown");
+type(#field{type=T}) ->
+    type(T);
 type(_) ->
     "?".
-
--spec md5(binary()) -> binary().
-md5(Binary)
-  when is_binary(Binary) ->
-    list_to_binary([ io_lib:format("~2.16.0b",[E]) || <<E>> <= crypto:md5(Binary) ]).

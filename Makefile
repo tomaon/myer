@@ -1,57 +1,53 @@
 #
  ERLANG_HOME ?= /opt/erlang/release/latest
 
-#
- REBAR_BIN  = ./rebar
+ REBAR ?= ./rebar3
 
- REBAR_ENV  =
- REBAR_ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
- REBAR_ENV += ERL_LIB=..
+ ENV  =
+ ENV += REBAR_CONFIG=rebar3.config
+ ENV += PATH=$(ERLANG_HOME)/bin:$(PATH)
+#ENV += DEBUG=1
 
- REBAR_OPT  =
-#REBAR_OPT += --verbose 3
-
-#
- ERL_OPT  =
- ERL_OPT += -pa ebin deps/*/ebin
-
- PLT = .dialyzer_plt.local
-
- DIALYZER_OPT  =
- DIALYZER_OPT += --no_native
- DIALYZER_OPT += --plts $(ERLANG_HOME)/.dialyzer_plt $(PLT)
- DIALYZER_OPT += --src src
- DIALYZER_OPT += -I ..
+ OPT  =
+ OPT += --sname $(1)@localhost
+ OPT += --config priv/conf/$(1).config
 
 #
-all: compile
+default: compile
 
-delete-deps get-deps:
-	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) $@
+all: build
 
-clean compile ct:
-	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) $@ skip_deps=true
-
-build: get-deps
-	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) compile
-
-cleanall:
-	@$(REBAR_ENV) $(REBAR_BIN) $(REBAR_OPT) clean
-
-build_plt:
-	@$(ERLANG_HOME)/bin/dialyzer --$@ --output_plt $(PLT) --apps deps/*/ebin
-
-dialyzer:
-	@$(ERLANG_HOME)/bin/dialyzer $(DIALYZER_OPT)
-
-shell:
-	@$(ERLANG_HOME)/bin/erl $(ERL_OPT) -config files/$@
-
-test: compile ct
-
-distclean: clean delete-deps
-	@-rm -r deps
+test: ct cross_cover_analyse
 
 #
-cmp: compile
-	@ERL_FLAGS="" $(ERLANG_HOME)/bin/escript escript/$@.escript
+build:
+	@$(ENV) $(REBAR) as prod compile
+
+compile ct dialyzer eunit:
+	@$(ENV) $(REBAR) as test $@
+
+clean: rm
+	@for P in prod test; do $(ENV) $(REBAR) as $$P clean; done # prod,test -> prod+test ?!, TODO
+cleanall: rm
+	@for P in prod test; do $(ENV) $(REBAR) as $$P clean --all; done
+distclean:
+	@-rm -rf .rebar3 rebar.lock
+
+rm: rm-autosave rm-dump rm-logs
+
+rm-autosave:
+	@-find . -name "*~" | xargs rm -f
+rm-dump:
+	@-rm -f erl_crash.dump
+rm-logs:
+	@for D in cover logs; do rm -rf .rebar3/test/$$D; done
+
+cross_cover_analyse:
+	@$(ENV) escript .rebar3/test/lib/baseline/priv/escript/$@.escript .rebar3/test/logs
+
+#
+n%: compile
+	@$(ENV) $(REBAR) as test shell $(call OPT,$@)
+
+x%: compile
+	@$(ENV) ERL_LIBS=.rebar3/test/lib escript priv/escript/$@.escript

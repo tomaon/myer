@@ -1,84 +1,161 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
+%% Copyright 2013-2015 AONO Tomohiko
 %%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
+%% This library is free software; you can redistribute it and/or
+%% modify it under the terms of the GNU Lesser General Public
+%% License version 2.1 as published by the Free Software Foundation.
 %%
-%% http://www.apache.org/licenses/LICENSE-2.0
+%% This library is distributed in the hope that it will be useful,
+%% but WITHOUT ANY WARRANTY; without even the implied warranty of
+%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+%% Lesser General Public License for more details.
 %%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%% You should have received a copy of the GNU Lesser General Public
+%% License along with this library; if not, write to the Free Software
+%% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
 -module(myer_client).
 
--include("myer_internal.hrl").
+-include("internal.hrl").
 
 %% -- public --
--export([start_link/1, start_link/2, stop/1]).
--export([call/2, cast/2]).
+-export([start_link/1]).
+-export([stat/2, version/2]).
+-export([ping/2, refresh/3, select_db/3]).
+-export([real_query/3, next_result/2]).
+-export([autocommit/3, commit/2, rollback/2]).
+-export([prepare/4, unprepare/3, execute/4]).
+
+-export([affected_rows/1, errno/1, errmsg/1, insert_id/1,
+         more_results/1, sqlstate/1, warning_count/1]).
 
 %% -- behaviour: gen_server --
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
-%% -- private --
-
+%% -- internal --
 -record(state, {
-          handle :: tuple(),
-          auth :: boolean()
+          args   :: properties(),
+          handle :: tuple(),                    % myer_handle:handle()
+          reason :: reason()
          }).
 
 %% == public ==
 
--spec start_link([property()]) -> {ok,pid()}|ignore|{error,_}.
-start_link(Args) ->
-    start_link(Args, false). % for poolboy
+-spec start_link(properties()) -> {ok,pid()}|ignore|{error,_}.
+start_link(Args)
+  when is_list(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
 
--spec start_link([property()],boolean()) -> {ok,pid()}|ignore|{error,_}.
-start_link(Args, false)
-  when is_list(Args) ->
-    try lists:foldl(fun validate/2, [], proplists:unfold(Args)) of
-        List ->
-            start_link(List, true)
-    catch
-        Reason ->
+
+-spec stat(pid(),timeout()) -> {ok,binary()}|{error,_}.
+stat(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {stat,[]}, Timeout).
+
+-spec version(pid(),timeout()) -> {ok,version()}|{error,_}.
+version(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {version,[]}, Timeout).
+
+
+-spec ping(pid(),timeout()) -> {ok,result()}|{error,_}.
+ping(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {ping,[]}, Timeout).
+
+-spec refresh(pid(),integer(),timeout()) -> {ok,result()}|{error,_}.
+refresh(Pid, Option, Timeout)
+  when is_pid(Pid), is_integer(Option), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {refresh,[Option]}, Timeout).
+
+-spec select_db(pid(),binary(),timeout()) -> {ok,result()}|{error,_}.
+select_db(Pid, Database, Timeout)
+  when is_pid(Pid), is_binary(Database), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {select_db,[Database]}).
+
+
+-spec real_query(pid(),binary(),timeout()) ->
+                        {ok,result()}|
+                        {ok,fields(),rows(),result()}|
+                        {error,_}.
+real_query(Pid, Query, Timeout)
+  when is_pid(Pid), is_binary(Query), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {real_query,[Query]}, Timeout).
+
+-spec next_result(pid(),timeout()) ->
+                         {ok,result()}|
+                         {ok,fields(),rows(),result()}|
+                         {error,_}.
+next_result(Pid, Timeout)
+  when is_pid(Pid), ?IS_TIMEOUT(Timeout) ->
+    gen_server:call(Pid, {next_result,[]}, Timeout).
+
+
+-spec autocommit(pid(),boolean(),timeout()) -> {ok,result()}|{error,_}.
+autocommit(Pid, Bool, Timeout) ->
+    gen_server:call(Pid, {autocommit,[Bool]}, Timeout).
+
+-spec commit(pid(),timeout()) -> {ok,result()}|{error,_}.
+commit(Pid, Timeout) ->
+    real_query(Pid, <<"COMMIT">>, Timeout).
+
+-spec rollback(pid(),timeout()) -> {ok,result()}|{error,_}.
+rollback(Pid, Timeout) ->
+    real_query(Pid, <<"ROLLBACK">>, Timeout).
+
+
+-spec prepare(pid(),binary(),binary(),timeout()) -> {ok,result()}|{error,_}.
+prepare(Pid, Name, Query, Timeout) ->
+    real_query(Pid,  <<"PREPARE ",Name/binary," FROM '",Query/binary,"'">>, Timeout).
+
+-spec unprepare(pid(),binary(),timeout()) -> {ok,result()}|{error,_}.
+unprepare(Pid, Name, Timeout) ->
+    real_query(Pid, <<"DEALLOCATE PREPARE ",Name/binary>>, Timeout).
+
+-spec execute(pid(),binary(),params(),timeout()) ->
+                     {ok,result()}|
+                     {ok,fields(),rows(),result()}|
+                     {error,_}.
+execute(Pid, Name, Params, Timeout) ->
+    {ok, B1, B2} = params_to_binary(Name, 0, Params, [], []),
+    case real_query(Pid, <<"SET ",B1/binary,"; EXECUTE ",Name/binary," USING ",B2/binary>>, Timeout) of
+        {ok, #result{status=S}} when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) -> % SET
+            next_result(Pid, Timeout);                                         % EXECUTE
+        {error, Reason} ->
             {error, Reason}
-    end;
-start_link(Args, true)
-  when is_list(Args) ->
-    case gen_server:start_link(?MODULE, [], []) of
-        {ok, Pid} ->
-            case gen_server:call(Pid, {setup,Args}, infinity) of
-                ok ->
-                    {ok, Pid};
-                {error, Reason} ->
-                    stop(Pid),
-                    {error, Reason}
-            end;
-        Other ->
-            Other
     end.
 
--spec stop(pid()) -> ok.
-stop(Pid)
-  when is_pid(Pid) ->
-    gen_server:cast(Pid, stop).
 
--spec call(pid(),term()) -> term().
-call(Pid, Command)
-  when is_pid(Pid) ->
-    gen_server:call(Pid, Command).
+-spec affected_rows(term()) -> non_neg_integer()|undefined.
+affected_rows(#result{affected_rows=A}) -> A;
+affected_rows(_) -> undefined.
 
--spec cast(pid(),term()) -> ok.
-cast(Pid, Command)
-  when is_pid(Pid) ->
-    gen_server:cast(Pid, Command).
+-spec errno(term()) -> non_neg_integer()|undefined.
+errno(#reason{errno=E}) -> E;
+errno(_) -> undefined.
+
+-spec errmsg(term()) -> binary()|undefined.
+errmsg(#reason{message=M}) -> M; % rename error/1 to errmsg/1
+errmsg(_) -> undefined.
+
+-spec insert_id(term()) -> non_neg_integer()|undefined.
+insert_id(#result{insert_id=I}) -> I;
+insert_id(_) -> undefined.
+
+-spec more_results(term()) -> boolean().
+more_results(#result{status=S}) when ?IS_SET(S,?SERVER_MORE_RESULTS_EXISTS) -> true;
+more_results(_) -> false.
+
+-spec sqlstate(term()) -> binary()|undefined.
+sqlstate(#reason{state=S}) -> S;
+sqlstate(_) -> undefined.
+
+-spec warning_count(term()) -> non_neg_integer()|undefined.
+warning_count(#result{warning_count=W}) -> W;
+warning_count(_) -> undefined.
 
 %% == behaviour: gen_server ==
 
@@ -91,140 +168,130 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call({setup,Args}, _From, #state{}=S) ->
-    case setup(Args, S) of
-        {ok, State} ->
-            {reply, ok, State};
-        {error, Reason, State} ->
-            {reply, {error,Reason}, State}
-    end;
-handle_call({Func,Args}, _From, #state{handle=H}=S)
+handle_call({Func,Args}, _From, #state{reason=undefined}=S)
   when is_atom(Func), is_list(Args)->
-    case apply(myer_protocol, Func, [H|Args]) of
-        {ok, Term, Handle} ->
-            {reply, {ok,Term}, S#state{handle = Handle}};
-        {error, Reason, Handle} ->
-            {reply, {error,Reason}, S#state{handle = Handle}}
-    end;
-handle_call(Request, From, State) ->
-    io:format("~p [~p:handle_call] req=~p,~p~n", [self(),?MODULE,Request,From]),
-    {reply, {error,badarg}, State}.
+    ready(Func, Args, S);
+handle_call(_Request, _From, #state{reason=R}=S) -> % stop?, TODO
+    {reply, {error,R}, S}.
 
-handle_cast(stop, State) ->
-    {stop, normal, State};
-handle_cast(Request, State) ->
-    io:format("~p [~p:handle_cast] req=~p~n", [self(),?MODULE,Request]),
-    {noreply, State}.
+handle_cast(_Request, State) ->
+    {stop, enotsup, State}.
 
+handle_info(timeout, State) ->
+    initialized(State);
+handle_info({tcp_closed,_Socket}, #state{}=S) ->
+    {stop, tcp_closed, S#state{handle = undefined}};
+handle_info({tcp_error,_Socket}, #state{}=S) ->
+    {stop, tcp_error, S#state{handle = undefined}};
+handle_info({'EXIT',_Socket,normal}, #state{}=S) ->
+    {stop, port_closed, S#state{handle = undefined}};
 handle_info({'EXIT',_Pid,Reason}, State) ->
-    {stop, Reason, State};
-handle_info(Info, State) ->
-    io:format("~p [~p:handle_info] info=~p~n", [self(),?MODULE,Info]),
-    {noreply, State}.
+    {stop, Reason, State}.
 
-%% == private: state ==
+%% == internal ==
 
 cleanup(#state{handle=H}=S)
   when undefined =/= H ->
-    _ = myer_protocol:close(H),
-    cleanup(S#state{handle = undefined, auth = false});
+    _ = myer_protocol:close([H]),
+    cleanup(S#state{handle = undefined});
 cleanup(#state{}) ->
-    %%io:format("~p [~p:cleanup]~n",[self(),?MODULE]),
-    flush().
+    baseline:flush().
 
-setup([]) ->
-    %%io:format("~p [~p:setup]~n",[self(),?MODULE]),
-    process_flag(trap_exit, true),
-    {ok, #state{}}.
+setup(Args) ->
+    _ = process_flag(trap_exit, true),
+    loaded(Args, #state{}).
 
-setup(Args, #state{handle=undefined}=S) ->
-    L = [
-         proplists:get_value(address, Args, "localhost"),
-         proplists:get_value(port, Args, 3306),
-         proplists:get_value(default_character_set, Args, ?CHARSET_utf8_general_ci),
-         proplists:get_value(compress, Args, false),
-         proplists:get_value(max_allowed_packet, Args, 4194304),
-         timer:seconds(proplists:get_value(timeout, Args, 10))
-        ],
-    case apply(myer_protocol, connect, [L]) of
-        {ok, undefined, Handle} ->
-            setup(Args, S#state{handle = Handle, auth = false});
+
+loaded(Args, #state{}=S) ->
+    {ok, S#state{args = Args}, 0}.
+
+
+initialized(#state{args=A}=S) ->
+    case myer_protocol:connect([
+                                get(address, A),
+                                get(port, A),
+                                get(max_allowed_packet, A),
+                                get(compress, A),
+                                get(timeout, A)
+                               ]) of
+        {ok, Handshake, Handle} ->
+            connected(Handshake, S#state{handle = Handle});
+        {error, Reason} ->
+            interrupted(S#state{reason = Reason});
         {error, Reason, Handle} ->
-            {error, Reason, S#state{handle = Handle}}
-    end;
-setup(Args, #state{handle=H,auth=false}=S) ->
-    L = [
-         proplists:get_value(user, Args, <<"root">>),
-         proplists:get_value(password, Args, <<"">>),
-         proplists:get_value(database, Args, <<"">>)
-        ],
-    case apply(myer_protocol, auth, [H|L]) of
+            interrupted(S#state{handle = Handle, reason = Reason})
+    end.
+
+connected(Handshake, #state{args=A,handle=H}=S) ->
+    case myer_protocol:auth([
+                             H,
+                             get(user, A),
+                             get(password, A),
+                             get(database, A),
+                             get(default_character_set, A),
+                             Handshake
+                            ]) of
         {ok, _Result, Handle} ->
-            setup(Args, S#state{handle = Handle, auth = true});
+            authorized(S#state{handle = Handle});
         {error, Reason, Handle} ->
-            {error, Reason, S#state{handle = Handle}}
-    end;
-setup(_Args, #state{}=S) ->
-    {ok, S}.
+            interrupted(S#state{handle = Handle, reason = Reason})
+    end.
 
-%% == private ==
+authorized(#state{args=A,handle=H}=S) ->
+    case myer_protocol:autocommit([
+                                   H,
+                                   get(autocommit, A)
+                                  ]) of
+        {ok, _Result, Handle} ->
+            {noreply, S#state{args = undefined, handle = Handle}};
+        {error, Reason, Handle} ->
+            interrupted(S#state{handle = Handle, reason = Reason})
+    end.
 
-flush() ->
-    receive _ -> flush() after 0 -> ok end.
 
-validate({address=K,Value}, List) -> % inet:ip_address()|inet:hostname()
-    T = if is_atom(Value)                    -> {K, Value};
-           is_list(Value), 0 < length(Value) -> {K, Value};
-           is_binary(Value), 0 < size(Value) -> {K, binary_to_list(Value)};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({port=K,Value}, List) -> % inet:port_number()
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({user=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({password=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({database=K,Value}, List) -> % binary()
-    T = if is_list(Value), 0 < length(Value) -> {K, list_to_binary(Value)};
-           is_list(Value)                    -> {K, <<>>};
-           is_binary(Value), 0 < size(Value) -> {K, Value};
-           is_binary(Value)                  -> {K, <<>>};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({default_character_set=K,Value}, List) -> % integer()
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({compress=K,Value}, List) -> % boolean()
-    T = if is_boolean(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({max_allowed_packet=K,Value}, List) -> % integer()
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({timeout=K,Value}, List) -> % integer()
-    T = if is_integer(Value)                 -> {K, Value};
-           true -> throw({badarg,K})
-        end,
-    [T|List];
-validate({Key,_Value}, _List) ->
-    throw({badarg,Key}).
+ready(Func, Args, #state{handle=H}=S) ->
+    case apply(myer_protocol, Func, [
+                                     [H|Args]
+                                    ]) of
+        {ok, Term, Handle} ->
+            {reply, {ok,Term}, S#state{handle = Handle}};
+        {ok, Term1, Term2, Term3, Handle} ->
+            {reply, {ok,Term1,Term2,Term3}, S#state{handle = Handle}};
+        {error, Reason, Handle} ->
+            {reply, {error,Reason}, S#state{handle = Handle}}
+    end.
+
+
+interrupted(#state{reason=R}=S) ->
+    error_logger:error_msg("interrupted: ~p", [R]),
+    {noreply, S}.
+
+%% == internal ==
+
+get(Key, List) ->
+    baseline_lists:get(Key, 1, List, undefined).
+
+params_to_binary(_Name, _N, [], [_|T1], [_|T2]) ->
+    {ok, list_to_binary(lists:reverse(T1)), list_to_binary(lists:reverse(T2))};
+params_to_binary(Name, N, [H|T], L1, L2) ->
+    S = integer_to_binary(N),
+    K = <<$@, Name/binary, $_, S/binary>>,
+    V = to_binary(H),
+    params_to_binary(Name, N+1, T, [$,|[<<K/binary,$=,V/binary>>|L1]], [$,|[K|L2]]).
+
+to_binary(null)  ->
+    <<"null">>;
+to_binary(Term) when is_binary(Term) ->
+    <<"'", Term/binary, "'">>;
+to_binary(Term) when is_integer(Term) ->
+    integer_to_binary(Term, 10);
+to_binary(Term) when is_float(Term) ->
+    list_to_binary(io_lib:format("~w", [Term]));
+to_binary({{Year,Month,Day},{Hour,Minute,Second}}) ->
+    list_to_binary(io_lib:fwrite("'~.4.0w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w'",[Year,Month,Day,Hour,Minute,Second]));
+to_binary({bit, Unsigned}) ->
+    binary:encode_unsigned(Unsigned, big);
+to_binary({date,{Year,Month,Day}}) ->
+    list_to_binary(io_lib:fwrite("'~.4.0w-~.2.0w-~.2.0w'",[Year,Month,Day]));
+to_binary({time,{Hour,Minute,Second}}) ->
+    list_to_binary(io_lib:fwrite("'~.2.0w:~.2.0w:~.2.0w'",[Hour,Minute,Second])).

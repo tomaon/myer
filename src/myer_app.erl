@@ -1,123 +1,87 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
+%% Copyright 2013-2015 AONO Tomohiko
 %%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
+%% This library is free software; you can redistribute it and/or
+%% modify it under the terms of the GNU Lesser General Public
+%% License version 2.1 as published by the Free Software Foundation.
 %%
-%% http://www.apache.org/licenses/LICENSE-2.0
+%% This library is distributed in the hope that it will be useful,
+%% but WITHOUT ANY WARRANTY; without even the implied warranty of
+%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+%% Lesser General Public License for more details.
 %%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%% You should have received a copy of the GNU Lesser General Public
+%% License along with this library; if not, write to the Free Software
+%% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
 -module(myer_app).
 
-%% -- public --
--export([call/2, call/3]).
--export([checkin/2, checkout/3, deps/0, version/0]).
+-include("internal.hrl").
 
 %% -- behaviour: application --
 -behaviour(application).
--export([start/2, prep_stop/1, stop/1]).
-
-%% -- private --
--define(APP, myer).
--define(WORKER, myer_client).
-
-%% == public ==
-
--spec call(node(),term()) -> any().
-call(Pool, Command)
-  when is_atom(Pool) ->
-    call(Pool, Command, timer:seconds(3)).
-
--spec call(node(),term(),timeout()) -> any().
-call(Pool, Command, Timeout)
-  when is_atom(Pool) ->
-    case myer_sup:find(myer_sup, Pool) of
-        undefined ->
-            {error, badarg};
-        Pid ->
-            F = fun(Worker) -> ?WORKER:call(Worker, Command) end,
-            poolboy:transaction(Pid, F, Timeout)
-    end.
-
--spec checkin(atom(),pid()) -> ok|{error,_}.
-checkin(Pool, Worker)
-  when is_atom(Pool), is_pid(Worker) ->
-    case myer_sup:find(myer_sup, Pool) of
-        undefined ->
-            {error, badarg};
-        Child ->
-            poolboy:checkin(Child, Worker)
-    end.
-
--spec checkout(atom(),boolean(),timeout()) -> {ok,pid()}|{error,_}.
-checkout(Pool, Block, Timeout)
-  when is_atom(Pool), is_boolean(Block) ->
-    case myer_sup:find(myer_sup, Pool) of
-        undefined ->
-            {error, badarg};
-        Child ->
-            case poolboy:checkout(Child, Block, Timeout) of
-                full ->
-                    {error, full};
-                Pid ->
-                    {ok, Pid}
-            end
-    end.
-
--spec deps() -> [atom()].
-deps() ->
-    _ = application:load(?APP),
-    {ok, List} = application:get_key(?APP, applications),
-    lists:foldl(fun proplists:delete/2, List, [kernel,stdlib]).
-
--spec version() -> [non_neg_integer()].
-version() ->
-    _ = application:load(?APP),
-    {ok, List} = application:get_key(myer, vsn),
-    lists:map(fun list_to_integer/1, string:tokens(List, ".")).
+-export([start/2, stop/1]).
 
 %% == behaviour: application ==
 
--record(state, {
-          sup :: pid()
-         }).
+start(_StartType, StartArgs) ->
+    baseline_sup:start_link({local, myer_sup},
+                            {
+                              {one_for_one, 10, timer:seconds(5)},
+                              [ get_childspec(E) || E <- baseline_app:args(myer,StartArgs) ]
+                            }).
 
-start(normal, []) ->
-    case start_sup(application:get_all_env(?APP)) of
-        {ok, Pid} ->
-            {ok, Pid, #state{sup = Pid}};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+stop([]) ->
+    void.
 
-prep_stop(#state{sup=P}=S)
-  when undefined =/= P ->
-    ok = stop_sup(),
-    S#state{sup = undefined}.
+%% == internal ==
 
-stop(#state{sup=undefined}) ->
-    ok.
+get_childspec({Name,Args}) ->
+    {
+      Name,
+      {
+        baseline_sup,
+        start_link,
+        [
+         {
+           {simple_one_for_one, 10, timer:seconds(5)},
+           [
+            {
+              undefined,
+              {
+                myer_client,
+                start_link,
+                [
+                 update(Args)
+                ]
+              },
+              temporary,
+              timer:seconds(5),
+              worker,
+              [gen_server]
+            }
+           ]
+         }
+        ]
+      },
+      permanent,
+      timer:seconds(5),
+      supervisor,
+      []
+    }.
 
-%% == private: sup ==
-
-start_sup(Args) ->
-    case lists:foldl(fun setup_sup/2, [], Args) of
-        List ->
-            T = {one_for_one, 0, timer:seconds(1)},
-            myer_sup:start_link({local,myer_sup}, {T,List})
-    end.
-
-stop_sup() ->
-    myer_sup:stop(myer_sup).
-
-setup_sup({poolboy,Args}, List) ->
-    List ++ [ poolboy:child_spec(N,[{worker_module,?WORKER}|O],A) || {N,O,A} <- Args ];
-setup_sup({_Key,_Value}, List) ->
-    List. % ignore
+update(Args) ->
+    L = [
+         {address,               fun baseline_lists:get/4,            [{127,0,0,1}]},
+         {port,                  fun baseline_lists:get_as_integer/4, [3306]},
+         {user,                  fun baseline_lists:get_as_binary/4,  [<<"root">>]},
+         {password,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
+         {database,              fun baseline_lists:get_as_binary/4,  [<<"">>]},
+         {default_character_set, fun baseline_lists:get_as_integer/4, [?CHARSET_utf8_general_ci]},
+         {compress,              fun baseline_lists:get_as_boolean/4, [false]},
+         {autocommit,            fun baseline_lists:get_as_boolean/4, [false]},
+         {max_allowed_packet,    fun baseline_lists:get_as_integer/6, [4194304,?MAX_PACKET_LENGTH,?MIN_PACKET_LENGTH]},
+         {timeout,               fun baseline_lists:get_as_integer/4, [10]} % != infinity
+        ],
+    [ {K,apply(F,[K|[1|[Args|A]]])} || {K,F,A} <- L ].

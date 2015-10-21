@@ -1,7 +1,12 @@
 language: erlang
+
 otp_release:
-  - R16B
-  - R15B03
-  - R15B02
-  - R15B01
-  - R15B
+  - 18.1
+  - 18.0
+  - 17.5
+  - R16B03-1
+
+before_script:
+  - mysql -u root -e "INSTALL PLUGIN test_plugin_server SONAME 'auth_test_plugin.so'"
+  - mysql -u root < priv/ct/env/mysqld/sql/run-root.sql
+  - mysql -u test --host=127.0.0.1 --password=test test < priv/ct/env/mysqld/sql/run-test.sql

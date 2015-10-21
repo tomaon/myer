@@ -1,0 +1,54 @@
+# ====================================
+#  my.cnf : v56
+# ====================================
+
+# ------------------------------------
+# ------------------------------------
+[mysqld]
+#autocommit = 0
+ character_set_server = utf8
+ datadir = /var/tmp/fugo/v56/data
+ explicit_defaults_for_timestamp
+#init_connect = ''
+ log_bin = mysqld-bin
+ log_error = /var/tmp/fugo/v56/log/error.log
+ lower_case_table_names = 1
+ pid_file = /var/tmp/fugo/v56/log/mysqld.pid
+ port = 20506
+ query_cache_size = 0
+ query_cache_type = 0
+ server_id = 56
+ skip_external_locking
+ skip_name_resolve
+ socket = /tmp/mysql.v56.sock
+ sync_binlog = 1
+ table_open_cache = 20
+
+ innodb_autoinc_lock_mode = 2
+ innodb_buffer_pool_size = 16M
+ innodb_data_file_path = ibdata1:10M:autoextend
+ innodb_doublewrite = 0
+ innodb_file_per_table = 1
+ innodb_flush_log_at_trx_commit = 1
+ innodb_flush_method = O_DIRECT
+ innodb_flush_neighbors = 0
+ innodb_io_capacity = 2000
+ innodb_io_capacity_max = 2000
+ innodb_large_prefix = 1
+ innodb_log_buffer_size = 16M
+ innodb_log_file_size = 4M
+ innodb_random_read_ahead = 0
+ innodb_read_ahead_threshold = 0
+ innodb_strict_mode = 1
+
+ plugin_load=test_plugin_server=auth_test_plugin.so
+
+# ------------------------------------
+# ------------------------------------
+[client]
+ default_character_set = utf8
+ socket = /tmp/mysql.v56.sock
+
+[mysql]
+ safe_updates
+ show_warnings

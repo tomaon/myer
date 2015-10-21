@@ -1,114 +1,102 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%% http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
 %% =============================================================================
 
 -module(myer_type_SUITE).
 
--compile(export_all).
+-include("internal.hrl").
 
--include_lib("common_test/include/ct.hrl").
+%% -- callback: ct --
+-export([all/0,
+         groups/0, init_per_group/2, end_per_group/2,
+         init_per_testcase/2, end_per_testcase/2]).
 
--include("../src/myer_internal.hrl").
+%% -- public --
+-export([real_types_test_11_2_1/1,
+         real_types_test_11_2_2/1,
+         real_types_test_11_2_3/1, real_types_test_11_2_4/1,
+         real_types_test_11_3_1/1, real_types_test_11_3_2/1,
+         real_types_test_11_3_3/1,
+         real_types_test_11_4_1/1,
+         real_types_test_11_4_2/1,
+         real_types_test_11_4_3/1,
+         real_types_test_11_4_4/1, real_types_test_11_4_5/1,
+         real_types_test_11_6/1]).
+-export([stmt_types_test_11_2_1/1,
+         stmt_types_test_11_2_2/1,
+         stmt_types_test_11_2_3/1, stmt_types_test_11_2_4/1,
+         stmt_types_test_11_3_1/1, stmt_types_test_11_3_2/1,
+         stmt_types_test_11_3_3/1,
+         stmt_types_test_11_4_1/1,
+         stmt_types_test_11_4_2/1,
+         stmt_types_test_11_4_3/1,
+         stmt_types_test_11_4_4/1, stmt_types_test_11_4_5/1,
+         stmt_types_test_11_6/1]).
+
+%% == callback: ct ==
 
 all() -> [
-          {group, test_normal},
-          {group, test_compress}
+          {group, groups_internal}
          ].
 
-groups() ->
-    [
-     {test_normal,   [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool}
-                         ]},
-     {test_compress, [], [
-                          {group, test_v56_pool},
-                          {group, test_v55_pool},
-                          {group, test_v51_pool}
-                         ]},
+groups() -> [
 
-     {test_v56_pool, [], [{group,real_test},{group,stmt_test}]},
-     {test_v55_pool, [], [{group,real_test},{group,stmt_test}]},
-     {test_v51_pool, [], [{group,real_test},{group,stmt_test}]},
+             {groups_internal, [sequence], [
+                                            {group, group_normal}
+                                           ]},
 
-     {real_test, [], [
-                      real_types_test_11_2_1,
-                      real_types_test_11_2_2,
-                      real_types_test_11_2_3, real_types_test_11_2_4,
-                      real_types_test_11_3_1, real_types_test_11_3_2,
-                      real_types_test_11_3_3, real_types_test_11_4_1,
-                      real_types_test_11_4_2, real_types_test_11_4_3,
-                      real_types_test_11_4_4, real_types_test_11_4_5
-                     ]},
-     {stmt_test, [], [
-                      stmt_types_test_11_2_1,
-                      stmt_types_test_11_2_2,
-                      stmt_types_test_11_2_3, stmt_types_test_11_2_4,
-                      stmt_types_test_11_3_1, stmt_types_test_11_3_2,
-                      stmt_types_test_11_3_3, stmt_types_test_11_4_1,
-                      stmt_types_test_11_4_2, stmt_types_test_11_4_3,
-                      stmt_types_test_11_4_4, stmt_types_test_11_4_5
-                     ]}
-    ].
+             {group_normal, [sequence], [
+                                         {group,real_test},
+                                         {group,stmt_test}
+                                        ]},
 
-init_per_suite(Config) ->
-    _ = application:load(myer),
-    Config.
+             {real_test, [], [
+                              real_types_test_11_2_1,
+                              real_types_test_11_2_2,
+                              real_types_test_11_2_3, real_types_test_11_2_4,
+                              real_types_test_11_3_1, real_types_test_11_3_2,
+                              real_types_test_11_3_3,
+                              real_types_test_11_4_1,
+                              real_types_test_11_4_2,
+                              real_types_test_11_4_3,
+                              real_types_test_11_4_4, real_types_test_11_4_5,
+                              real_types_test_11_6
+                             ]},
 
-end_per_suite(Config) ->
-    Config.
+             {stmt_test, [], [
+                              stmt_types_test_11_2_1,
+                              stmt_types_test_11_2_2,
+                              stmt_types_test_11_2_3, stmt_types_test_11_2_4,
+                              stmt_types_test_11_3_1, stmt_types_test_11_3_2,
+                              stmt_types_test_11_3_3,
+                              stmt_types_test_11_4_1,
+                              stmt_types_test_11_4_2,
+                              stmt_types_test_11_4_3,
+                              stmt_types_test_11_4_4, stmt_types_test_11_4_5,
+                              stmt_types_test_11_6
+                             ]}
+            ].
 
 init_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun set_env/1, fun start/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, [{pool,Group}|Config], L);
-        <<"lamron_",_/binary>> ->
-            [{compress,false}|Config];
-        <<"sserpmoc_",_/binary>> ->
-            [{compress,true}|Config];
-        _ ->
-            Config
-    end.
+    myer_public_SUITE:init_per_group(Group, Config).
 
 end_per_group(Group, Config) ->
-    case list_to_binary(lists:reverse(atom_to_list(Group))) of
-        <<"loop_",_/binary>> ->
-            L = [fun stop/1 ],
-            lists:foldl(fun(E,A) -> E(A) end, proplists:delete(pool,Config), L);
-        <<"lamron_",_/binary>> ->
-            proplists:delete(compress, Config);
-        <<"sserpmoc_",_/binary>> ->
-            proplists:delete(compress, Config);
-        _ ->
-            Config
-    end.
+    myer_public_SUITE:end_per_group(Group, Config).
 
-init_per_testcase(_TestCase, Config) -> % use erlang:monitor/2 (poolboy:checkout/3)
-    L = [ fun connect/1, fun get_server_version/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+init_per_testcase(TestCase, Config) ->
+    myer_public_SUITE:init_per_testcase(TestCase, Config).
 
-end_per_testcase(_TestCase, Config) ->
-    L = [ fun close/1, fun cleanup/1 ],
-    lists:foldl(fun(E,A) -> E(A) end, Config, L).
+end_per_testcase(TestCase, Config) ->
+    myer_public_SUITE:end_per_testcase(TestCase, Config).
 
-%% == group: real_test --
+%% == public ==
 
+%% -- real_* --
+
+real_types_test(Config, Table)
+  when <<"data_types_11_6">> =:= Table ->
+    real_types_test(Config, Table, ?config(version,Config) >= [5,7,0]);
 real_types_test(Config, Table) ->
-    real_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
+    real_types_test(Config, Table, ?config(version,Config) >= [5,1,0]).
 
 real_types_test(_Config, _Table, false) ->
     {skip, not_supported};
@@ -118,7 +106,10 @@ real_types_test(Config, Table, true) ->
 
     F = fields(Config,Table),
     R = rows(Config,Table),
-    {ok, F, R, _} = real_query(Config, Q).
+
+    {ok, F, R, _} = real_query(Config, Q),
+
+    ok.
 
 real_types_test_11_2_1(Config) -> real_types_test(Config, <<"data_types_11_2_1">>).
 real_types_test_11_2_2(Config) -> real_types_test(Config, <<"data_types_11_2_2">>).
@@ -132,11 +123,15 @@ real_types_test_11_4_2(Config) -> real_types_test(Config, <<"data_types_11_4_2">
 real_types_test_11_4_3(Config) -> real_types_test(Config, <<"data_types_11_4_3">>).
 real_types_test_11_4_4(Config) -> real_types_test(Config, <<"data_types_11_4_4">>).
 real_types_test_11_4_5(Config) -> real_types_test(Config, <<"data_types_11_4_5">>).
+real_types_test_11_6(Config) -> real_types_test(Config, <<"data_types_11_6">>).
 
-%% == group: stmt_test --
+%%  -- stmt_* --
 
+stmt_types_test(Config, Table)
+  when <<"data_types_11_6">> =:= Table ->
+    stmt_types_test(Config, Table, ?config(version,Config) >= [5,7,0]);
 stmt_types_test(Config, Table) ->
-    stmt_types_test(Config, Table, ?config(version,Config) > [5,1,0]).
+    stmt_types_test(Config, Table, ?config(version,Config) >= [5,1,0]).
 
 stmt_types_test(_Config, _Table, false) ->
     {skip, not_supported};
@@ -144,13 +139,15 @@ stmt_types_test(Config, Table, true) ->
 
     Q = <<"SELECT * FROM ", Table/binary,  " WHERE k > ?">>,
 
-    {ok, P0} = stmt_prepare(Config, Q),
+    Name = list_to_binary(?MODULE_STRING),
 
-    F = fields(Config,Table),
+    {ok, _} = prepare(Config, Name, Q),
+
     R = rows(Config,Table),
-    {ok, F, R, P1} = stmt_execute(Config, P0, [0]),
 
-    ok = stmt_close(Config, P1).
+    {ok, _, R, _} = execute(Config, Name, [0]),
+
+    {ok, _} = unprepare(Config, Name).
 
 stmt_types_test_11_2_1(Config) -> stmt_types_test(Config, <<"data_types_11_2_1">>).
 stmt_types_test_11_2_2(Config) -> stmt_types_test(Config, <<"data_types_11_2_2">>).
@@ -164,6 +161,9 @@ stmt_types_test_11_4_2(Config) -> stmt_types_test(Config, <<"data_types_11_4_2">
 stmt_types_test_11_4_3(Config) -> stmt_types_test(Config, <<"data_types_11_4_3">>).
 stmt_types_test_11_4_4(Config) -> stmt_types_test(Config, <<"data_types_11_4_4">>).
 stmt_types_test_11_4_5(Config) -> stmt_types_test(Config, <<"data_types_11_4_5">>).
+stmt_types_test_11_6(Config) -> stmt_types_test(Config, <<"data_types_11_6">>).
+
+%% == internal ==
 
 %% -- filed(s) --
 
@@ -254,7 +254,7 @@ fields(_Config, <<"data_types_11_2_4">>=B) ->
 fields(Config, <<"data_types_11_3_1">>=B) ->
     F = field(B),
     case ?config(version, Config) of % diff: flags
-        Version when Version > [5,6,0] ->
+        Version when Version >= [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -265,7 +265,7 @@ fields(Config, <<"data_types_11_3_1">>=B) ->
              F#field{name = <<"ts">>, org_name = <<"ts">>,
                      length = 19, type = 7, flags = 128, decimals = 0}
             ];
-        Version when Version > [5,1,0] ->
+        Version when Version >= [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -280,14 +280,14 @@ fields(Config, <<"data_types_11_3_1">>=B) ->
 fields(Config, <<"data_types_11_3_2">>=B) ->
     F = field(B),
     case ?config(version, Config) of % diff:length
-        Version when Version > [5,6,0] ->
+        Version when Version >= [5,6,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
              F#field{name = <<"t">>, org_name = <<"t">>,
                      length = 10, type = 11, flags = 128, decimals = 0} % 128, << 7
             ];
-        Version when Version > [5,1,0] ->
+        Version when Version >= [5,1,0] ->
             [
              F#field{name = <<"k">>, org_name = <<"k">>,
                      length = 11, type = 3, flags = 20483, decimals = 0},
@@ -385,6 +385,14 @@ fields(_Config, <<"data_types_11_4_5">>=B) ->
      F#field{name = <<"s">>, org_name = <<"s">>, charsetnr = 33,
              length = 15, type = 254, flags = 2048, decimals = 0} % 2048, << 11
     ];
+fields(_Config, <<"data_types_11_6">>=B) ->
+    F = field(B),
+    [
+     F#field{name = <<"k">>, org_name = <<"k">>,
+             length = 11, type = 3, flags = 20483, decimals = 0},
+     F#field{name = <<"j">>, org_name = <<"j">>, charsetnr = 63,
+             length = 4294967295, type = 245, flags = 144, decimals = 0} % 144, << 7,4
+    ];
 fields(_Config, _Table) ->
     [].
 
@@ -465,69 +473,14 @@ rows(_Config, <<"data_types_11_2_2">>, all) ->
      [903,null,null,null,null,null,null,null,null,10.0]
     ];
 rows(Config, <<"data_types_11_2_3">>, all) ->
-    case atom_to_binary(get_value(Config,[tc_group_properties,name]), latin1) of
-        <<"real", _Rest/binary>> ->
-            case ?config(version, Config) of
-                V when V > [5,5,0] -> [
-                                       [101,0.0,null,null,null,null,null],
-                                       [102,-3.40282e38,null,null,null,null,null],
-                                       [103,-1.17549e-38,null,null,null,null,null],
-                                       [104,1.17549e-38,null,null,null,null,null],
-                                       [105,3.40282e38,null,null,null,null,null],
-                                       [201,null,0.0,null,null,null,null],
-                                       [202,null,-1.7976931348623157e308,null,null,null,null],
-                                       [203,null,-2.2250738585072014e-308,null,null,null,null],
-                                       [204,null,2.2250738585072014e-308,null,null,null,null],
-                                       [205,null,1.7976931348623157e308,null,null,null,null],
-                                       [301,null,null,0.0,null,null,null],
-                                       [302,null,null,-1.7976931348623157e308,null,null,null],
-                                       [303,null,null,-2.2250738585072014e-308,null,null,null],
-                                       [304,null,null,2.2250738585072014e-308,null,null,null],
-                                       [305,null,null,1.7976931348623157e308,null,null,null],
-                                       [401,null,null,null,0.0,null,null],
-                                       [404,null,null,null,1.17549e-38,null,null],
-                                       [405,null,null,null,3.40282e38,null,null],
-                                       [501,null,null,null,null,0.0,null],
-                                       [504,null,null,null,null,2.2250738585072014e-308,null],
-                                       [505,null,null,null,null,1.7976931348623157e308,null],
-                                       [601,null,null,null,null,null,0.0],
-                                       [604,null,null,null,null,null,2.2250738585072014e-308],
-                                       [605,null,null,null,null,null,1.7976931348623157e308]
-                                      ];
-                V when V > [5,1,0] -> [
-                                       [101,0.0,null,null,null,null,null],
-                                       [102,-3.40282e38,null,null,null,null,null],
-                                       [103,-1.17549e-38,null,null,null,null,null],
-                                       [104,1.17549e-38,null,null,null,null,null],
-                                       [105,3.40282e38,null,null,null,null,null],
-                                       [201,null,0.0,null,null,null,null],
-                                       [202,null,undefined,null,null,null,null],
-                                       [203,null,-2.2250738585072e-308,null,null,null,null],
-                                       [204,null,2.2250738585072e-308,null,null,null,null],
-                                       [205,null,undefined,null,null,null,null],
-                                       [301,null,null,0.0,null,null,null],
-                                       [302,null,null,undefined,null,null,null],
-                                       [303,null,null,-2.2250738585072e-308,null,null,null],
-                                       [304,null,null,2.2250738585072e-308,null,null,null],
-                                       [305,null,null,undefined,null,null,null],
-                                       [401,null,null,null,0.0,null,null],
-                                       [404,null,null,null,1.17549e-38,null,null],
-                                       [405,null,null,null,3.40282e38,null,null],
-                                       [501,null,null,null,null,0.0,null],
-                                       [504,null,null,null,null,2.2250738585072e-308,null],
-                                       [505,null,null,null,null,undefined,null],
-                                       [601,null,null,null,null,null,0.0],
-                                       [604,null,null,null,null,null,2.2250738585072e-308],
-                                       [605,null,null,null,null,null,undefined]
-                                      ]
-            end;
-        <<"stmt", _Rest/binary>> ->
+    case ?config(version, Config) of
+        Version when Version >= [5,5,0] ->
             [
              [101,0.0,null,null,null,null,null],
-             [102,-3.4028234663852886e38,null,null,null,null,null],
-             [103,-1.1754943508222875e-38,null,null,null,null,null],
-             [104,1.1754943508222875e-38,null,null,null,null,null],
-             [105,3.4028234663852886e38,null,null,null,null,null],
+             [102,-3.40282e38,null,null,null,null,null],
+             [103,-1.17549e-38,null,null,null,null,null],
+             [104,1.17549e-38,null,null,null,null,null],
+             [105,3.40282e38,null,null,null,null,null],
              [201,null,0.0,null,null,null,null],
              [202,null,-1.7976931348623157e308,null,null,null,null],
              [203,null,-2.2250738585072014e-308,null,null,null,null],
@@ -539,8 +492,8 @@ rows(Config, <<"data_types_11_2_3">>, all) ->
              [304,null,null,2.2250738585072014e-308,null,null,null],
              [305,null,null,1.7976931348623157e308,null,null,null],
              [401,null,null,null,0.0,null,null],
-             [404,null,null,null,1.1754943508222875e-38,null,null],
-             [405,null,null,null,3.4028234663852886e38,null,null],
+             [404,null,null,null,1.17549e-38,null,null],
+             [405,null,null,null,3.40282e38,null,null],
              [501,null,null,null,null,0.0,null],
              [504,null,null,null,null,2.2250738585072014e-308,null],
              [505,null,null,null,null,1.7976931348623157e308,null],
@@ -548,7 +501,33 @@ rows(Config, <<"data_types_11_2_3">>, all) ->
              [604,null,null,null,null,null,2.2250738585072014e-308],
              [605,null,null,null,null,null,1.7976931348623157e308]
             ];
-        _ -> []
+        Version when Version > [5,1,0] ->
+            [
+             [101,0.0,null,null,null,null,null],
+             [102,-3.40282e38,null,null,null,null,null],
+             [103,-1.17549e-38,null,null,null,null,null],
+             [104,1.17549e-38,null,null,null,null,null],
+             [105,3.40282e38,null,null,null,null,null],
+             [201,null,0.0,null,null,null,null],
+             [202,null,undefined,null,null,null,null],
+             [203,null,-2.2250738585072e-308,null,null,null,null],
+             [204,null,2.2250738585072e-308,null,null,null,null],
+             [205,null,undefined,null,null,null,null],
+             [301,null,null,0.0,null,null,null],
+             [302,null,null,undefined,null,null,null],
+             [303,null,null,-2.2250738585072e-308,null,null,null],
+             [304,null,null,2.2250738585072e-308,null,null,null],
+             [305,null,null,undefined,null,null,null],
+             [401,null,null,null,0.0,null,null],
+             [404,null,null,null,1.17549e-38,null,null],
+             [405,null,null,null,3.40282e38,null,null],
+             [501,null,null,null,null,0.0,null],
+             [504,null,null,null,null,2.2250738585072e-308,null],
+             [505,null,null,null,null,undefined,null],
+             [601,null,null,null,null,null,0.0],
+             [604,null,null,null,null,null,2.2250738585072e-308],
+             [605,null,null,null,null,null,undefined]
+            ]
     end;
 rows(_Config, <<"data_types_11_2_4">>, all) ->
     [
@@ -629,79 +608,20 @@ rows(_Config, <<"data_types_11_4_5">>, all) ->
      [101,<<"S">>],
      [102,<<"L">>]
     ];
+rows(_Config, <<"data_types_11_6">>, all) ->
+    [
+     [101,<<"{}">>],
+     [102,<<"{\"k\": 102, \"v\": \"102\"}">>]
+    ];
 rows(_Config, _Table, _Cond) ->
     [].
 
-%% -- --
 
-call(Func, Args) ->
-    apply(myer, Func, Args).
+call(Config, Function, Args) -> call(Config, myer, Function, Args).
+call(Config, Module, Function, Args) -> test(Module, Function, [?config(handle,Config)|Args]).
+test(Module, Function, Args) -> baseline_ct:test(Module, Function, Args).
 
-call(Config, Func, Args) ->
-    apply(myer, Func, [?config(pid,Config)|Args]).
-
-cleanup(Config) ->
-    lists:foldl(fun proplists:delete/2, Config, [version]).
-
-close(Config) ->
-    case myer:close(?config(pool,Config), ?config(pid,Config)) of
-        ok ->
-            proplists:delete(pid, Config);
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-connect(Config) ->
-    case myer:connect(?config(pool,Config)) of
-        {ok, Pid} ->
-            ct:log("connect, pid=~p", [Pid]),
-            [{pid,Pid}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-get_server_version(Config) ->
-    case call(Config, get_server_version, []) of
-        {ok, Version} ->
-            [{version,Version}|Config];
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-get_value(Config, List) ->
-    lists:foldl(fun proplists:get_value/2, Config, List).
-
-set_env(Config) ->
-    A = ?config(pool, Config),
-    L = [
-         {user, <<"test">>},
-         {password, <<"test">>},
-         {compress, ?config(compress,Config)}
-        ],
-    ok = application:set_env(myer, poolboy,
-                             [{A,[{size,1},{max_overflow,3}],L ++ ct:get_config(A)}]),
-    Config.
-
-start(Config) ->
-    case myer:start() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
-stop(Config) ->
-    case myer:stop() of
-        ok ->
-            Config;
-        {error, Reason} ->
-            ct:fail(Reason)
-    end.
-
+execute(Config, Name, Params) -> call(Config, execute, [Name,Params]).
+prepare(Config, Name, Query) -> call(Config, prepare, [Name,Query]).
 real_query(Config, Query) -> call(Config, real_query, [Query]).
-stmt_close(Config, Prepare) -> call(Config, stmt_close, [Prepare]).
-stmt_execute(Config, Prepare, Args) -> call(Config, stmt_execute, [Prepare,Args]).
-stmt_prepare(Config, Query) -> call(Config, stmt_prepare, [Query]).
-
-affected_rows(Result) -> call(affected_rows, [Result]).
-warning_count(Result) -> call(warning_count, [Result]).
+unprepare(Config, Name) -> call(Config, unprepare, [Name]).

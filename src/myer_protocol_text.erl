@@ -1,140 +1,166 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
+%% Copyright 2013-2015 AONO Tomohiko
 %%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
+%% This library is free software; you can redistribute it and/or
+%% modify it under the terms of the GNU Lesser General Public
+%% License version 2.1 as published by the Free Software Foundation.
 %%
-%% http://www.apache.org/licenses/LICENSE-2.0
+%% This library is distributed in the hope that it will be useful,
+%% but WITHOUT ANY WARRANTY; without even the implied warranty of
+%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+%% Lesser General Public License for more details.
 %%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%% You should have received a copy of the GNU Lesser General Public
+%% License along with this library; if not, write to the Free Software
+%% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
 -module(myer_protocol_text).
 
--include("myer_internal.hrl").
+-include("internal.hrl").
 
-%% -- public --
+%% -- private --
 -export([recv_field_41/2, recv_field/2]).
 -export([recv_row/3]).
 
-%% -- private --
--import(myer_protocol, [binary_to_float/2, binary_to_integer/3,
-                        recv/2, recv_packed_binary/1, recv_packed_binary/2]).
+%% -- internal --
+-import(myer_handle, [recv_binary/2]).
+-import(myer_protocol, [recv_packed_binary/1, recv_packed_binary/2]).
 
-%% == public ==
-
-%% @see sql/protocol.cc : Protocol_text::store*
-
--spec recv_field_41(protocol(),binary()) -> {ok, field(), protocol()}.
-recv_field_41(Protocol, Byte) ->
-    {ok, CT, P1} = recv_packed_binary(Protocol, Byte),
-    {ok, DB, P2} = recv_packed_binary(P1),
-    {ok, TA, P3} = recv_packed_binary(P2),
-    {ok, OT, P4} = recv_packed_binary(P3),
-    {ok, NA, P5} = recv_packed_binary(P4),
-    {ok, ON, P6} = recv_packed_binary(P5),
-    {ok, B,  P7} = recv(P6, 13),
-    <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
-    {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
-                name = NA, org_name = ON, charsetnr = E, length = L,
-                type = T, flags = F, decimals = N}, P7}. % TODO: mask(flags)
-
--spec recv_field(protocol(),binary()) -> {ok, field(), protocol()}.
-recv_field(Protocol, Byte) ->
-    {ok, TA, P1} = recv_packed_binary(Protocol, Byte),
-    {ok, NA, P2} = recv_packed_binary(P1),
-    {ok, B,  P3} = recv(P2, 10),
-    <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
-    {ok, #field{table = TA, name = NA, length = L,
-                type = T, flags = F, decimals = N}, P3}. % TODO: mask(flags)
-
--spec recv_row(protocol(),binary(),[field()]) -> {ok, [term()], protocol()}.
-recv_row(Protocol, Byte, Fields) ->
-    recv_row(Protocol, Byte, Fields, []).
-
-recv_row(Protocol, undefined, [], List) ->
-    {ok, lists:reverse(List), Protocol};
-recv_row(Protocol, Byte, [H|T], List) ->
-    case restore(Protocol, Byte, type(H#field.type), H) of
-        {ok, Value, #protocol{}=P} ->
-            recv_row(P, undefined, T, [Value|List])
-    end.
+-type(handle() :: myer_handle:handle()).
 
 %% == private ==
 
-cast(null, _Type, _Field) ->
-    null;
-cast(Binary, binary, _Field) ->
-    Binary;
-cast(Binary, integer, #field{decimals=D}) ->
-    binary_to_integer(Binary, 10, D);
-cast(Binary, float, #field{decimals=D}) ->
-    binary_to_float(Binary, D);
-cast(Binary, datetime, _Field) ->
-    case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
-        {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
-            {{Year,Month,Day},{Hour,Minute,Second}};
-        _ ->
-            undefined % TODO: second_part
-    end;
-cast(Binary, date, _Field) ->
-    case io_lib:fread("~d-~d-~d", binary_to_list(Binary)) of
-        {ok, [Year,Month,Day], []} ->
-            {Year,Month,Day};
-        _ ->
-            undefined
-    end;
-cast(Binary, time, _Field) ->
-    case io_lib:fread("~d:~d:~d", binary_to_list(Binary)) of
-        {ok, [Hour,Minute,Second], []} ->
-            {Hour,Minute,Second};
-        _ ->
-            undefined % TODO: second_part
-    end;
-cast(Binary, bit, _Field) ->
-    binary:decode_unsigned(Binary, big);
-cast(_Binary, undefined, _Field) ->
-    undefined.
+%% -----------------------------------------------------------------------------
+%% << sql/protocol.cc (< 5.7) : Protocol::send_result_set_metadata/2
+%%    sql/protocol_classic.cc : Protocol_classic::send_field_metadata/2
+%% -----------------------------------------------------------------------------
+-spec recv_field_41(handle(),binary()) -> {ok,field(),handle()}.
+recv_field_41(Handle, Byte) ->
+    {ok, CT, H1} = recv_packed_binary(Byte, Handle),
+    {ok, DB, H2} = recv_packed_binary(H1),
+    {ok, TA, H3} = recv_packed_binary(H2),
+    {ok, OT, H4} = recv_packed_binary(H3),
+    {ok, NA, H5} = recv_packed_binary(H4),
+    {ok, ON, H6} = recv_packed_binary(H5),
+    {ok, B,  H7} = recv_binary(13, H6),
+    <<12, E:16/little, L:32/little, T, F:16/little, N, 0, 0>> = B,
+    {ok, #field{catalog = CT, db = DB, table = TA, org_table = OT,
+                name = NA, org_name = ON, charsetnr = E, length = L,
+                type = T, flags = F, decimals = N}, H7}. % TODO: mask(flags)
 
-restore(Protocol, Byte, Type, Field) ->
-    case recv_packed_binary(Protocol, Byte) of
-        {ok, Binary, #protocol{}=P} ->
-            {ok, cast(Binary,Type,Field), P}
+-spec recv_field(handle(),binary()) -> {ok,field(),handle()}.
+recv_field(Handle, Byte) ->
+    {ok, TA, H1} = recv_packed_binary(Byte, Handle),
+    {ok, NA, H2} = recv_packed_binary(H1),
+    {ok, B,  H3} = recv_binary(10, H2),
+    <<3, L:24/little, 1, T, 3, F:16/little, N>> = B,
+    {ok, #field{table = TA, name = NA, length = L,
+                type = T, flags = F, decimals = N}, H3}. % TODO: mask(flags)
+
+%% -----------------------------------------------------------------------------
+%% << sql/item.cc : Item::send/2
+%% -----------------------------------------------------------------------------
+-spec recv_row(handle(),binary(),fields()) -> {ok,row(),handle()}.
+recv_row(Handle, Byte, Fields) ->
+    recv_columns(Handle, Byte, [ decode(T) || #field{type=T} <- Fields], []).
+
+
+recv_columns(Handle, [], List) ->
+    {ok, lists:reverse(List), Handle};
+recv_columns(Handle, [C|T], List) ->
+    case recv_packed_binary(Handle) of
+        {ok, null, H} ->
+            recv_columns(H, T, [null|List]);
+        {ok, Binary, H} ->
+            recv_columns(H, T, [C(Binary)|List])
     end.
 
-%%pe(?MYSQL_TYPE_DECIMAL)     -> undefined;
-type(?MYSQL_TYPE_TINY)        -> integer;
-type(?MYSQL_TYPE_SHORT)       -> integer;
-type(?MYSQL_TYPE_LONG)        -> integer;
-type(?MYSQL_TYPE_FLOAT)       -> float;
-type(?MYSQL_TYPE_DOUBLE)      -> float;
-%%pe(?MYSQL_TYPE_NULL)        -> undefined;
-type(?MYSQL_TYPE_TIMESTAMP)   -> datetime;
-type(?MYSQL_TYPE_LONGLONG)    -> integer;
-type(?MYSQL_TYPE_INT24)       -> integer;
-type(?MYSQL_TYPE_DATE)        -> date;
-type(?MYSQL_TYPE_TIME)        -> time;
-type(?MYSQL_TYPE_DATETIME)    -> datetime;
-type(?MYSQL_TYPE_YEAR)        -> integer;
-%%pe(?MYSQL_TYPE_NEWDATE)     -> undefined;
-%%pe(?MYSQL_TYPE_VARCHAR)     -> undefined;
-type(?MYSQL_TYPE_BIT)         -> bit;
-%%pe(?MYSQL_TYPE_TIMESTAMP2)  -> undefined;
-%%pe(?MYSQL_TYPE_DATETIME2)   -> undefined;
-%%pe(?MYSQL_TYPE_TIME2)       -> undefined;
-type(?MYSQL_TYPE_NEWDECIMAL)  -> float;
-%%pe(?MYSQL_TYPE_ENUM)        -> undefined;
-%%pe(?MYSQL_TYPE_SET)         -> undefined;
-%%pe(?MYSQL_TYPE_TINY_BLOB)   -> undefined;
-%%pe(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined;
-%%pe(?MYSQL_TYPE_LONG_BLOB)   -> undefined;
-type(?MYSQL_TYPE_BLOB)        -> binary;
-type(?MYSQL_TYPE_VAR_STRING)  -> binary;
-type(?MYSQL_TYPE_STRING)      -> binary;
-%%pe(?MYSQL_TYPE_GEOMETRY)    -> undefined;
-type(_)                       -> undefined.
+recv_columns(Handle, Byte, [C|T], List) ->
+    case recv_packed_binary(Byte, Handle) of
+        {ok, null, H} ->
+            recv_columns(H, T, [null|List]);
+        {ok, Binary, H} ->
+            recv_columns(H, T, [C(Binary)|List])
+    end.
+
+%% == internal ==
+
+%%code(?MYSQL_TYPE_DECIMAL)     -> undefined
+decode(?MYSQL_TYPE_TINY)        -> fun to_integer/1;
+decode(?MYSQL_TYPE_SHORT)       -> fun to_integer/1;
+decode(?MYSQL_TYPE_LONG)        -> fun to_integer/1;
+decode(?MYSQL_TYPE_FLOAT)       -> fun to_float/1;
+decode(?MYSQL_TYPE_DOUBLE)      -> fun to_float/1;
+%%code(?MYSQL_TYPE_NULL)        -> undefined
+decode(?MYSQL_TYPE_TIMESTAMP)   -> fun to_datetime/1;
+decode(?MYSQL_TYPE_LONGLONG)    -> fun to_integer/1;
+decode(?MYSQL_TYPE_INT24)       -> fun to_integer/1;
+decode(?MYSQL_TYPE_DATE)        -> fun to_date/1;
+decode(?MYSQL_TYPE_TIME)        -> fun to_time/1;
+decode(?MYSQL_TYPE_DATETIME)    -> fun to_datetime/1;
+decode(?MYSQL_TYPE_YEAR)        -> fun to_integer/1;
+%%code(?MYSQL_TYPE_NEWDATE)     -> undefined
+%%code(?MYSQL_TYPE_VARCHAR)     -> undefined
+decode(?MYSQL_TYPE_BIT)         -> fun to_bit/1;
+%%code(?MYSQL_TYPE_TIMESTAMP2)  -> undefined
+%%code(?MYSQL_TYPE_DATETIME2)   -> undefined
+%%code(?MYSQL_TYPE_TIME2)       -> undefined
+decode(?MYSQL_TYPE_JSON)        -> fun to_binary/1;
+decode(?MYSQL_TYPE_NEWDECIMAL)  -> fun to_float/1;
+%%code(?MYSQL_TYPE_ENUM)        -> undefined
+%%code(?MYSQL_TYPE_SET)         -> undefined
+%%code(?MYSQL_TYPE_TINY_BLOB)   -> undefined
+%%code(?MYSQL_TYPE_MEDIUM_BLOB) -> undefined
+%%code(?MYSQL_TYPE_LONG_BLOB)   -> undefined
+decode(?MYSQL_TYPE_BLOB)        -> fun to_binary/1;
+decode(?MYSQL_TYPE_VAR_STRING)  -> fun to_binary/1;
+decode(?MYSQL_TYPE_STRING)      -> fun to_binary/1.
+%%code(?MYSQL_TYPE_GEOMETRY)    -> undefined;
+
+
+to_binary(Binary) ->
+    Binary.
+
+to_bit(Binary) ->
+    binary:decode_unsigned(Binary, big).
+
+to_date(Binary) ->
+    case io_lib:fread("~d-~d-~d", binary_to_list(Binary)) of
+        {ok, [Year,Month,Day], []} ->
+            {Year,Month,Day}
+    end.
+
+to_datetime(Binary) ->
+    case io_lib:fread("~d-~d-~d ~d:~d:~d", binary_to_list(Binary)) of
+        {ok, [Year,Month,Day,Hour,Minute,Second], []} ->
+            {{Year,Month,Day},{Hour,Minute,Second}}
+            %%
+            %% TODO: second_part
+            %%
+    end.
+
+to_float(Binary) ->
+    try binary_to_float(Binary)
+    catch
+        _:_ ->
+            try binary_to_integer(Binary) of
+                I ->
+                    I * 1.0
+            catch
+                _:_ ->
+                    undefined % for v5.1 (out_of_range)
+            end
+    end.
+
+to_integer(Binary) ->
+    binary_to_integer(Binary, 10).
+
+to_time(Binary) ->
+    case io_lib:fread("~d:~d:~d", binary_to_list(Binary)) of
+        {ok, [Hour,Minute,Second], []} ->
+            {Hour,Minute,Second}
+            %%
+            %% TODO: second_part
+            %%
+    end.

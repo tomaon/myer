@@ -1,251 +1,203 @@
 %% =============================================================================
-%% Copyright 2013 Tomohiko Aono
+%% Copyright 2013-2015 AONO Tomohiko
 %%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
+%% This library is free software; you can redistribute it and/or
+%% modify it under the terms of the GNU Lesser General Public
+%% License version 2.1 as published by the Free Software Foundation.
 %%
-%% http://www.apache.org/licenses/LICENSE-2.0
+%% This library is distributed in the hope that it will be useful,
+%% but WITHOUT ANY WARRANTY; without even the implied warranty of
+%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+%% Lesser General Public License for more details.
 %%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
+%% You should have received a copy of the GNU Lesser General Public
+%% License along with this library; if not, write to the Free Software
+%% Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 %% =============================================================================
 
 -module(myer).
 
--include("myer_internal.hrl").
+-include("internal.hrl").
 
 %% -- public: application --
--export([start/0, stop/0, get_client_version/0]).
+-export([start/0, start/1, stop/0, version/0]).
 
 %% -- public: pool --
--export([connect/1, connect/2, connect/3, close/2]).
+-export([checkout/1, checkin/1]).
+-export([set_timeout/2]).
 
 %% -- public: worker --
--export([autocommit/2, commit/1, get_server_version/1, next_result/1, ping/1,
-         real_query/2, refresh/2, rollback/1, select_db/2, stat/1]).
--export([stmt_close/2, stmt_execute/3, stmt_fetch/2, stmt_prepare/2, stmt_reset/2,
-         stmt_next_result/2]).
+-export([get_server_version/1, stat/1]).
+-export([ping/1, refresh/2, select_db/2]).
+-export([real_query/2, next_result/1]).
+-export([autocommit/2, commit/1, rollback/1]).
+-export([prepare/3, unprepare/2, execute/3]).
 
 %% -- public: record --
 -export([affected_rows/1, errno/1, errmsg/1, insert_id/1, more_results/1, sqlstate/1,
          warning_count/1]).
--export([stmt_affected_rows/1, stmt_field_count/1, stmt_insert_id/1, stmt_param_count/1,
-         stmt_attr_get/2, stmt_attr_set/3, stmt_warning_count/1]).
+
+%% -- internal --
+-record(myer, {
+          sup     :: pid(),
+          worker  :: pid(),
+          timeout :: timeout()
+         }).
+
+-type(myer() :: #myer{}).
 
 %% == public: application ==
 
 -spec start() -> ok|{error,_}.
 start() ->
-    ok = lists:foreach(fun application:start/1, myer_app:deps()),
-    application:start(?MODULE).
+    start(temporary).
+
+-spec start(atom()) -> ok|{error,_}.
+start(Type)
+  when is_atom(Type) ->
+    baseline_app:ensure_start(?MODULE, Type).
 
 -spec stop() -> ok|{error,_}.
 stop() ->
     application:stop(?MODULE).
 
--spec get_client_version() -> {ok,[non_neg_integer()]}.
-get_client_version() ->
-    {ok, myer_app:version()}.
+-spec version() -> [term()].
+version() ->
+    baseline_app:version(?MODULE).
 
 %% == public: pool ==
 
--spec connect(atom()) -> {ok,pid()}|{error,_}.
-connect(Pool)
+-spec checkout(atom()) -> {ok,myer()}|{error,_}.
+checkout(Pool)
   when is_atom(Pool) ->
-    connect(Pool, false).
+    case baseline_sup:find(myer_sup, Pool) of
+        undefined ->
+            {error,notfound};
+        Sup ->
+            case supervisor:start_child(Sup, []) of
+                {ok, Pid} ->
+                    true = link(Pid),
+                    {ok, #myer{sup = Sup, worker = Pid,
+                               timeout = timer:seconds(?NET_READ_TIMEOUT)}};
+                {error, Reason} ->
+                    {error, Reason}
+            end
+    end.
 
--spec connect(atom(),boolean()) -> {ok,pid()}|{error,_}.
-connect(Pool, Block)
-  when is_atom(Pool), is_boolean(Block) ->
-    connect(Pool, Block, timer:seconds(5)).
+-spec checkin(myer()) -> ok|{error,not_found|simple_one_for_one}.
+checkin(#myer{sup=S,worker=W})
+  when is_pid(S), is_pid(W) ->
+    true = unlink(W),
+    supervisor:terminate_child(S, W).
 
--spec connect(atom(),boolean(),timeout()) -> {ok,pid()}|{error,_}.
-connect(Pool, Block, Timeout)
-  when is_atom(Pool), is_boolean(Block) ->
-    myer_app:checkout(Pool, Block, Timeout).
 
--spec close(atom(),pid()) -> ok|{error,_}.
-close(Pool, Worker)
-  when is_atom(Pool), is_pid(Worker) ->
-    myer_app:checkin(Pool, Worker).
+-spec set_timeout(myer(),timeout()) -> {ok,myer()}.
+set_timeout(#myer{}=H, Timeout)
+  when ?IS_TIMEOUT(Timeout) ->
+    {ok, H#myer{timeout = Timeout}}.
 
 %% == public: worker ==
 
--spec autocommit(pid(),boolean()) -> {ok,result()}|{error,_}.
-autocommit(Pid, true)
-  when is_pid(Pid) ->
-    real_query(Pid, <<"SET autocommit=1">>);
-autocommit(Pid, false)
-  when is_pid(Pid) ->
-    real_query(Pid, <<"SET autocommit=0">>).
+-spec get_server_version(myer()) -> {ok,[non_neg_integer()]}|{error,_}.
+get_server_version(#myer{worker=W,timeout=T}) ->
+    myer_client:version(W, T).
 
--spec commit(pid()) -> {ok,result()}|{error,_}.
-commit(Pid)
-  when is_pid(Pid) ->
-    real_query(Pid, <<"COMMIT">>).
+-spec stat(myer()) -> {ok,binary()}|{error,_}.
+stat(#myer{worker=W,timeout=T}) ->
+    myer_client:stat(W, T).
 
--spec get_server_version(pid()) -> {ok,[non_neg_integer()]}|{error,_}.
-get_server_version(Pid)
-  when is_pid(Pid) ->
-    call(Pid, {version,[]}).
 
--spec next_result(pid()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
-next_result(Pid)
-  when is_pid(Pid) ->
-    call(Pid, {next_result,[]}).
+-spec ping(myer()) -> {ok,result()}|{error,_}.
+ping(#myer{worker=W,timeout=T}) ->
+    myer_client:ping(W, T).
 
--spec ping(pid()) -> {ok,result()}|{error,_}.
-ping(Pid)
-  when is_pid(Pid) ->
-    call(Pid, {ping,[]}).
+-spec refresh(myer(),integer()) -> {ok,result()}|{error,_}.
+refresh(#myer{worker=W,timeout=T}, Option) ->
+    myer_client:refresh(W, Option, T).
 
--spec real_query(pid(),binary()) -> {ok,result()}|{ok,[field()],[term()],result()}|{error,_}.
-real_query(Pid, Query)
-  when is_pid(Pid), is_binary(Query) ->
-    call(Pid, {real_query,[Query]}).
+-spec select_db(myer(),binary()) -> {ok,result()}|{error,_}.
+select_db(#myer{worker=W,timeout=T}, Database) ->
+    myer_client:select_db(W, Database, T).
 
--spec refresh(pid(),integer()) -> {ok,result()}|{error,_}.
-refresh(Pid, Option)
-  when is_pid(Pid), is_integer(Option) ->
-    call(Pid, {refresh,[Option]}).
 
--spec rollback(pid()) -> {ok,result()}|{error,_}.
-rollback(Pid)
-  when is_pid(Pid) ->
-    real_query(Pid, <<"ROLLBACK">>).
+-spec real_query(myer(),binary()) ->
+                        {ok,result()}|
+                        {ok,fields(),rows(),result()}|
+                        {error,_}.
+real_query(#myer{worker=W,timeout=T}, Query) ->
+    myer_client:real_query(W, Query, T).
 
--spec select_db(pid(),binary()) -> {ok,result()}|{error,_}.
-select_db(Pid, Database)
-  when is_pid(Pid), is_binary(Database) ->
-    call(Pid, {select_db,[Database]}).
+-spec next_result(myer()) ->
+                         {ok,result()}|
+                         {ok,fields(),rows(),result()}|
+                         {error,_}.
+next_result(#myer{worker=W,timeout=T})
+  when is_pid(W) ->
+    myer_client:next_result(W, T).
 
--spec stat(pid()) -> {ok,binary()}|{error,_}.
-stat(Pid)
-  when is_pid(Pid) ->
-    call(Pid, {stat,[]}).
 
--spec stmt_close(pid(),prepare()) -> ok|{error,_}.
-stmt_close(Pid, #prepare{}=X)
-  when is_pid(Pid) ->
-    call(Pid, {stmt_close,[X]}).
+-spec autocommit(myer(),boolean()) -> {ok,result()}|{error,_}.
+autocommit(#myer{worker=W,timeout=T}, Boolean) ->
+    myer_client:autocommit(W, Boolean, T).
 
--spec stmt_execute(pid(),prepare(),[term()])
-                  -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
-stmt_execute(Pid, #prepare{param_count=N}=X, Args)
-  when is_pid(Pid), is_list(Args), N == length(Args) ->
-    call(Pid, {stmt_execute,[X,Args]}).
+-spec commit(myer()) -> {ok,result()}|{error,_}.
+commit(#myer{worker=W,timeout=T}) ->
+    myer_client:commit(W, T).
 
--spec stmt_fetch(pid(),prepare())
-                -> {ok,prepare()}|
-                   {ok,[field()],[term()],prepare()}|{error,_}.
-stmt_fetch(Pid, #prepare{}=X)
-  when is_pid(Pid) ->
-    call(Pid, {stmt_fetch,[X]}).
+-spec rollback(myer()) -> {ok,result()}|{error,_}.
+rollback(#myer{worker=W,timeout=T}) ->
+    myer_client:rollback(W, T).
 
--spec stmt_prepare(pid(),binary()) -> {ok,prepare()}|{error,_}.
-stmt_prepare(Pid, Query)
-  when is_pid(Pid), is_binary(Query) ->
-    call(Pid, {stmt_prepare,[Query]}).
 
--spec stmt_reset(pid(),prepare()) -> {ok,prepare()}|{error,_}.
-stmt_reset(Pid, #prepare{}=X)
-  when is_pid(Pid) ->
-    call(Pid, {stmt_reset,[X]}).
+-spec prepare(myer(),binary(),binary()) -> {ok,result()}|{error,_}.
+prepare(#myer{worker=W,timeout=T}, Name, Query) ->
+    myer_client:prepare(W, Name, Query, T).
 
--spec stmt_next_result(pid(),prepare())
-                      -> {ok,prepare()}|{ok,[field()],[term()],prepare()}|{error,_}.
-stmt_next_result(Pid, #prepare{}=X)
-  when is_pid(Pid) ->
-    call(Pid, {stmt_next_result,[X]}).
+-spec unprepare(myer(),binary()) -> {ok,result()}|{error,_}.
+unprepare(#myer{worker=W,timeout=T}, Name) ->
+    myer_client:unprepare(W, Name, T).
 
-%% stmt_send_long_data, TODO
+-spec execute(myer(),binary(),params()) ->
+                     {ok,result()}|
+                     {ok,fields(),rows(),result()}|
+                     {error,_}.
+execute(#myer{worker=W,timeout=T}, Name, Params) ->
+    myer_client:execute(W, Name, Params, T).
 
 %% == public: record ==
 
--spec affected_rows(result()) -> non_neg_integer()|undefined.
-affected_rows(#result{affected_rows=A}) -> A;
-affected_rows(_) -> undefined.
+-spec affected_rows(term()) -> non_neg_integer()|undefined.
+affected_rows(Term) -> myer_client:affected_rows(Term).
 
--spec errno(reason()) -> non_neg_integer().
-errno(#reason{errno=E}) -> E.
+-spec errno(term()) -> non_neg_integer()|undefined.
+errno(Term) -> myer_client:errno(Term).
 
--spec errmsg(reason()) -> binary().
-errmsg(#reason{message=M}) -> M. % rename error/1 to errmsg/1
+-spec errmsg(term()) -> binary()|undefined.
+errmsg(Term) -> myer_client:errmsg(Term).
 
--spec insert_id(result()) -> non_neg_integer()|undefined.
-insert_id(#result{insert_id=I}) -> I;
-insert_id(_) -> undefined.
+-spec insert_id(term()) -> non_neg_integer()|undefined.
+insert_id(Term) -> myer_client:insert_id(Term).
 
--spec more_results(prepare()|result()) -> boolean().
-more_results(#prepare{result=R}) ->
-    more_results(R);
-more_results(#result{status=S})
-  when ?ISSET(S,?SERVER_MORE_RESULTS_EXISTS) ->
-    true;
-more_results(_) ->
-    false.
+-spec more_results(term()) -> boolean().
+more_results(Term) -> myer_client:more_results(Term).
 
--spec sqlstate(reason()) -> binary().
-sqlstate(#reason{state=S}) -> S.
+-spec sqlstate(term()) -> binary()|undefined.
+sqlstate(Term) -> myer_client:sqlstate(Term).
 
--spec warning_count(result()) -> non_neg_integer()|undefined.
-warning_count(#result{warning_count=W}) -> W;
-warning_count(_) -> undefined.
-
--spec stmt_affected_rows(prepare()) -> non_neg_integer().
-stmt_affected_rows(#prepare{result=R}) -> affected_rows(R).
-
--spec stmt_field_count(prepare()) -> non_neg_integer().
-stmt_field_count(#prepare{field_count=F}) -> F.
-
--spec stmt_insert_id(prepare()) -> non_neg_integer().
-stmt_insert_id(#prepare{result=R}) -> insert_id(R).
-
--spec stmt_param_count(prepare()) -> non_neg_integer().
-stmt_param_count(#prepare{param_count=P}) -> P.
-
--spec stmt_attr_get(prepare(),non_neg_integer()) -> non_neg_integer().
-stmt_attr_get(#prepare{flags=F}, ?STMT_ATTR_CURSOR_TYPE) -> F;
-stmt_attr_get(#prepare{prefetch_rows=P}, ?STMT_ATTR_PREFETCH_ROWS) -> P.
-
--spec stmt_attr_set(prepare(),non_neg_integer(),non_neg_integer()) -> prepare().
-stmt_attr_set(#prepare{}=X, ?STMT_ATTR_CURSOR_TYPE, Value) ->
-    X#prepare{flags = Value};
-stmt_attr_set(#prepare{}=X, ?STMT_ATTR_PREFETCH_ROWS, Value) ->
-    X#prepare{prefetch_rows = Value}.
-
--spec stmt_warning_count(prepare()) -> non_neg_integer().
-stmt_warning_count(#prepare{result=R}) -> warning_count(R).
-
-%% == private ==
-
-call(Pid, Command) ->
-    case myer_client:call(Pid, Command) of
-        {ok, {Fields,Rows,Record}} ->
-            {ok, Fields, Rows, Record};
-        {ok, undefined} ->
-            ok;
-        {ok, Record} ->
-            {ok, Record};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-spec warning_count(term()) -> non_neg_integer()|undefined.
+warning_count(Term) -> myer_client:warning_count(Term).
 
 %% mysql_affected_rows mysql_autocommit mysql_close mysql_commit
 %% mysql_errno mysql_error mysql_get_server_version mysql_insert_id
 %% mysql_ping mysql_real_connect mysql_real_query mysql_refresh
 %% mysql_rollback mysql_select_db mysql_sqlstate mysql_warning_count
+%% mysql_more_results mysql_next_result
+
 %% mysql_stmt_attr_get mysql_stmt_attr_set mysql_stmt_close
 %% mysql_stmt_errno mysql_stmt_error mysql_stmt_execute
 %% mysql_stmt_fetch mysql_stmt_field_count mysql_stmt_insert_id
 %% mysql_stmt_param_count mysql_stmt_prepare mysql_stmt_reset
 %% mysql_stmt_sqlstate mysql_stat mysql_stmt_send_long_data
-%% mysql_more_results mysql_next_result
-
 %% mysql_stmt_next_result
 %% mysql_escape_string mysql_real_escape_string
 %% mysql_set_local_infile_default mysql_set_local_infile_handler
