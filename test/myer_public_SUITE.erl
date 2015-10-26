@@ -141,7 +141,7 @@ stop_test(Config) ->
     end.
 
 version_test(Config) ->
-    [0,3,0] = version(Config).
+    [0,4,0] = version(Config).
 
 
 checkout_test(Config) ->
